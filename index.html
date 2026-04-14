@@ -387,15 +387,15 @@
 <div class="refresh-note">Auto-refreshes every 60s</div>
 
 <script>
-// Calendar is embedded as an iframe — edit the src URL in the HTML to change calendars
+// Calendar is embedded as an iframe ‚Äî edit the src URL in the HTML to change calendars
 
 // ============================================================
-// PROXY — Replace with your deployed Cloud Function URL
+// PROXY ‚Äî Replace with your deployed Cloud Function URL
 // ============================================================
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 
 // ============================================================
-// FERRY SCHEDULES — Hoboken 14th St departures
+// FERRY SCHEDULES ‚Äî Hoboken 14th St departures
 // Times in "HH:MM" 24-hour format
 // ============================================================
 const FERRY_SCHEDULES = {
@@ -426,7 +426,7 @@ const FERRY_SCHEDULES = {
 };
 
 // ============================================================
-// BUS 126 SCHEDULE — Hoboken -> New York
+// BUS 126 SCHEDULE ‚Äî Hoboken -> New York
 // Approximate times at 14th & Washington (estimated from published PA schedule)
 // ============================================================
 const BUS_126_SCHEDULE = {
@@ -485,8 +485,8 @@ const BUS_126_SCHEDULE = {
 };
 
 // ============================================================
-// BUS 119 SCHEDULE — Hoboken (Willow Ave at 14th St) -> New York
-// Weekday peak hours only — no Saturday or Sunday service
+// BUS 119 SCHEDULE ‚Äî Hoboken (Willow Ave at 14th St) -> New York
+// Weekday peak hours only ‚Äî no Saturday or Sunday service
 // ============================================================
 const BUS_119_SCHEDULE = {
   weekday: [
@@ -604,7 +604,7 @@ function minutesUntil(timeStr) {
   // After-midnight service (00:05, 01:35 etc) should show as upcoming if it's late night
   // But early morning times (5am+) should NOT wrap around at 11pm
   if (diff < 0 && timeToMinutes(timeStr) < 180) {
-    // Destination time is before 3am — treat as late-night continuation
+    // Destination time is before 3am ‚Äî treat as late-night continuation
     diff += 24 * 60;
   }
   return diff;
@@ -670,7 +670,7 @@ function get126WillowSchedule() {
 }
 
 function get119Schedule() {
-  if (isWeekend()) return BUS_119_SCHEDULE.saturday; // empty — no weekend service
+  if (isWeekend()) return BUS_119_SCHEDULE.saturday; // empty ‚Äî no weekend service
   return BUS_119_SCHEDULE.weekday;
 }
 
@@ -689,7 +689,7 @@ function updateBusStatic() {
 }
 
 // ============================================================
-// PROXY FETCH — live bus + tunnel data
+// PROXY FETCH ‚Äî live bus + tunnel data
 // ============================================================
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
