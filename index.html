@@ -169,35 +169,28 @@
   }
 
   .hop-etas {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: 6px;
+    align-items: center;
+    gap: 2px;
+    margin-top: 4px;
   }
 
   .hop-eta-item {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 4px;
   }
 
   .hop-eta-time {
-    font-size: 1.4rem;
+    font-size: 1.1rem;
     font-weight: 300;
     color: #fff;
   }
 
-  .hop-eta-label {
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: #6bffb8;
-  }
-
   .hop-no-service {
-    font-size: 0.9rem;
+    font-size: 0.7rem;
     color: #444;
-    margin-top: 8px;
   }
 
   /* Transit cards - full width */
@@ -389,13 +382,10 @@
   <iframe id="calFrame" src="https://calendar.google.com/calendar/embed?src=95b414e5897342d1c464b84fd964684962498e98f5f42eb8e9a7b7df48298bb8%40group.calendar.google.com&ctz=America%2FNew_York&mode=AGENDA&showTitle=0&showNav=0&showPrint=0&showCalendars=0&showTabs=0&bgcolor=%23151520&color=%236bffb8" style="width:100%;flex:1;border:none;border-radius:8px;min-height:0;filter:invert(1) hue-rotate(180deg);"></iframe>
 </div>
 
-<div class="card hop-card" id="hopCard">
-  <div class="card-title">
-    <svg viewBox="0 0 24 24" fill="#666" width="18" height="18"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/></svg>
-    Hop &middot; 12th &amp; Garden
-  </div>
-  <div class="hop-etas" id="hopContent">
-    <div class="hop-no-service">Loading...</div>
+
+<div class="card" id="photoCard" style="padding:0;overflow:hidden;">
+  <div id="photoFrame" style="width:100%;height:100%;background:#0a0a0f;display:flex;align-items:center;justify-content:center;">
+    <div style="color:#444;font-size:0.8rem;">Photos</div>
   </div>
 </div>
 
@@ -425,6 +415,12 @@
     <div class="transit-title">Ferry &middot; Hoboken 14th St</div>
     <div class="transit-routes" id="ferryContent">
       <div class="no-service">Loading...</div>
+    </div>
+  </div>
+  <div class="tunnel-traffic" id="hopTraffic">
+    <div class="tunnel-label">Hop &middot; 12th &amp; Garden</div>
+    <div class="hop-etas" id="hopContent">
+      <div class="hop-no-service">--</div>
     </div>
   </div>
 </div>
@@ -829,10 +825,7 @@ async function fetchProxy() {
       container.innerHTML = html;
     }
 
-    // Update Hop ETAs
-    if (data.hop && data.hop['158942']) {
-      renderHopEtas(data.hop['158942'].etas);
-    }
+    // Hop ETAs fetched directly from PassioGo in fetchHop()
   } catch (e) {
     console.error('Proxy fetch error:', e);
   }
@@ -885,6 +878,36 @@ function renderHopEtas(data) {
 }
 
 // ============================================================
+// HOP DIRECT FETCH (PassioGo has open CORS)
+// ============================================================
+async function fetchHop() {
+  try {
+    const resp = await fetch('https://passiogo.com/mapGetData.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'json=' + encodeURIComponent(JSON.stringify({s0:'466',sA:1})) + '&eta=3&deviceId=web&stopIds=158942',
+    });
+    const data = await resp.json();
+    const etas = [];
+    for (const [key, entries] of Object.entries(data.ETAs || {})) {
+      for (const entry of entries) {
+        if (entry.eta && entry.eta !== 'no vehicles') {
+          etas.push({ eta: entry.eta });
+        }
+      }
+    }
+    if (etas.length > 0) {
+      renderHopEtas(etas);
+    } else {
+      renderHopEtas({ status: 'no vehicles' });
+    }
+  } catch (e) {
+    console.error('Hop fetch error:', e);
+    renderHopEtas({ error: e.message });
+  }
+}
+
+// ============================================================
 // INIT
 // ============================================================
 function updateTransit() {
@@ -894,6 +917,7 @@ function updateTransit() {
     updateBusStatic();
   }
   updateFerries();
+  fetchHop();
 }
 
 updateClock();
