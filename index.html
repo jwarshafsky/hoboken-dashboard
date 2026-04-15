@@ -125,12 +125,13 @@
   .weather-details {
     grid-column: 1 / -1;
     display: flex;
-    gap: 12px;
-    font-size: 0.7rem;
+    gap: 10px;
+    font-size: 0.6rem;
     color: #777;
     padding-top: 6px;
     border-top: 1px solid #1e1e2e;
     margin-top: 6px;
+    white-space: nowrap;
   }
 
   .weather-details span { color: #bbb; }
@@ -539,14 +540,14 @@
         <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
+        <div style="font-size:0.65rem;color:#777;margin-top:2px;">Hi <span style="color:#bbb" id="weatherHi">--</span>&deg; / Lo <span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
       </div>
     </div>
   </div>
   <div class="weather-forecast" id="weatherForecast"></div>
   <div class="weather-details">
-    <div>Hi <span id="weatherHi">--</span>&deg; / Lo <span id="weatherLo">--</span>&deg;</div>
-    <div>Wind <span id="weatherWind">--</span> mph</div>
-    <div><span id="weatherHumidity">--</span>% humidity</div>
+    <div>Wind&nbsp;<span id="weatherWind">--</span>&nbsp;mph</div>
+    <div><span id="weatherHumidity">--</span>%&nbsp;humidity</div>
   </div>
 </div>
 
