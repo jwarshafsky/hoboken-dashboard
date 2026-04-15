@@ -445,7 +445,7 @@
 
   .bus-headlight.schedule {
     fill: #c0392b;
-    filter: drop-shadow(0 0 3px #c0392b);
+    filter: none;
   }
 
   @keyframes hl-flash {
@@ -1108,7 +1108,7 @@ async function fetchAlerts() {
     } else {
       // Count how many alert items (they take more vertical space)
       const alertCount = items.filter(i => i.isAlert).length;
-      const maxItems = alertCount > 2 ? 5 : 7;
+      const maxItems = alertCount >= 2 ? 6 : alertCount === 1 ? 7 : 8;
       let html = '';
       for (const item of items.slice(0, maxItems)) {
         const alertClass = item.isAlert ? ' is-alert' : '';
