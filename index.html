@@ -432,19 +432,25 @@
     color: #444;
   }
 
-  /* Bus icon live/schedule indicator */
-  #busIcon.live svg {
+  /* Bus headlights */
+  .bus-headlight {
+    filter: none;
+  }
+
+  .bus-headlight.live {
     fill: #fff;
-    animation: bus-flash 2s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 8px #fff);
+    animation: hl-flash 2s ease-in-out infinite;
   }
 
-  #busIcon.schedule svg {
+  .bus-headlight.schedule {
     fill: #c0392b;
+    filter: drop-shadow(0 0 3px #c0392b);
   }
 
-  @keyframes bus-flash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+  @keyframes hl-flash {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 8px #fff); }
+    50% { opacity: 0.15; filter: none; }
   }
 
   .refresh-note {
@@ -514,8 +520,8 @@
 </div>
 
 <div class="card transit-card" id="busCard">
-  <div class="transit-icon schedule" id="busIcon">
-    <svg viewBox="0 0 24 24" fill="#555" width="36" height="36"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/></svg>
+  <div class="transit-icon" id="busIcon">
+    <svg viewBox="0 0 24 24" fill="#555" width="44" height="44"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
   </div>
   <div class="transit-body" style="flex:1;">
     <div class="transit-title">Bus &rarr; New York</div>
@@ -954,10 +960,13 @@ async function fetchProxy() {
 
       container.innerHTML = html;
 
-      // Toggle bus icon: white flashing if live, red solid if schedule
-      const busIcon = document.getElementById('busIcon');
-      if (busIcon) {
-        busIcon.className = 'transit-icon ' + (isLive ? 'live' : 'schedule');
+      // Toggle headlights: white flashing if live, red solid if schedule
+      const hl1 = document.getElementById('busHL1');
+      const hl2 = document.getElementById('busHL2');
+      if (hl1 && hl2) {
+        const mode = isLive ? 'live' : 'schedule';
+        hl1.className = 'bus-headlight ' + mode;
+        hl2.className = 'bus-headlight ' + mode;
       }
     }
 
