@@ -431,6 +431,26 @@
     color: #444;
   }
 
+  /* Bus headlights */
+  .bus-headlight {
+    transition: fill 0.3s;
+  }
+
+  .bus-headlight.live {
+    fill: #fff;
+    animation: headlight-flash 2s ease-in-out infinite;
+  }
+
+  .bus-headlight.schedule {
+    fill: #c0392b;
+    animation: none;
+  }
+
+  @keyframes headlight-flash {
+    0%, 100% { fill: #fff; opacity: 1; }
+    50% { fill: #fff; opacity: 0.2; }
+  }
+
   .refresh-note {
     position: fixed;
     bottom: 4px;
@@ -499,7 +519,7 @@
 
 <div class="card transit-card" id="busCard">
   <div class="transit-icon">
-    <svg viewBox="0 0 24 24" fill="#555" width="36" height="36"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/></svg>
+    <svg viewBox="0 0 24 24" fill="#555" width="36" height="36"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
   </div>
   <div class="transit-body" style="flex:1;">
     <div class="transit-title">Bus &rarr; New York</div>
@@ -900,10 +920,12 @@ async function fetchProxy() {
     if (data.stops) {
       const container = document.getElementById('busContent');
       let html = '';
+      let isLive = false;
 
       const stop20490 = data.stops['20490'];
       if (stop20490 && Array.isArray(stop20490.predictions) && stop20490.predictions.length > 0) {
         html += renderLivePredictions(stop20490.predictions, '126 @ 14th & Bloomfield');
+        isLive = true;
       } else {
         // Fall back to static schedule
         let schedule;
@@ -935,6 +957,14 @@ async function fetchProxy() {
       }
 
       container.innerHTML = html;
+
+      // Toggle headlights: white flashing if live, red solid if schedule
+      const hl1 = document.getElementById('busHL1');
+      const hl2 = document.getElementById('busHL2');
+      if (hl1 && hl2) {
+        hl1.className = 'bus-headlight ' + (isLive ? 'live' : 'schedule');
+        hl2.className = 'bus-headlight ' + (isLive ? 'live' : 'schedule');
+      }
     }
 
     // Hop ETAs fetched directly from PassioGo in fetchHop()
@@ -1025,7 +1055,7 @@ async function fetchHop() {
 async function fetchAlerts() {
   if (!PROXY_URL) return;
   try {
-    const res = await fetch(PROXY_URL + '/alerts');
+    const res = await fetch(PROXY_URL + '?mode=alerts');
     const data = await res.json();
     const container = document.getElementById('alertsList');
     let items = [];
@@ -1035,7 +1065,7 @@ async function fetchAlerts() {
       for (const a of data.njt_alerts) {
         if (a.error) continue;
         items.push({
-          text: a.title || a.description || '',
+          text: a.description || a.title || '',
           badge: 'njt',
           badgeText: 'NJT',
           isAlert: true,
