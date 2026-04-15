@@ -1097,9 +1097,11 @@ async function fetchAlerts() {
     if (items.length === 0) {
       container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
     } else {
-      // Show as many as fit ‚Äî alerts always shown, news fills the rest
+      // Count how many alert items (they take more vertical space)
+      const alertCount = items.filter(i => i.isAlert).length;
+      const maxItems = alertCount > 2 ? 5 : 7;
       let html = '';
-      for (const item of items.slice(0, 8)) {
+      for (const item of items.slice(0, maxItems)) {
         const alertClass = item.isAlert ? ' is-alert' : '';
         html += `<div class="alert-item${alertClass}">`;
         html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
