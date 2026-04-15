@@ -336,9 +336,10 @@
 
   .transit-routes {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px 20px;
+    flex-wrap: nowrap;
+    gap: 6px 16px;
     align-items: center;
+    overflow: hidden;
   }
 
   .route-group {
@@ -602,14 +603,14 @@ const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 // FERRY SCHEDULES
 // ============================================================
 const FERRY_SCHEDULES = {
-  "Pier 11 / Wall St": {
+  "Wall St": {
     weekday: [
       "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
       "16:10","16:40","17:05","17:30","17:55","18:20","18:50"
     ],
     weekend: []
   },
-  "Midtown / W 39th St": {
+  "Midtown": {
     weekday: [
       "06:20","06:40","07:03","07:23","07:43","08:03","08:23","08:43",
       "09:03","09:23","09:43","10:03","10:23","10:43","11:03","11:23","11:43",
