@@ -162,6 +162,105 @@
     color: #ccc;
   }
 
+  /* Alerts / News panel */
+  .alerts-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .alerts-list {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .alert-item {
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: #ccc;
+    padding: 4px 0;
+    border-bottom: 1px solid #1a1a28;
+  }
+
+  .alert-item:last-child { border-bottom: none; }
+
+  .alert-item.is-alert {
+    color: #ff9b6b;
+    font-weight: 600;
+  }
+
+  .alert-badge {
+    display: inline-block;
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+
+  .alert-badge.njt {
+    background: #c0392b;
+    color: #fff;
+  }
+
+  .alert-badge.nixle {
+    background: #e67e22;
+    color: #fff;
+  }
+
+  .alert-badge.news {
+    background: #2a2a3a;
+    color: #888;
+  }
+
+  .stock-ticker-bar {
+    flex-shrink: 0;
+    margin-top: auto;
+    border-top: 1px solid #1e1e2e;
+    padding-top: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .stock-ticker-track {
+    display: flex;
+    gap: 20px;
+    animation: ticker-scroll 25s linear infinite;
+    width: max-content;
+  }
+
+  @keyframes ticker-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .stock-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    font-size: 0.7rem;
+  }
+
+  .stock-symbol {
+    font-weight: 600;
+    color: #999;
+  }
+
+  .stock-pct {
+    font-weight: 500;
+  }
+
+  .stock-up { color: #6bffb8; }
+  .stock-down { color: #ff6b6b; }
+
   /* Hop card */
   .hop-card {
     display: flex;
@@ -383,9 +482,18 @@
 </div>
 
 
-<div class="card" id="photoCard" style="padding:0;overflow:hidden;">
-  <div id="photoFrame" style="width:100%;height:100%;background:#0a0a0f;display:flex;align-items:center;justify-content:center;">
-    <div style="color:#444;font-size:0.8rem;">Photos</div>
+<div class="card alerts-panel" id="alertsCard">
+  <div class="card-title">
+    <svg viewBox="0 0 24 24" fill="#666" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    Alerts &amp; News
+  </div>
+  <div class="alerts-list" id="alertsList">
+    <div class="alert-item" style="color:#444;">Loading...</div>
+  </div>
+  <div class="stock-ticker-bar">
+    <div class="stock-ticker-track" id="stockTicker">
+      <span class="stock-item"><span class="stock-symbol">Loading...</span></span>
+    </div>
   </div>
 </div>
 
@@ -616,18 +724,22 @@ async function updateWeather() {
       : (data.hourly.relative_humidity_2m ? data.hourly.relative_humidity_2m[nowHour] : '--');
     document.getElementById('weatherHumidity').textContent = humidity;
 
-    // Hourly forecast for rest of day
+    // Hourly forecast ‚Äî next ~6 points, wrapping into tomorrow if needed
     const hourlyTemps = data.hourly.temperature_2m;
     const hourlyCodes = data.hourly.weathercode;
     if (hourlyTemps && hourlyCodes) {
       let fhtml = '';
-      // Show every 2-3 hours from now until end of day
-      for (let h = nowHour + 2; h <= 23; h += 3) {
+      let count = 0;
+      let h = nowHour + 2;
+      while (count < 6 && h < hourlyTemps.length) {
         const t = Math.round(hourlyTemps[h]);
         const ic = WMO_CODES[hourlyCodes[h]] || ['?', '?'];
-        const ampm = h >= 12 ? 'p' : 'a';
-        const h12 = h % 12 || 12;
+        const displayH = h % 24;
+        const ampm = displayH >= 12 ? 'p' : 'a';
+        const h12 = displayH % 12 || 12;
         fhtml += `<div class="weather-hour"><span class="wh-time">${h12}${ampm}</span><span class="wh-icon">${ic[1]}</span><span class="wh-temp">${t}&deg;</span></div>`;
+        h += 3;
+        count++;
       }
       document.getElementById('weatherForecast').innerHTML = fhtml;
     }
@@ -908,6 +1020,91 @@ async function fetchHop() {
 }
 
 // ============================================================
+// ALERTS & NEWS
+// ============================================================
+async function fetchAlerts() {
+  if (!PROXY_URL) return;
+  try {
+    const res = await fetch(PROXY_URL + '/alerts');
+    const data = await res.json();
+    const container = document.getElementById('alertsList');
+    let items = [];
+
+    // Priority 1: NJT travel alerts (bold, red badge)
+    if (Array.isArray(data.njt_alerts)) {
+      for (const a of data.njt_alerts) {
+        if (a.error) continue;
+        items.push({
+          text: a.title || a.description || '',
+          badge: 'njt',
+          badgeText: 'NJT',
+          isAlert: true,
+        });
+      }
+    }
+
+    // Priority 2: Nixle advisories (bold, orange badge)
+    if (Array.isArray(data.nixle_alerts)) {
+      for (const a of data.nixle_alerts) {
+        if (a.error) continue;
+        items.push({
+          text: a.title || '',
+          badge: 'nixle',
+          badgeText: 'Nixle',
+          isAlert: true,
+        });
+      }
+    }
+
+    // Priority 3: News headlines (fill remaining space)
+    if (Array.isArray(data.news)) {
+      for (const n of data.news) {
+        if (n.error) continue;
+        items.push({
+          text: n.title || '',
+          badge: 'news',
+          badgeText: n.source || 'News',
+          isAlert: false,
+        });
+      }
+    }
+
+    // Render ‚Äî alerts first, then fill with news
+    if (items.length === 0) {
+      container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
+    } else {
+      // Show as many as fit ‚Äî alerts always shown, news fills the rest
+      let html = '';
+      for (const item of items.slice(0, 8)) {
+        const alertClass = item.isAlert ? ' is-alert' : '';
+        html += `<div class="alert-item${alertClass}">`;
+        html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
+        html += item.text;
+        html += '</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    // Stock ticker
+    const stocks = data.stocks;
+    const tickerEl = document.getElementById('stockTicker');
+    if (Array.isArray(stocks) && stocks.length > 0) {
+      let tickerHtml = '';
+      for (const s of stocks) {
+        if (s.error) continue;
+        const sign = s.direction === 'up' ? '+' : '';
+        const cls = s.direction === 'up' ? 'stock-up' : 'stock-down';
+        tickerHtml += `<span class="stock-item"><span class="stock-symbol">${s.symbol}</span><span class="stock-pct ${cls}">${sign}${s.pctChange}%</span></span>`;
+      }
+      // Duplicate for seamless loop
+      tickerEl.innerHTML = tickerHtml + tickerHtml;
+    }
+  } catch (e) {
+    console.error('Alerts fetch error:', e);
+  }
+}
+
+// ============================================================
 // INIT
 // ============================================================
 function updateTransit() {
@@ -923,9 +1120,11 @@ function updateTransit() {
 updateClock();
 updateTransit();
 updateWeather();
+fetchAlerts();
 setInterval(updateClock, 1000);
-setInterval(updateTransit, 60000);  // 1-minute refresh for transit
-setInterval(updateWeather, 600000);
+setInterval(updateTransit, 60000);   // 1-minute refresh for transit
+setInterval(updateWeather, 600000);  // 10-minute refresh for weather
+setInterval(fetchAlerts, 300000);    // 5-minute refresh for alerts/news
 </script>
 </body>
 </html>
