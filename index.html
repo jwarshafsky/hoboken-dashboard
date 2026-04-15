@@ -17,38 +17,16 @@
     overflow: hidden;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: auto 2fr 1fr 1fr;
-    gap: 12px;
-    padding: 16px;
-  }
-
-  /* Clock - full width */
-  .clock-section {
-    grid-column: 1 / -1;
-    text-align: center;
-    padding: 6px 0;
-  }
-
-  .time {
-    font-size: 5rem;
-    font-weight: 200;
-    letter-spacing: 0.02em;
-    line-height: 1;
-    color: #fff;
-  }
-
-  .date-line {
-    font-size: 1.1rem;
-    font-weight: 300;
-    color: #888;
-    margin-top: 2px;
+    grid-template-rows: auto 1fr auto auto;
+    gap: 10px;
+    padding: 12px;
   }
 
   /* Cards */
   .card {
     background: #151520;
-    border-radius: 16px;
-    padding: 14px;
+    border-radius: 14px;
+    padding: 12px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -56,30 +34,54 @@
   }
 
   .card-title {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #666;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .card-title svg {
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
   }
 
-  /* Weather - takes up more space */
+  /* Clock card ‚Äî top left */
+  .clock-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  .time {
+    font-size: 3.2rem;
+    font-weight: 200;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: #fff;
+  }
+
+  .date-line {
+    font-size: 0.85rem;
+    font-weight: 300;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  /* Weather card ‚Äî below clock */
   .weather-card {
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-rows: 1fr auto;
-    gap: 0 12px;
+    gap: 0 10px;
   }
 
   .weather-main {
@@ -91,40 +93,40 @@
   .weather-top {
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
   }
 
-  .weather-icon { font-size: 3rem; line-height: 1; }
+  .weather-icon { font-size: 2.2rem; line-height: 1; }
 
   .weather-temp {
-    font-size: 3.5rem;
+    font-size: 2.5rem;
     font-weight: 200;
     color: #fff;
     line-height: 1;
   }
 
   .weather-temp-c {
-    font-size: 1.3rem;
+    font-size: 1rem;
     font-weight: 200;
     color: #888;
     line-height: 1;
   }
 
   .weather-desc {
-    font-size: 1.1rem;
+    font-size: 0.85rem;
     color: #aaa;
-    margin-top: 4px;
+    margin-top: 3px;
   }
 
   .weather-details {
     grid-column: 1 / -1;
     display: flex;
-    gap: 16px;
-    font-size: 0.8rem;
+    gap: 12px;
+    font-size: 0.7rem;
     color: #777;
-    padding-top: 8px;
+    padding-top: 6px;
     border-top: 1px solid #1e1e2e;
-    margin-top: 8px;
+    margin-top: 6px;
   }
 
   .weather-details span { color: #bbb; }
@@ -132,37 +134,57 @@
   .weather-forecast {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     overflow: hidden;
     border-left: 1px solid #1e1e2e;
-    padding-left: 12px;
+    padding-left: 10px;
     justify-content: center;
   }
 
   .weather-hour {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .weather-hour .wh-time {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     color: #666;
-    min-width: 30px;
+    min-width: 26px;
   }
 
   .weather-hour .wh-icon {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     line-height: 1;
   }
 
   .weather-hour .wh-temp {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: #ccc;
   }
 
-  /* Alerts / News panel */
+  /* Calendar ‚Äî spans both rows in middle column */
+  #calCard {
+    grid-row: 1 / 3;
+    grid-column: 2;
+  }
+
+  #calCard iframe {
+    width: 100%;
+    flex: 1;
+    border: none;
+    border-radius: 8px;
+    min-height: 0;
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  /* Alerts ‚Äî spans both rows in right column */
+  #alertsCard {
+    grid-row: 1 / 3;
+    grid-column: 3;
+  }
+
   .alerts-panel {
     display: flex;
     flex-direction: column;
@@ -175,14 +197,14 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
   }
 
   .alert-item {
-    font-size: 0.78rem;
-    line-height: 1.35;
+    font-size: 0.72rem;
+    line-height: 1.3;
     color: #ccc;
-    padding: 4px 0;
+    padding: 3px 0;
     border-bottom: 1px solid #1a1a28;
   }
 
@@ -195,13 +217,13 @@
 
   .alert-badge {
     display: inline-block;
-    font-size: 0.55rem;
+    font-size: 0.5rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    padding: 1px 5px;
+    padding: 1px 4px;
     border-radius: 3px;
-    margin-right: 5px;
+    margin-right: 4px;
     vertical-align: middle;
   }
 
@@ -222,17 +244,16 @@
 
   .stock-ticker-bar {
     flex-shrink: 0;
-    margin-top: auto;
     border-top: 1px solid #1e1e2e;
-    padding-top: 8px;
-    margin-top: 10px;
+    padding-top: 6px;
+    margin-top: 8px;
     overflow: hidden;
     position: relative;
   }
 
   .stock-ticker-track {
     display: flex;
-    gap: 20px;
+    gap: 18px;
     animation: ticker-scroll 25s linear infinite;
     width: max-content;
   }
@@ -245,9 +266,9 @@
   .stock-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     white-space: nowrap;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
   }
 
   .stock-symbol {
@@ -255,52 +276,18 @@
     color: #999;
   }
 
-  .stock-pct {
-    font-weight: 500;
-  }
-
+  .stock-pct { font-weight: 500; }
   .stock-up { color: #6bffb8; }
   .stock-down { color: #ff6b6b; }
-
-  /* Hop card */
-  .hop-card {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .hop-etas {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    margin-top: 4px;
-  }
-
-  .hop-eta-item {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-  }
-
-  .hop-eta-time {
-    font-size: 1.1rem;
-    font-weight: 300;
-    color: #fff;
-  }
-
-  .hop-no-service {
-    font-size: 0.7rem;
-    color: #444;
-  }
 
   /* Transit cards - full width */
   .transit-card {
     grid-column: 1 / -1;
     flex-direction: row;
     align-items: center;
-    gap: 16px;
-    padding: 16px 18px;
-    min-height: 90px;
+    gap: 12px;
+    padding: 10px 14px;
+    min-height: 0;
   }
 
   .transit-icon {
@@ -310,8 +297,8 @@
   }
 
   .transit-icon svg {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     fill: #555;
   }
 
@@ -321,29 +308,29 @@
   }
 
   .transit-title {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #666;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
 
   .transit-routes {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 24px;
+    gap: 6px 20px;
     align-items: center;
   }
 
   .route-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .route-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -353,17 +340,17 @@
 
   .dep-row {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     flex-wrap: wrap;
   }
 
   .dep-chip {
     display: flex;
     align-items: baseline;
-    gap: 5px;
+    gap: 4px;
     background: #1a1a2a;
-    padding: 4px 10px;
-    border-radius: 8px;
+    padding: 3px 8px;
+    border-radius: 6px;
   }
 
   .dep-chip:first-child {
@@ -371,71 +358,69 @@
   }
 
   .dep-chip .t {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 400;
     color: #fff;
   }
 
   .dep-chip:first-child .t {
-    font-size: 1.25rem;
+    font-size: 1.05rem;
   }
 
   .dep-chip .cd {
-    font-size: 0.65rem;
+    font-size: 0.55rem;
     font-weight: 500;
   }
 
   .tunnel-traffic {
     flex-shrink: 0;
     text-align: center;
-    padding: 4px 16px;
+    padding: 3px 14px;
     border-left: 1px solid #1e1e2e;
-    margin-left: 12px;
+    margin-left: 10px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-width: 90px;
+    min-width: 80px;
   }
 
   .tunnel-label {
-    font-size: 0.6rem;
+    font-size: 0.55rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: #555;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .tunnel-time {
-    font-size: 2rem;
+    font-size: 1.6rem;
     font-weight: 300;
     color: #fff;
     line-height: 1;
   }
 
   .tunnel-min {
-    font-size: 0.7rem;
+    font-size: 0.6rem;
     color: #888;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
   }
 
   .tunnel-status {
-    font-size: 0.6rem;
+    font-size: 0.5rem;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
 
   .no-service {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: #444;
   }
 
   /* Bus headlights */
-  .bus-headlight {
-    filter: none;
-  }
+  .bus-headlight { filter: none; }
 
   .bus-headlight.live {
     fill: #fff;
@@ -453,11 +438,37 @@
     50% { opacity: 0.15; filter: none; }
   }
 
+  /* Hop */
+  .hop-etas {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    margin-top: 2px;
+  }
+
+  .hop-eta-item {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+
+  .hop-eta-time {
+    font-size: 0.95rem;
+    font-weight: 300;
+    color: #fff;
+  }
+
+  .hop-no-service {
+    font-size: 0.6rem;
+    color: #444;
+  }
+
   .refresh-note {
     position: fixed;
-    bottom: 4px;
-    right: 12px;
-    font-size: 0.55rem;
+    bottom: 3px;
+    right: 10px;
+    font-size: 0.5rem;
     color: #282828;
   }
 
@@ -466,19 +477,44 @@
       grid-template-columns: 1fr;
       grid-template-rows: auto auto auto auto auto auto;
     }
+    #calCard, #alertsCard { grid-row: auto; grid-column: auto; }
     .transit-card { flex-direction: column; align-items: flex-start; }
-    .time { font-size: 3.5rem; }
-    .weather-temp { font-size: 3rem; }
+    .time { font-size: 2.5rem; }
+    .weather-temp { font-size: 2rem; }
   }
 </style>
 </head>
 <body>
 
-<div class="clock-section">
+<!-- Row 1: Clock (top-left) -->
+<div class="card clock-card">
   <div class="time" id="clock">--:--</div>
   <div class="date-line" id="dateLine">---</div>
 </div>
 
+<!-- Row 1-2: Calendar (middle, tall) -->
+<div class="card" id="calCard">
+  <div class="card-title">Today's Events</div>
+  <iframe id="calFrame" src="https://calendar.google.com/calendar/embed?src=95b414e5897342d1c464b84fd964684962498e98f5f42eb8e9a7b7df48298bb8%40group.calendar.google.com&ctz=America%2FNew_York&mode=AGENDA&showTitle=0&showNav=0&showPrint=0&showCalendars=0&showTabs=0&bgcolor=%23151520&color=%236bffb8" style="width:100%;flex:1;border:none;border-radius:8px;min-height:0;filter:invert(1) hue-rotate(180deg);"></iframe>
+</div>
+
+<!-- Row 1-2: Alerts & News (right, tall) -->
+<div class="card alerts-panel" id="alertsCard">
+  <div class="card-title">
+    <svg viewBox="0 0 24 24" fill="#666" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    Alerts &amp; News
+  </div>
+  <div class="alerts-list" id="alertsList">
+    <div class="alert-item" style="color:#444;">Loading...</div>
+  </div>
+  <div class="stock-ticker-bar">
+    <div class="stock-ticker-track" id="stockTicker">
+      <span class="stock-item"><span class="stock-symbol">Loading...</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- Row 2: Weather (below clock, left) -->
 <div class="card weather-card" id="weatherCard">
   <div class="weather-main">
     <div class="weather-top">
@@ -498,30 +534,10 @@
   </div>
 </div>
 
-<div class="card" id="calCard">
-  <div class="card-title">Today's Events</div>
-  <iframe id="calFrame" src="https://calendar.google.com/calendar/embed?src=95b414e5897342d1c464b84fd964684962498e98f5f42eb8e9a7b7df48298bb8%40group.calendar.google.com&ctz=America%2FNew_York&mode=AGENDA&showTitle=0&showNav=0&showPrint=0&showCalendars=0&showTabs=0&bgcolor=%23151520&color=%236bffb8" style="width:100%;flex:1;border:none;border-radius:8px;min-height:0;filter:invert(1) hue-rotate(180deg);"></iframe>
-</div>
-
-
-<div class="card alerts-panel" id="alertsCard">
-  <div class="card-title">
-    <svg viewBox="0 0 24 24" fill="#666" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-    Alerts &amp; News
-  </div>
-  <div class="alerts-list" id="alertsList">
-    <div class="alert-item" style="color:#444;">Loading...</div>
-  </div>
-  <div class="stock-ticker-bar">
-    <div class="stock-ticker-track" id="stockTicker">
-      <span class="stock-item"><span class="stock-symbol">Loading...</span></span>
-    </div>
-  </div>
-</div>
-
+<!-- Row 3: Bus (full width) -->
 <div class="card transit-card" id="busCard">
   <div class="transit-icon" id="busIcon">
-    <svg viewBox="0 0 24 24" fill="#555" width="44" height="44"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
+    <svg viewBox="0 0 24 24" fill="#555" width="32" height="32"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
   </div>
   <div class="transit-body" style="flex:1;">
     <div class="transit-title">Bus &rarr; New York</div>
@@ -537,9 +553,10 @@
   </div>
 </div>
 
+<!-- Row 4: Ferry (full width) -->
 <div class="card transit-card" id="ferryCard">
   <div class="transit-icon">
-    <svg viewBox="0 0 24 24" fill="#555" width="36" height="36"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.14.52-.05.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/></svg>
+    <svg viewBox="0 0 24 24" fill="#555" width="32" height="32"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2zM3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.14.52-.05.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/></svg>
   </div>
   <div class="transit-body">
     <div class="transit-title">Ferry &middot; Hoboken 14th St</div>
@@ -558,16 +575,13 @@
 <div class="refresh-note">Auto-refreshes every 60s</div>
 
 <script>
-// Calendar is embedded as an iframe ‚Äî edit the src URL in the HTML to change calendars
-
 // ============================================================
-// PROXY ‚Äî Replace with your deployed Cloud Function URL
+// PROXY
 // ============================================================
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 
 // ============================================================
-// FERRY SCHEDULES ‚Äî Hoboken 14th St departures
-// Times in "HH:MM" 24-hour format
+// FERRY SCHEDULES
 // ============================================================
 const FERRY_SCHEDULES = {
   "Pier 11 / Wall St": {
@@ -596,8 +610,7 @@ const FERRY_SCHEDULES = {
 };
 
 // ============================================================
-// BUS 126 SCHEDULE ‚Äî Hoboken -> New York
-// Approximate times at 14th & Washington (estimated from published PA schedule)
+// BUS 126 SCHEDULE
 // ============================================================
 const BUS_126_SCHEDULE = {
   weekday: [
@@ -655,8 +668,7 @@ const BUS_126_SCHEDULE = {
 };
 
 // ============================================================
-// BUS 119 SCHEDULE ‚Äî Hoboken (Willow Ave at 14th St) -> New York
-// Weekday peak hours only ‚Äî no Saturday or Sunday service
+// BUS 119 SCHEDULE
 // ============================================================
 const BUS_119_SCHEDULE = {
   weekday: [
@@ -745,14 +757,14 @@ async function updateWeather() {
       : (data.hourly.relative_humidity_2m ? data.hourly.relative_humidity_2m[nowHour] : '--');
     document.getElementById('weatherHumidity').textContent = humidity;
 
-    // Hourly forecast ‚Äî next ~6 points, wrapping into tomorrow if needed
+    // Hourly forecast
     const hourlyTemps = data.hourly.temperature_2m;
     const hourlyCodes = data.hourly.weathercode;
     if (hourlyTemps && hourlyCodes) {
       let fhtml = '';
       let count = 0;
       let h = nowHour + 2;
-      while (count < 6 && h < hourlyTemps.length) {
+      while (count < 5 && h < hourlyTemps.length) {
         const t = Math.round(hourlyTemps[h]);
         const ic = WMO_CODES[hourlyCodes[h]] || ['?', '?'];
         const displayH = h % 24;
@@ -791,10 +803,7 @@ function formatTime12(timeStr) {
 
 function minutesUntil(timeStr) {
   let diff = timeToMinutes(timeStr) - nowMinutes();
-  // After-midnight service (00:05, 01:35 etc) should show as upcoming if it's late night
-  // But early morning times (5am+) should NOT wrap around at 11pm
   if (diff < 0 && timeToMinutes(timeStr) < 180) {
-    // Destination time is before 3am ‚Äî treat as late-night continuation
     diff += 24 * 60;
   }
   return diff;
@@ -844,7 +853,6 @@ function renderDepartures(times, label) {
 // ============================================================
 // BUS (static fallback)
 // ============================================================
-// 15th & Willow is ~2 min after 14th & Bloomfield on the 126 route
 function get126WillowSchedule() {
   let base;
   if (isSunday()) base = BUS_126_SCHEDULE.sunday;
@@ -860,7 +868,7 @@ function get126WillowSchedule() {
 }
 
 function get119Schedule() {
-  if (isWeekend()) return BUS_119_SCHEDULE.saturday; // empty ‚Äî no weekend service
+  if (isWeekend()) return BUS_119_SCHEDULE.saturday;
   return BUS_119_SCHEDULE.weekday;
 }
 
@@ -873,13 +881,13 @@ function get126BloomfieldSchedule() {
 function updateBusStatic() {
   const container = document.getElementById('busContent');
   let html = '';
-  html += renderDepartures(get126BloomfieldSchedule(), '126 @ 14th & Bloomfield');
-  html += renderDepartures(get119Schedule(), '119 @ 15th & Willow');
+  html += renderDepartures(get126BloomfieldSchedule(), '126 @ 14th');
+  html += renderDepartures(get119Schedule(), '119 @ 15th');
   container.innerHTML = html;
 }
 
 // ============================================================
-// PROXY FETCH ‚Äî live bus + tunnel data
+// PROXY FETCH
 // ============================================================
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
@@ -891,14 +899,13 @@ function renderLivePredictions(predictions, label) {
     for (const p of items) {
       const mins = parseInt(p.countdown, 10);
       const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-      const timeStr = p.eta ? p.eta.split(' ').pop() : '';  // "YYYYMMDD HH:MM" -> "HH:MM"
+      const timeStr = p.eta ? p.eta.split(' ').pop() : '';
       const displayTime = timeStr ? formatTime12(timeStr) : `${mins}m`;
       html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
     }
     html += '</div></div>';
     return html;
   }
-  // Fallback for unparsed data
   return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">No predictions</div></div>`;
 }
 
@@ -908,7 +915,6 @@ async function fetchProxy() {
     const res = await fetch(PROXY_URL);
     const data = await res.json();
 
-    // Update tunnel traffic
     if (data.tunnel && !data.tunnel.error) {
       const t = data.tunnel;
       document.getElementById('tunnelTime').textContent = t.travelTime || '--';
@@ -917,7 +923,6 @@ async function fetchProxy() {
       statusEl.style.color = t.travelTime && parseInt(t.travelTime) > 15 ? '#ff6b6b' : '#6bffb8';
     }
 
-    // Update bus predictions
     if (data.stops) {
       const container = document.getElementById('busContent');
       let html = '';
@@ -925,41 +930,36 @@ async function fetchProxy() {
 
       const stop20490 = data.stops['20490'];
       if (stop20490 && Array.isArray(stop20490.predictions) && stop20490.predictions.length > 0) {
-        html += renderLivePredictions(stop20490.predictions, '126 @ 14th & Bloomfield');
+        html += renderLivePredictions(stop20490.predictions, '126 @ 14th');
         isLive = true;
       } else {
-        // Fall back to static schedule
         let schedule;
         if (isSunday()) schedule = BUS_126_SCHEDULE.sunday;
         else if (isWeekend()) schedule = BUS_126_SCHEDULE.saturday;
         else schedule = BUS_126_SCHEDULE.weekday;
-        html += renderDepartures(schedule, '126 @ 14th & Bloomfield');
+        html += renderDepartures(schedule, '126 @ 14th');
       }
 
       const stop32084 = data.stops['32084'];
       if (stop32084 && Array.isArray(stop32084.predictions) && stop32084.predictions.length > 0) {
-        // Filter out 126 buses that are the same bus as 14th & Bloomfield
-        // (within 3 min of a 14th prediction). Keep 119s and unique 126 Willow variants.
         const preds14 = (stop20490 && Array.isArray(stop20490.predictions)) ? stop20490.predictions : [];
         const etaMins14 = preds14.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
         const filtered = stop32084.predictions.filter(p => {
-          if (p.route !== '126') return true; // always keep 119 etc
+          if (p.route !== '126') return true;
           const mins = parseInt(p.countdown, 10);
-          // If this 126 is within 3 min of a 14th prediction, it's the same bus
           return !etaMins14.some(m14 => Math.abs(mins - m14) <= 3);
         });
         if (filtered.length > 0) {
-          html += renderLivePredictions(filtered, '15th & Willow');
+          html += renderLivePredictions(filtered, '119 @ 15th');
         } else {
-          html += renderDepartures(get119Schedule(), '119 @ 15th & Willow');
+          html += renderDepartures(get119Schedule(), '119 @ 15th');
         }
       } else {
-        html += renderDepartures(get119Schedule(), '119 @ 15th & Willow');
+        html += renderDepartures(get119Schedule(), '119 @ 15th');
       }
 
       container.innerHTML = html;
 
-      // Toggle headlights: white flashing if live, red solid if schedule
       const hl1 = document.getElementById('busHL1');
       const hl2 = document.getElementById('busHL2');
       if (hl1 && hl2) {
@@ -968,8 +968,6 @@ async function fetchProxy() {
         hl2.className = 'bus-headlight ' + mode;
       }
     }
-
-    // Hop ETAs fetched directly from PassioGo in fetchHop()
   } catch (e) {
     console.error('Proxy fetch error:', e);
   }
@@ -1006,7 +1004,6 @@ function renderHopEtas(data) {
   if (Array.isArray(data) && data.length > 0) {
     let html = '';
     for (const e of data.slice(0, 3)) {
-      // Add 1 min offset: Fox Hill Gardens -> 12th & Garden
       let eta = e.eta || '';
       const minsMatch = eta.match(/^(\d+)\s*min/i);
       if (minsMatch) {
@@ -1021,9 +1018,6 @@ function renderHopEtas(data) {
   container.innerHTML = '<div class="hop-no-service">No vehicles running</div>';
 }
 
-// ============================================================
-// HOP DIRECT FETCH (PassioGo has open CORS)
-// ============================================================
 async function fetchHop() {
   try {
     const resp = await fetch('https://passiogo.com/mapGetData.php', {
@@ -1062,52 +1056,32 @@ async function fetchAlerts() {
     const container = document.getElementById('alertsList');
     let items = [];
 
-    // Priority 1: NJT travel alerts (bold, red badge)
     if (Array.isArray(data.njt_alerts)) {
       for (const a of data.njt_alerts) {
         if (a.error) continue;
-        items.push({
-          text: a.description || a.title || '',
-          badge: 'njt',
-          badgeText: 'NJT',
-          isAlert: true,
-        });
+        items.push({ text: a.description || a.title || '', badge: 'njt', badgeText: 'NJT', isAlert: true });
       }
     }
 
-    // Priority 2: Nixle advisories (bold, orange badge)
     if (Array.isArray(data.nixle_alerts)) {
       for (const a of data.nixle_alerts) {
         if (a.error) continue;
-        items.push({
-          text: a.title || '',
-          badge: 'nixle',
-          badgeText: 'Nixle',
-          isAlert: true,
-        });
+        items.push({ text: a.title || '', badge: 'nixle', badgeText: 'Nixle', isAlert: true });
       }
     }
 
-    // Priority 3: News headlines (fill remaining space)
     if (Array.isArray(data.news)) {
       for (const n of data.news) {
         if (n.error) continue;
-        items.push({
-          text: n.title || '',
-          badge: 'news',
-          badgeText: n.source || 'News',
-          isAlert: false,
-        });
+        items.push({ text: n.title || '', badge: 'news', badgeText: n.source || 'News', isAlert: false });
       }
     }
 
-    // Render ‚Äî alerts first, then fill with news
     if (items.length === 0) {
       container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
     } else {
-      // Count how many alert items (they take more vertical space)
       const alertCount = items.filter(i => i.isAlert).length;
-      const maxItems = alertCount >= 2 ? 6 : alertCount === 1 ? 7 : 8;
+      const maxItems = alertCount >= 2 ? 8 : alertCount === 1 ? 9 : 10;
       let html = '';
       for (const item of items.slice(0, maxItems)) {
         const alertClass = item.isAlert ? ' is-alert' : '';
@@ -1119,7 +1093,6 @@ async function fetchAlerts() {
       container.innerHTML = html;
     }
 
-    // Stock ticker
     const stocks = data.stocks;
     const tickerEl = document.getElementById('stockTicker');
     if (Array.isArray(stocks) && stocks.length > 0) {
@@ -1130,7 +1103,6 @@ async function fetchAlerts() {
         const cls = s.direction === 'up' ? 'stock-up' : 'stock-down';
         tickerHtml += `<span class="stock-item"><span class="stock-symbol">${s.symbol}</span><span class="stock-pct ${cls}">${sign}${s.pctChange}%</span></span>`;
       }
-      // Duplicate for seamless loop
       tickerEl.innerHTML = tickerHtml + tickerHtml;
     }
   } catch (e) {
@@ -1156,9 +1128,9 @@ updateTransit();
 updateWeather();
 fetchAlerts();
 setInterval(updateClock, 1000);
-setInterval(updateTransit, 60000);   // 1-minute refresh for transit
-setInterval(updateWeather, 600000);  // 10-minute refresh for weather
-setInterval(fetchAlerts, 300000);    // 5-minute refresh for alerts/news
+setInterval(updateTransit, 60000);
+setInterval(updateWeather, 600000);
+setInterval(fetchAlerts, 300000);
 </script>
 </body>
 </html>
