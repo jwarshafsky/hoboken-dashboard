@@ -1141,11 +1141,23 @@ function updateTransit() {
   fetchHop();
 }
 
+// ============================================================
+// SLEEP MODE ‚Äî black screen midnight to 7am
+// ============================================================
+function checkSleepMode() {
+  const h = new Date().getHours();
+  const sleeping = h >= 0 && h < 7;
+  document.body.style.visibility = sleeping ? 'hidden' : 'visible';
+  document.body.style.background = sleeping ? '#000' : '#0a0a0f';
+}
+
 updateClock();
 updateTransit();
 updateWeather();
 fetchAlerts();
+checkSleepMode();
 setInterval(updateClock, 1000);
+setInterval(checkSleepMode, 60000);
 setInterval(updateTransit, 60000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts, 300000);
