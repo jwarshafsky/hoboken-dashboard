@@ -170,13 +170,24 @@
     grid-column: 2;
   }
 
-  #calCard iframe {
-    width: 100%;
+  #calCard .cal-wrap {
     flex: 1;
-    border: none;
+    overflow: hidden;
+    position: relative;
     border-radius: 8px;
     min-height: 0;
+  }
+
+  #calCard iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 143%;
+    height: 143%;
+    border: none;
     filter: invert(1) hue-rotate(180deg);
+    transform: scale(0.7);
+    transform-origin: top left;
   }
 
   /* Alerts ‚Äî spans both rows in right column */
@@ -495,7 +506,7 @@
 <!-- Row 1-2: Calendar (middle, tall) -->
 <div class="card" id="calCard">
   <div class="card-title">Today's Events</div>
-  <iframe id="calFrame" src="https://calendar.google.com/calendar/embed?src=95b414e5897342d1c464b84fd964684962498e98f5f42eb8e9a7b7df48298bb8%40group.calendar.google.com&ctz=America%2FNew_York&mode=AGENDA&showTitle=0&showNav=0&showPrint=0&showCalendars=0&showTabs=0&bgcolor=%23151520&color=%236bffb8" style="width:100%;flex:1;border:none;border-radius:8px;min-height:0;filter:invert(1) hue-rotate(180deg);"></iframe>
+  <div class="cal-wrap"><iframe id="calFrame" src="https://calendar.google.com/calendar/embed?src=95b414e5897342d1c464b84fd964684962498e98f5f42eb8e9a7b7df48298bb8%40group.calendar.google.com&ctz=America%2FNew_York&mode=AGENDA&showTitle=0&showNav=0&showPrint=0&showCalendars=0&showTabs=0&bgcolor=%23151520&color=%236bffb8"></iframe></div>
 </div>
 
 <!-- Row 1-2: Alerts & News (right, tall) -->
