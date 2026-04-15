@@ -780,14 +780,14 @@ async function updateWeather() {
       let fhtml = '';
       let count = 0;
       let h = nowHour + 2;
-      while (count < 5 && h < hourlyTemps.length) {
+      while (count < 7 && h < hourlyTemps.length) {
         const t = Math.round(hourlyTemps[h]);
         const ic = WMO_CODES[hourlyCodes[h]] || ['?', '?'];
         const displayH = h % 24;
         const ampm = displayH >= 12 ? 'p' : 'a';
         const h12 = displayH % 12 || 12;
         fhtml += `<div class="weather-hour"><span class="wh-time">${h12}${ampm}</span><span class="wh-icon">${ic[1]}</span><span class="wh-temp">${t}&deg;</span></div>`;
-        h += 3;
+        h += 2;
         count++;
       }
       document.getElementById('weatherForecast').innerHTML = fhtml;
