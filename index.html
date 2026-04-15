@@ -96,11 +96,11 @@
 
   .weather-top {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 4px;
   }
 
-  .weather-icon { font-size: 1.8rem; line-height: 1; }
+  .weather-icon { font-size: 2.8rem; line-height: 1; }
 
   .weather-temp {
     font-size: 2rem;
@@ -125,8 +125,9 @@
   .weather-details {
     grid-column: 1 / -1;
     display: flex;
-    gap: 10px;
-    font-size: 0.6rem;
+    justify-content: center;
+    gap: 16px;
+    font-size: 0.75rem;
     color: #777;
     padding-top: 6px;
     border-top: 1px solid #1e1e2e;
@@ -540,7 +541,7 @@
         <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
-        <div style="font-size:0.65rem;color:#777;margin-top:2px;">Hi <span style="color:#bbb" id="weatherHi">--</span>&deg; / Lo <span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
+        <div style="font-size:0.65rem;color:#777;margin-top:2px;white-space:nowrap;">Hi&nbsp;<span style="color:#bbb" id="weatherHi">--</span>&deg;&nbsp;/&nbsp;Lo&nbsp;<span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
       </div>
     </div>
   </div>
