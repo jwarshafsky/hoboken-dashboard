@@ -157,7 +157,7 @@
   .weather-hour .wh-time {
     font-size: 0.6rem;
     color: #666;
-    min-width: 26px;
+    min-width: 38px;
   }
 
   .weather-hour .wh-icon {
@@ -523,13 +523,25 @@
     color: #444;
   }
 
-  .refresh-note {
+  .status-bar {
     position: fixed;
     bottom: 3px;
     right: 10px;
-    font-size: 0.5rem;
-    color: #282828;
+    left: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.55rem;
+    color: #444;
+    pointer-events: none;
   }
+
+  .status-warning {
+    color: #e0a040;
+    font-weight: 600;
+  }
+
+  .status-ok { color: #444; }
 
   @media (max-width: 800px) {
     body {
@@ -582,6 +594,7 @@
         <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
+        <div id="weatherRain" style="font-size:0.7rem;margin-top:3px;color:#f0c040;display:none;"><span style="font-size:0.9rem;">‚òÇÔ∏è</span> <span id="weatherRainPct">--</span>% rain</div>
         <div style="font-size:0.65rem;color:#777;margin-top:2px;white-space:nowrap;">Hi&nbsp;<span style="color:#bbb" id="weatherHi">--</span>&deg;&nbsp;/&nbsp;Lo&nbsp;<span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
       </div>
     </div>
@@ -631,13 +644,68 @@
   </div>
 </div>
 
-<div class="refresh-note">Auto-refreshes every 60s</div>
+<div class="status-bar">
+  <span id="statusFreshness">Loading‚Ä¶</span>
+  <span id="statusErrors" class="status-ok"></span>
+</div>
 
 <script>
 // ============================================================
 // PROXY
 // ============================================================
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
+
+// ============================================================
+// API STATUS TRACKING
+// ============================================================
+const apiStatus = {
+  transit: { ok: null, lastUpdate: null },
+  weather: { ok: null, lastUpdate: null },
+  hop:     { ok: null, lastUpdate: null },
+  alerts:  { ok: null, lastUpdate: null },
+};
+
+function markOk(key) {
+  apiStatus[key].ok = true;
+  apiStatus[key].lastUpdate = Date.now();
+}
+
+function markFail(key) {
+  apiStatus[key].ok = false;
+}
+
+function agoText(ts) {
+  if (!ts) return 'never';
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  return `${Math.floor(sec / 3600)}h ago`;
+}
+
+function updateStatusBar() {
+  // Freshness: oldest successful update
+  let oldest = null;
+  for (const key of Object.keys(apiStatus)) {
+    const ts = apiStatus[key].lastUpdate;
+    if (ts && (oldest === null || ts < oldest)) oldest = ts;
+  }
+  document.getElementById('statusFreshness').textContent =
+    oldest ? `Updated ${agoText(oldest)}` : 'Loading‚Ä¶';
+
+  // Errors: list any failed APIs
+  const failed = [];
+  for (const [key, s] of Object.entries(apiStatus)) {
+    if (s.ok === false) failed.push(key);
+  }
+  const errEl = document.getElementById('statusErrors');
+  if (failed.length > 0) {
+    errEl.className = 'status-warning';
+    errEl.textContent = `‚ö† ${failed.join(', ')} offline`;
+  } else {
+    errEl.className = 'status-ok';
+    errEl.textContent = '';
+  }
+}
 
 // ============================================================
 // FERRY SCHEDULES
@@ -793,10 +861,12 @@ function updateClock() {
 async function updateWeather() {
   try {
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032'
-      + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min'
-      + '&hourly=relativehumidity_2m,temperature_2m,weathercode&temperature_unit=fahrenheit&timezone=America/New_York';
+      + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max'
+      + '&hourly=relativehumidity_2m,temperature_2m,weathercode,precipitation_probability'
+      + '&temperature_unit=fahrenheit&timezone=America/New_York';
     const res = await fetch(url);
     const data = await res.json();
+    markOk('weather');
     const cw = data.current_weather;
     const code = WMO_CODES[cw.weathercode] || ["Unknown", "?"];
 
@@ -809,6 +879,21 @@ async function updateWeather() {
     document.getElementById('weatherWind').textContent = Math.round(cw.windspeed);
     document.getElementById('weatherHi').textContent = Math.round(data.daily.temperature_2m_max[0]);
     document.getElementById('weatherLo').textContent = Math.round(data.daily.temperature_2m_min[0]);
+
+    // Precipitation: show umbrella if any hour in next 12 hours has >30% chance
+    const nowH = new Date().getHours();
+    const rainProbs = data.hourly.precipitation_probability || [];
+    let maxRain = 0;
+    for (let h = nowH; h < Math.min(nowH + 12, rainProbs.length); h++) {
+      if (rainProbs[h] > maxRain) maxRain = rainProbs[h];
+    }
+    const rainEl = document.getElementById('weatherRain');
+    if (maxRain >= 30) {
+      rainEl.style.display = 'block';
+      document.getElementById('weatherRainPct').textContent = maxRain;
+    } else {
+      rainEl.style.display = 'none';
+    }
 
     const nowHour = new Date().getHours();
     const humidity = data.hourly.relativehumidity_2m
@@ -827,9 +912,9 @@ async function updateWeather() {
         const t = Math.round(hourlyTemps[h]);
         const ic = WMO_CODES[hourlyCodes[h]] || ['?', '?'];
         const displayH = h % 24;
-        const ampm = displayH >= 12 ? 'p' : 'a';
+        const ampm = displayH >= 12 ? 'PM' : 'AM';
         const h12 = displayH % 12 || 12;
-        fhtml += `<div class="weather-hour"><span class="wh-time">${h12}${ampm}</span><span class="wh-icon">${ic[1]}</span><span class="wh-temp">${t}&deg;</span></div>`;
+        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${ic[1]}</span><span class="wh-temp">${t}&deg;</span></div>`;
         h += 2;
         count++;
       }
@@ -837,6 +922,7 @@ async function updateWeather() {
     }
   } catch (e) {
     document.getElementById('weatherDesc').textContent = 'Error loading weather';
+    markFail('weather');
   }
 }
 
@@ -855,9 +941,9 @@ function nowMinutes() {
 
 function formatTime12(timeStr) {
   const [h, m] = timeStr.split(':').map(Number);
-  const ampm = h >= 12 ? 'p' : 'a';
+  const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, '0')}${ampm}`;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
 function minutesUntil(timeStr) {
@@ -986,9 +1072,9 @@ function renderLivePredictions(predictions, label) {
         const arrive = new Date(now.getTime() + mins * 60000);
         const hh = arrive.getHours();
         const mm = String(arrive.getMinutes()).padStart(2, '0');
-        const ampm = hh >= 12 ? 'p' : 'a';
+        const ampm = hh >= 12 ? 'PM' : 'AM';
         const h12 = hh % 12 || 12;
-        displayTime = `${h12}:${mm}${ampm}`;
+        displayTime = `${h12}:${mm} ${ampm}`;
       }
       const dot = loadDot(p.passload);
       html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span>${dot}</div>`;
@@ -1004,6 +1090,7 @@ async function fetchProxy() {
   try {
     const res = await fetch(PROXY_URL);
     const data = await res.json();
+    markOk('transit');
 
     if (data.tunnel && !data.tunnel.error) {
       const t = data.tunnel;
@@ -1062,6 +1149,7 @@ async function fetchProxy() {
     }
   } catch (e) {
     console.error('Proxy fetch error:', e);
+    markFail('transit');
   }
 }
 
@@ -1137,9 +1225,11 @@ async function fetchHop() {
     } else {
       renderHopEtas({ status: 'no vehicles' });
     }
+    markOk('hop');
   } catch (e) {
     console.error('Hop fetch error:', e);
     renderHopEtas({ error: e.message });
+    markFail('hop');
   }
 }
 
@@ -1151,6 +1241,7 @@ async function fetchAlerts() {
   try {
     const res = await fetch(PROXY_URL + '?mode=alerts');
     const data = await res.json();
+    markOk('alerts');
     const container = document.getElementById('alertsList');
     let items = [];
 
@@ -1205,6 +1296,7 @@ async function fetchAlerts() {
     }
   } catch (e) {
     console.error('Alerts fetch error:', e);
+    markFail('alerts');
   }
 }
 
@@ -1238,6 +1330,8 @@ fetchAlerts();
 checkSleepMode();
 setInterval(updateClock, 1000);
 setInterval(checkSleepMode, 60000);
+setInterval(updateStatusBar, 10000);
+updateStatusBar();
 setInterval(updateTransit, 30000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts, 300000);
