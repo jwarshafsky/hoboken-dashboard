@@ -1010,6 +1010,7 @@ async function fetchProxy() {
         });
         if (filtered.length > 0) {
           html += renderLivePredictions(filtered, '119 @ 15th');
+          if (filtered.some(p => p.is_live)) isLive = true;
         } else {
           html += renderDepartures(get119Schedule(), '119 @ 15th');
         }
