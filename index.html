@@ -1002,13 +1002,13 @@ async function fetchProxy() {
     if (data.stops) {
       const container = document.getElementById('busContent');
       let html = '';
-      let isLive = false;
+      let apiWorking = false;
 
       const stop20490 = data.stops['20490'];
       if (stop20490 && Array.isArray(stop20490.predictions) && stop20490.predictions.length > 0) {
         html += renderLivePredictions(stop20490.predictions, '126 @ 14th');
-        // Only consider it "live" if at least one prediction has a vehicle_id (real-time GPS)
-        if (stop20490.predictions.some(p => p.is_live)) isLive = true;
+        // API is working if we got an array of predictions back (live or scheduled)
+        apiWorking = true;
       } else {
         let schedule;
         if (isSunday()) schedule = BUS_126_SCHEDULE.sunday;
@@ -1028,7 +1028,7 @@ async function fetchProxy() {
         });
         if (filtered.length > 0) {
           html += renderLivePredictions(filtered, '119 @ 15th');
-          if (filtered.some(p => p.is_live)) isLive = true;
+          apiWorking = true;
         } else {
           html += renderDepartures(get119Schedule(), '119 @ 15th');
         }
@@ -1041,7 +1041,7 @@ async function fetchProxy() {
       const hl1 = document.getElementById('busHL1');
       const hl2 = document.getElementById('busHL2');
       if (hl1 && hl2) {
-        const mode = isLive ? 'live' : 'schedule';
+        const mode = apiWorking ? 'live' : 'schedule';
         hl1.className = 'bus-headlight ' + mode;
         hl2.className = 'bus-headlight ' + mode;
       }
