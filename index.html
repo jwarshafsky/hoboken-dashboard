@@ -1042,8 +1042,8 @@ async function fetchProxy() {
       const hl2 = document.getElementById('busHL2');
       if (hl1 && hl2) {
         const mode = apiWorking ? 'live' : 'schedule';
-        hl1.className = 'bus-headlight ' + mode;
-        hl2.className = 'bus-headlight ' + mode;
+        hl1.setAttribute('class', 'bus-headlight ' + mode);
+        hl2.setAttribute('class', 'bus-headlight ' + mode);
       }
     }
   } catch (e) {
