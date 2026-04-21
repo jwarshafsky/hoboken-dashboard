@@ -391,6 +391,21 @@
     font-weight: 500;
   }
 
+  .load-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  .load-empty { background: #6bffb8; }
+  .load-light { background: #a0e060; }
+  .load-medium { background: #e0c040; }
+  .load-heavy { background: #e07040; }
+  .load-full { background: #e04040; }
+
   .tunnel-traffic {
     flex-shrink: 0;
     text-align: center;
@@ -908,6 +923,18 @@ function updateBusStatic() {
 // ============================================================
 // PROXY FETCH
 // ============================================================
+function loadDot(passload) {
+  const p = (passload || '').toUpperCase();
+  let cls = '';
+  if (p === 'EMPTY') cls = 'load-empty';
+  else if (p === 'LIGHT') cls = 'load-light';
+  else if (p === 'MEDIUM') cls = 'load-medium';
+  else if (p === 'HEAVY') cls = 'load-heavy';
+  else if (p === 'FULL' || p === 'OVERLOADED') cls = 'load-full';
+  else return '';
+  return `<span class="load-dot ${cls}" title="${p}"></span>`;
+}
+
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
     return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">Error</div></div>`;
@@ -918,9 +945,21 @@ function renderLivePredictions(predictions, label) {
     for (const p of items) {
       const mins = parseInt(p.countdown, 10);
       const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-      const timeStr = p.eta ? p.eta.split(' ').pop() : '';
-      const displayTime = timeStr ? formatTime12(timeStr) : `${mins}m`;
-      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
+      // For live API, we only have countdown minutes ‚Äî compute the clock time
+      let displayTime;
+      if (mins === 0) {
+        displayTime = 'Due';
+      } else {
+        const now = new Date();
+        const arrive = new Date(now.getTime() + mins * 60000);
+        const hh = arrive.getHours();
+        const mm = String(arrive.getMinutes()).padStart(2, '0');
+        const ampm = hh >= 12 ? 'p' : 'a';
+        const h12 = hh % 12 || 12;
+        displayTime = `${h12}:${mm}${ampm}`;
+      }
+      const dot = loadDot(p.passload);
+      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span>${dot}</div>`;
     }
     html += '</div></div>';
     return html;
@@ -950,7 +989,8 @@ async function fetchProxy() {
       const stop20490 = data.stops['20490'];
       if (stop20490 && Array.isArray(stop20490.predictions) && stop20490.predictions.length > 0) {
         html += renderLivePredictions(stop20490.predictions, '126 @ 14th');
-        isLive = true;
+        // Only consider it "live" if at least one prediction has a vehicle_id (real-time GPS)
+        if (stop20490.predictions.some(p => p.is_live)) isLive = true;
       } else {
         let schedule;
         if (isSunday()) schedule = BUS_126_SCHEDULE.sunday;
@@ -959,11 +999,11 @@ async function fetchProxy() {
         html += renderDepartures(schedule, '126 @ 14th');
       }
 
-      const stop32084 = data.stops['32084'];
-      if (stop32084 && Array.isArray(stop32084.predictions) && stop32084.predictions.length > 0) {
+      const stop20523 = data.stops['20523'];
+      if (stop20523 && Array.isArray(stop20523.predictions) && stop20523.predictions.length > 0) {
         const preds14 = (stop20490 && Array.isArray(stop20490.predictions)) ? stop20490.predictions : [];
         const etaMins14 = preds14.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
-        const filtered = stop32084.predictions.filter(p => {
+        const filtered = stop20523.predictions.filter(p => {
           if (p.route !== '126') return true;
           const mins = parseInt(p.countdown, 10);
           return !etaMins14.some(m14 => Math.abs(mins - m14) <= 3);
