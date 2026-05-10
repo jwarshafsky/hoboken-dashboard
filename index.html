@@ -340,6 +340,7 @@
     gap: 6px 16px;
     align-items: center;
     overflow: hidden;
+    white-space: nowrap;
   }
 
   .route-group {
@@ -360,7 +361,7 @@
   .dep-row {
     display: flex;
     gap: 5px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .dep-chip {
@@ -594,7 +595,7 @@
         <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
-        <div id="weatherRain" style="font-size:0.7rem;margin-top:3px;color:#f0c040;display:none;"><span style="font-size:0.9rem;">‚òÇÔ∏è</span> <span id="weatherRainPct">--</span>% rain</div>
+        <div id="weatherRain" style="font-size:0.75rem;margin-top:3px;color:#f0c040;display:none;align-items:center;gap:4px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="#f0c040" style="flex-shrink:0;"><path d="M12 2C7 2 2.7 5.3 1 10c1.7 4.7 6 8 11 8s9.3-3.3 11-8C21.3 5.3 17 2 12 2zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10v4l3 3-1 1-4-4V6h2z" opacity="0"/><path d="M17 13.96c0 .61-.49 1.1-1.1 1.1H15v6c0 .55-.45 1-1 1s-1-.45-1-1v-6h-2v6c0 .55-.45 1-1 1s-1-.45-1-1v-6H8.1c-.61 0-1.1-.49-1.1-1.1 0-3.86 2.5-7.05 5-7.45V5c0-.55.45-1 1-1s1 .45 1 1v1.51c2.5.4 5 3.59 5 7.45z"/></svg><span id="weatherRainPct">--</span>% rain</div>
         <div style="font-size:0.65rem;color:#777;margin-top:2px;white-space:nowrap;">Hi&nbsp;<span style="color:#bbb" id="weatherHi">--</span>&deg;&nbsp;/&nbsp;Lo&nbsp;<span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
       </div>
     </div>
@@ -809,35 +810,50 @@ const BUS_119_SCHEDULE = {
 };
 
 // ============================================================
-// WEATHER CODES
+// WEATHER ICONS (SVG paths) \u2014 render reliably without emoji fonts
 // ============================================================
+const SVG_ICONS = {
+  sun: '<path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13l2 .01c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0l2 .01c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1-.55 0-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" fill="#f9c948"/>',
+  cloud: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/>',
+  partly_cloudy: '<path d="M9 17h7c2.21 0 4-1.79 4-4 0-2.05-1.53-3.74-3.5-3.97-.07-2.79-2.34-5.03-5.14-5.03-2.4 0-4.41 1.65-4.97 3.88-.04 0-.07 0-.11 0-2.21 0-4 1.79-4 4 0 1.95 1.4 3.57 3.24 3.92" fill="#9aa5b8"/><circle cx="6.5" cy="6.5" r="2.5" fill="#f9c948"/>',
+  rain: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/><path d="M7 19l-1.5 3M11 19l-1.5 3M15 19l-1.5 3" stroke="#5fa3e0" stroke-width="1.5" stroke-linecap="round"/>',
+  snow: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/><circle cx="7" cy="20.5" r="0.8" fill="#fff"/><circle cx="11" cy="20.5" r="0.8" fill="#fff"/><circle cx="15" cy="20.5" r="0.8" fill="#fff"/>',
+  fog: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8" opacity="0.6"/><line x1="2" y1="20" x2="22" y2="20" stroke="#9aa5b8" stroke-width="1.5"/><line x1="4" y1="22.5" x2="20" y2="22.5" stroke="#9aa5b8" stroke-width="1.5"/>',
+  storm: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#6a7080"/><path d="M11 17l-3 5h3l-1 4 4-6h-3l1-3z" fill="#f9c948"/>',
+};
+
+function wIcon(key, size) {
+  const s = size || 24;
+  return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="display:inline-block;vertical-align:middle;">${SVG_ICONS[key] || SVG_ICONS.cloud}</svg>`;
+}
+
 const WMO_CODES = {
-  0: ["Clear sky", "\u2600\uFE0F"],
-  1: ["Mostly clear", "\uD83C\uDF24\uFE0F"],
-  2: ["Partly cloudy", "\u26C5"],
-  3: ["Overcast", "\u2601\uFE0F"],
-  45: ["Foggy", "\uD83C\uDF2B\uFE0F"],
-  48: ["Rime fog", "\uD83C\uDF2B\uFE0F"],
-  51: ["Light drizzle", "\uD83C\uDF26\uFE0F"],
-  53: ["Drizzle", "\uD83C\uDF26\uFE0F"],
-  55: ["Heavy drizzle", "\uD83C\uDF26\uFE0F"],
-  61: ["Light rain", "\uD83C\uDF27\uFE0F"],
-  63: ["Rain", "\uD83C\uDF27\uFE0F"],
-  65: ["Heavy rain", "\uD83C\uDF27\uFE0F"],
-  66: ["Freezing rain", "\uD83C\uDF27\uFE0F"],
-  67: ["Heavy freezing rain", "\uD83C\uDF27\uFE0F"],
-  71: ["Light snow", "\uD83C\uDF28\uFE0F"],
-  73: ["Snow", "\uD83C\uDF28\uFE0F"],
-  75: ["Heavy snow", "\uD83C\uDF28\uFE0F"],
-  77: ["Snow grains", "\uD83C\uDF28\uFE0F"],
-  80: ["Rain showers", "\uD83C\uDF27\uFE0F"],
-  81: ["Moderate showers", "\uD83C\uDF27\uFE0F"],
-  82: ["Heavy showers", "\uD83C\uDF27\uFE0F"],
-  85: ["Snow showers", "\uD83C\uDF28\uFE0F"],
-  86: ["Heavy snow showers", "\uD83C\uDF28\uFE0F"],
-  95: ["Thunderstorm", "\u26A1"],
-  96: ["Thunderstorm + hail", "\u26A1"],
-  99: ["Thunderstorm + heavy hail", "\u26A1"]
+  0: ["Clear sky", "sun"],
+  1: ["Mostly clear", "partly_cloudy"],
+  2: ["Partly cloudy", "partly_cloudy"],
+  3: ["Overcast", "cloud"],
+  45: ["Foggy", "fog"],
+  48: ["Rime fog", "fog"],
+  51: ["Light drizzle", "rain"],
+  53: ["Drizzle", "rain"],
+  55: ["Heavy drizzle", "rain"],
+  61: ["Light rain", "rain"],
+  63: ["Rain", "rain"],
+  65: ["Heavy rain", "rain"],
+  66: ["Freezing rain", "rain"],
+  67: ["Heavy freezing rain", "rain"],
+  71: ["Light snow", "snow"],
+  73: ["Snow", "snow"],
+  75: ["Heavy snow", "snow"],
+  77: ["Snow grains", "snow"],
+  80: ["Rain showers", "rain"],
+  81: ["Moderate showers", "rain"],
+  82: ["Heavy showers", "rain"],
+  85: ["Snow showers", "snow"],
+  86: ["Heavy snow showers", "snow"],
+  95: ["Thunderstorm", "storm"],
+  96: ["Thunderstorm + hail", "storm"],
+  99: ["Thunderstorm + heavy hail", "storm"]
 };
 
 // ============================================================
@@ -875,7 +891,7 @@ async function updateWeather() {
     document.getElementById('weatherTemp').innerHTML = `${tempF}&deg;F`;
     document.getElementById('weatherTempC').innerHTML = `${tempC}&deg;C`;
     document.getElementById('weatherDesc').textContent = code[0];
-    document.getElementById('weatherIcon').textContent = code[1];
+    document.getElementById('weatherIcon').innerHTML = wIcon(code[1], 44);
     document.getElementById('weatherWind').textContent = Math.round(cw.windspeed);
     document.getElementById('weatherHi').textContent = Math.round(data.daily.temperature_2m_max[0]);
     document.getElementById('weatherLo').textContent = Math.round(data.daily.temperature_2m_min[0]);
@@ -889,7 +905,7 @@ async function updateWeather() {
     }
     const rainEl = document.getElementById('weatherRain');
     if (maxRain >= 30) {
-      rainEl.style.display = 'block';
+      rainEl.style.display = 'flex';
       document.getElementById('weatherRainPct').textContent = maxRain;
     } else {
       rainEl.style.display = 'none';
@@ -910,11 +926,11 @@ async function updateWeather() {
       let h = nowHour + 2;
       while (count < 7 && h < hourlyTemps.length) {
         const t = Math.round(hourlyTemps[h]);
-        const ic = WMO_CODES[hourlyCodes[h]] || ['?', '?'];
+        const ic = WMO_CODES[hourlyCodes[h]] || ['?', 'cloud'];
         const displayH = h % 24;
         const ampm = displayH >= 12 ? 'PM' : 'AM';
         const h12 = displayH % 12 || 12;
-        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${ic[1]}</span><span class="wh-temp">${t}&deg;</span></div>`;
+        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${wIcon(ic[1], 14)}</span><span class="wh-temp">${t}&deg;</span></div>`;
         h += 2;
         count++;
       }
@@ -1332,9 +1348,11 @@ setInterval(updateClock, 1000);
 setInterval(checkSleepMode, 60000);
 setInterval(updateStatusBar, 10000);
 updateStatusBar();
-setInterval(updateTransit, 30000);
-setInterval(updateWeather, 600000);
-setInterval(fetchAlerts, 300000);
+// PAUSED 2026-05-04 ‚Äî throttled API pulls to once per day to save resources.
+// Restore: updateTransit 30000, updateWeather 600000, fetchAlerts 300000.
+setInterval(updateTransit, 86400000);
+setInterval(updateWeather, 86400000);
+setInterval(fetchAlerts,   86400000);
 </script>
 </body>
 </html>
