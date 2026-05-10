@@ -1348,11 +1348,9 @@ setInterval(updateClock, 1000);
 setInterval(checkSleepMode, 60000);
 setInterval(updateStatusBar, 10000);
 updateStatusBar();
-// PAUSED 2026-05-04 ‚Äî throttled API pulls to once per day to save resources.
-// Restore: updateTransit 30000, updateWeather 600000, fetchAlerts 300000.
-setInterval(updateTransit, 86400000);
-setInterval(updateWeather, 86400000);
-setInterval(fetchAlerts,   86400000);
+setInterval(updateTransit, 30000);
+setInterval(updateWeather, 600000);
+setInterval(fetchAlerts,   300000);
 </script>
 </body>
 </html>
