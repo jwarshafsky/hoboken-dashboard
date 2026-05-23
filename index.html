@@ -35,7 +35,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid #2a2a35;
+    border: 0.5px solid #2a2a35;
   }
 
   .card-title {
@@ -132,7 +132,7 @@
     font-size: 0.75rem;
     color: #777;
     padding-top: 6px;
-    border-top: 1px solid #1e1e2e;
+    border-top: 0.5px solid #1e1e2e;
     margin-top: 6px;
     white-space: nowrap;
   }
@@ -144,7 +144,7 @@
     flex-direction: column;
     gap: 2px;
     overflow: visible;
-    border-left: 1px solid #1e1e2e;
+    border-left: 0.5px solid #1e1e2e;
     padding-left: 8px;
     justify-content: center;
     min-width: 90px;
@@ -198,7 +198,7 @@
     color: #6bffb8;
     margin: 8px 0 4px 0;
     padding-bottom: 3px;
-    border-bottom: 1px solid #1a1a28;
+    border-bottom: 0.5px solid #1a1a28;
   }
 
   .cal-day-header:first-child { margin-top: 0; }
@@ -282,7 +282,7 @@
     line-height: 1.3;
     color: #ccc;
     padding: 3px 0;
-    border-bottom: 1px solid #1a1a28;
+    border-bottom: 0.5px solid #1a1a28;
   }
 
   .alert-item:last-child { border-bottom: none; }
@@ -321,7 +321,7 @@
 
   .stock-ticker-bar {
     flex-shrink: 0;
-    border-top: 1px solid #1e1e2e;
+    border-top: 0.5px solid #1e1e2e;
     padding-top: 6px;
     margin-top: 8px;
     overflow: hidden;
@@ -481,7 +481,7 @@
     flex-shrink: 0;
     text-align: center;
     padding: 3px 14px;
-    border-left: 1px solid #1e1e2e;
+    border-left: 0.5px solid #1e1e2e;
     margin-left: 10px;
     display: flex;
     flex-direction: column;
@@ -617,10 +617,7 @@
     <span style="color:#444;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:0.6rem;" onclick="resetCalendarChoice()">change</span>
   </div>
   <div class="cal-content" id="calContent">
-    <div class="cal-signin-prompt" id="calSigninPrompt">
-      <div>Sign in to view your calendar</div>
-      <button class="cal-signin-btn" id="calSigninBtn" tabindex="0" onclick="signInCal()">Sign in with Google</button>
-    </div>
+    <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;">Loading‚Ä¶</div>
     <div id="calEvents"></div>
   </div>
 </div>
@@ -1390,149 +1387,31 @@ async function fetchAlerts() {
 }
 
 // ============================================================
-// GOOGLE CALENDAR API (manual OAuth 2.0 implicit flow ‚Äî works in any WebView)
+// CALENDAR (private ICS feed via proxy ‚Äî no auth needed in WebView)
 // ============================================================
-const GOOGLE_CLIENT_ID = '105885243706-kkim4jabkh9q39j7cg0gu61kr4atpidc.apps.googleusercontent.com';
-const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
-
-let calToken = localStorage.getItem('calToken');
-let calTokenExpiry = parseInt(localStorage.getItem('calTokenExpiry') || '0', 10);
-
-function oauthRedirectUri() {
-  // Use exact origin + pathname (no hash, no query) ‚Äî must match Google Cloud Console
-  return window.location.origin + window.location.pathname;
-}
-
-// On page load, check if we just came back from a Google OAuth redirect
-function checkOAuthRedirect() {
-  if (!window.location.hash) return;
-  const hash = window.location.hash.substring(1);
-  const params = new URLSearchParams(hash);
-  const accessToken = params.get('access_token');
-  const expiresIn = params.get('expires_in');
-  if (accessToken) {
-    calToken = accessToken;
-    const lifetime = parseInt(expiresIn || '3600', 10);
-    calTokenExpiry = Date.now() + (lifetime - 60) * 1000;
-    localStorage.setItem('calToken', calToken);
-    localStorage.setItem('calTokenExpiry', String(calTokenExpiry));
-    // Clean URL so the token isn't visible
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
-}
-
 function initCalAuth() {
-  checkOAuthRedirect();
-  if (calToken && Date.now() < calTokenExpiry) {
-    document.getElementById('calSigninPrompt').style.display = 'none';
-    fetchCalEvents();
-  }
-}
-
-function signInCal() {
-  const params = {
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: oauthRedirectUri(),
-    response_type: 'token',
-    scope: GOOGLE_SCOPES,
-    include_granted_scopes: 'true',
-    prompt: 'consent'
-  };
-  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-    Object.keys(params).map(function (k) {
-      return k + '=' + encodeURIComponent(params[k]);
-    }).join('&');
-  window.location.href = url;
-}
-
-async function fetchCalEvents() {
-  if (!calToken || Date.now() >= calTokenExpiry) {
-    signInCal();
-    return;
-  }
-  try {
-    const headers = { 'Authorization': 'Bearer ' + calToken };
-    const chosenCalId = localStorage.getItem('chosenCalId');
-
-    // If user hasn't picked a calendar yet, show picker
-    if (!chosenCalId) {
-      const listRes = await fetchT(
-        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
-        { headers: headers }
-      );
-      if (listRes.status === 401) {
-        signInCal();
-        return;
-      }
-      const listData = await listRes.json();
-      showCalPicker(listData.items || []);
-      return;
-    }
-
-    // Fetch events from chosen calendar
-    const now = new Date();
-    const future = new Date();
-    future.setDate(future.getDate() + 30);
-    const url = 'https://www.googleapis.com/calendar/v3/calendars/' +
-      encodeURIComponent(chosenCalId) + '/events' +
-      '?timeMin=' + encodeURIComponent(now.toISOString()) +
-      '&timeMax=' + encodeURIComponent(future.toISOString()) +
-      '&maxResults=40&orderBy=startTime&singleEvents=true';
-    const res = await fetchT(url, { headers: headers });
-    if (res.status === 401) {
-      signInCal();
-      return;
-    }
-    if (res.status === 404) {
-      // Chosen calendar no longer exists ‚Äî re-show picker
-      localStorage.removeItem('chosenCalId');
-      fetchCalEvents();
-      return;
-    }
-    const data = await res.json();
-    const color = localStorage.getItem('chosenCalColor') || '#6bffb8';
-    const events = (data.items || []).map(function (ev) {
-      ev._calendarColor = color;
-      return ev;
-    });
-    renderCalEvents(events);
-  } catch (e) {
-    console.error('Calendar fetch error:', e);
-  }
-}
-
-function showCalPicker(cals) {
-  const container = document.getElementById('calEvents');
-  // Sort: primary first, then alphabetical
-  cals.sort(function (a, b) {
-    if (a.primary) return -1;
-    if (b.primary) return 1;
-    return (a.summary || '').localeCompare(b.summary || '');
-  });
-  let html = '<div style="font-size:0.75rem;color:#888;margin-bottom:8px;text-align:center;">Pick a calendar:</div>';
-  for (const c of cals) {
-    const color = c.backgroundColor || '#6bffb8';
-    const safeId = c.id.replace(/'/g, "\\'");
-    const name = (c.summary || c.id).replace(/</g, '&lt;');
-    html += '<div style="padding:6px 4px;cursor:pointer;border-bottom:1px solid #1a1a28;font-size:0.75rem;" ' +
-      'onclick="pickCalendar(\'' + safeId + '\',\'' + color + '\')">' +
-      '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
-      color + ';margin-right:8px;vertical-align:middle;"></span>' +
-      name + '</div>';
-  }
-  container.innerHTML = html;
-}
-
-function pickCalendar(id, color) {
-  localStorage.setItem('chosenCalId', id);
-  localStorage.setItem('chosenCalColor', color);
+  document.getElementById('calSigninPrompt').style.display = 'none';
   fetchCalEvents();
 }
 
 function resetCalendarChoice() {
-  localStorage.removeItem('chosenCalId');
-  localStorage.removeItem('chosenCalColor');
   fetchCalEvents();
+}
+
+async function fetchCalEvents() {
+  try {
+    const res = await fetchT(PROXY_URL + '?mode=calendar');
+    const data = await res.json();
+    if (data.events && Array.isArray(data.events)) {
+      renderCalEvents(data.events);
+    } else if (data.events && data.events.error) {
+      document.getElementById('calEvents').innerHTML =
+        '<div class="cal-empty">Calendar error</div>';
+      console.error('Calendar error:', data.events.error);
+    }
+  } catch (e) {
+    console.error('Calendar fetch error:', e);
+  }
 }
 
 function renderCalEvents(events) {
@@ -1546,6 +1425,21 @@ function renderCalEvents(events) {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(today.getDate() + 1);
+
+  // Normalize new ICS-feed format to internal shape
+  // Incoming: {summary, start, end, allDay, location}
+  // Internal expects: ev.start.dateTime or ev.start.date, ev.summary
+  events = events.map(function (e) {
+    if (e.start && typeof e.start === 'string') {
+      const isAllDay = e.allDay || /^\d{4}-\d{2}-\d{2}$/.test(e.start);
+      return {
+        summary: e.summary,
+        start: isAllDay ? { date: e.start } : { dateTime: e.start },
+        _calendarColor: '#6bffb8',
+      };
+    }
+    return e;
+  });
 
   // Group by date key (YYYY-MM-DD in local time)
   const byDate = {};
