@@ -617,7 +617,7 @@
     <span style="color:#444;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:0.6rem;" onclick="resetCalendarChoice()">change</span>
   </div>
   <div class="cal-content" id="calContent">
-    <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;">Loading‚Ä¶</div>
+    <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
     <div id="calEvents"></div>
   </div>
 </div>
@@ -1387,20 +1387,56 @@ async function fetchAlerts() {
 }
 
 // ============================================================
-// CALENDAR (private ICS feed via proxy ‚Äî no auth needed in WebView)
+// CALENDAR (private ICS feed via proxy, token stored per-device)
 // ============================================================
 function initCalAuth() {
+  const token = localStorage.getItem('calToken');
+  if (!token) {
+    showCalTokenPrompt();
+    return;
+  }
   document.getElementById('calSigninPrompt').style.display = 'none';
   fetchCalEvents();
 }
 
+function showCalTokenPrompt() {
+  const c = document.getElementById('calContent');
+  c.innerHTML =
+    '<div class="cal-signin-prompt">' +
+    '<div style="margin-bottom:10px;">Enter calendar token:</div>' +
+    '<input id="calTokenInput" type="password" autocomplete="off" ' +
+    'style="background:#1a1a2a;border:0.5px solid #2a2a35;border-radius:6px;' +
+    'color:#fff;padding:8px 12px;font-size:0.85rem;width:80%;outline:none;" />' +
+    '<div><button class="cal-signin-btn" onclick="saveCalToken()">Save</button></div>' +
+    '</div>';
+  setTimeout(function () {
+    const inp = document.getElementById('calTokenInput');
+    if (inp) inp.focus();
+  }, 100);
+}
+
+function saveCalToken() {
+  const inp = document.getElementById('calTokenInput');
+  if (!inp || !inp.value.trim()) return;
+  localStorage.setItem('calToken', inp.value.trim());
+  initCalAuth();
+}
+
 function resetCalendarChoice() {
-  fetchCalEvents();
+  localStorage.removeItem('calToken');
+  initCalAuth();
 }
 
 async function fetchCalEvents() {
+  const token = localStorage.getItem('calToken') || '';
   try {
-    const res = await fetchT(PROXY_URL + '?mode=calendar');
+    const res = await fetchT(PROXY_URL + '?mode=calendar&token=' + encodeURIComponent(token));
+    if (res.status === 403) {
+      // Bad token ‚Äî re-prompt
+      localStorage.removeItem('calToken');
+      showCalTokenPrompt();
+      return;
+    }
     const data = await res.json();
     if (data.events && Array.isArray(data.events)) {
       renderCalEvents(data.events);
