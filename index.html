@@ -9,7 +9,6 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Hoboken Dashboard</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
@@ -1391,55 +1390,64 @@ async function fetchAlerts() {
 }
 
 // ============================================================
-// GOOGLE CALENDAR API
+// GOOGLE CALENDAR API (manual OAuth 2.0 implicit flow ‚Äî works in any WebView)
 // ============================================================
 const GOOGLE_CLIENT_ID = '105885243706-kkim4jabkh9q39j7cg0gu61kr4atpidc.apps.googleusercontent.com';
 const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
 
 let calToken = localStorage.getItem('calToken');
 let calTokenExpiry = parseInt(localStorage.getItem('calTokenExpiry') || '0', 10);
-let calTokenClient = null;
+
+function oauthRedirectUri() {
+  // Use exact origin + pathname (no hash, no query) ‚Äî must match Google Cloud Console
+  return window.location.origin + window.location.pathname;
+}
+
+// On page load, check if we just came back from a Google OAuth redirect
+function checkOAuthRedirect() {
+  if (!window.location.hash) return;
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  const expiresIn = params.get('expires_in');
+  if (accessToken) {
+    calToken = accessToken;
+    const lifetime = parseInt(expiresIn || '3600', 10);
+    calTokenExpiry = Date.now() + (lifetime - 60) * 1000;
+    localStorage.setItem('calToken', calToken);
+    localStorage.setItem('calTokenExpiry', String(calTokenExpiry));
+    // Clean URL so the token isn't visible
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
 
 function initCalAuth() {
-  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-    setTimeout(initCalAuth, 500);
-    return;
-  }
-  calTokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: GOOGLE_SCOPES,
-    callback: function (tokenResponse) {
-      if (tokenResponse && tokenResponse.access_token) {
-        calToken = tokenResponse.access_token;
-        // Token expires in ~3600 sec; refresh 60s early
-        const lifetime = parseInt(tokenResponse.expires_in || 3600, 10);
-        calTokenExpiry = Date.now() + (lifetime - 60) * 1000;
-        localStorage.setItem('calToken', calToken);
-        localStorage.setItem('calTokenExpiry', String(calTokenExpiry));
-        document.getElementById('calSigninPrompt').style.display = 'none';
-        fetchCalEvents();
-      }
-    },
-  });
-
+  checkOAuthRedirect();
   if (calToken && Date.now() < calTokenExpiry) {
     document.getElementById('calSigninPrompt').style.display = 'none';
     fetchCalEvents();
-  } else if (calToken) {
-    // Stale token ‚Äî try silent refresh
-    calTokenClient.requestAccessToken({ prompt: '' });
   }
 }
 
 function signInCal() {
-  if (calTokenClient) {
-    calTokenClient.requestAccessToken();
-  }
+  const params = {
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: oauthRedirectUri(),
+    response_type: 'token',
+    scope: GOOGLE_SCOPES,
+    include_granted_scopes: 'true',
+    prompt: 'consent'
+  };
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+    Object.keys(params).map(function (k) {
+      return k + '=' + encodeURIComponent(params[k]);
+    }).join('&');
+  window.location.href = url;
 }
 
 async function fetchCalEvents() {
   if (!calToken || Date.now() >= calTokenExpiry) {
-    if (calTokenClient) calTokenClient.requestAccessToken({ prompt: '' });
+    signInCal();
     return;
   }
   try {
@@ -1453,7 +1461,7 @@ async function fetchCalEvents() {
         { headers: headers }
       );
       if (listRes.status === 401) {
-        if (calTokenClient) calTokenClient.requestAccessToken({ prompt: '' });
+        signInCal();
         return;
       }
       const listData = await listRes.json();
@@ -1472,7 +1480,7 @@ async function fetchCalEvents() {
       '&maxResults=40&orderBy=startTime&singleEvents=true';
     const res = await fetchT(url, { headers: headers });
     if (res.status === 401) {
-      if (calTokenClient) calTokenClient.requestAccessToken({ prompt: '' });
+      signInCal();
       return;
     }
     if (res.status === 404) {
