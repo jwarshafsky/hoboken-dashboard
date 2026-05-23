@@ -194,7 +194,9 @@
     width: 143%;
     height: 150%;
     border: none;
-    filter: invert(1) hue-rotate(180deg);
+    /* Match dashboard's muted dark palette: invert for dark bg, hue-rotate keeps colors natural,
+       saturate down for less vibrancy, slight brightness/contrast to blend with our deep blacks */
+    filter: invert(0.92) hue-rotate(180deg) saturate(0.55) brightness(0.95) contrast(1.05);
     transform: scale(0.7);
     transform-origin: top left;
   }
