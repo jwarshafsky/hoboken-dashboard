@@ -9,6 +9,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Hoboken Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -192,9 +194,10 @@
     width: 143%;
     height: 150%;
     border: none;
-    filter: invert(1) hue-rotate(180deg);
     transform: scale(0.7);
     transform-origin: top left;
+    background: #000;
+    color-scheme: dark;
   }
 
   /* Alerts ‚Äî spans both rows in right column */
@@ -656,6 +659,15 @@
 // ============================================================
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 
+// fetch with abort timeout ‚Äî prevents hung TCP from piling up callbacks
+function fetchT(url, opts, ms) {
+  ms = ms || 15000;
+  const c = new AbortController();
+  const id = setTimeout(function() { c.abort(); }, ms);
+  return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }))
+    .finally(function() { clearTimeout(id); });
+}
+
 // ============================================================
 // API STATUS TRACKING
 // ============================================================
@@ -875,13 +887,15 @@ function updateClock() {
 // WEATHER
 // ============================================================
 async function updateWeather() {
+  let apiSucceeded = false;
   try {
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032'
       + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max'
       + '&hourly=relativehumidity_2m,temperature_2m,weathercode,precipitation_probability'
       + '&temperature_unit=fahrenheit&timezone=America/New_York';
-    const res = await fetch(url);
+    const res = await fetchT(url);
     const data = await res.json();
+    apiSucceeded = true;
     markOk('weather');
     const cw = data.current_weather;
     const code = WMO_CODES[cw.weathercode] || ["Unknown", "?"];
@@ -937,8 +951,11 @@ async function updateWeather() {
       document.getElementById('weatherForecast').innerHTML = fhtml;
     }
   } catch (e) {
-    document.getElementById('weatherDesc').textContent = 'Error loading weather';
-    markFail('weather');
+    console.error('Weather error:', e);
+    if (!apiSucceeded) {
+      document.getElementById('weatherDesc').textContent = 'Error loading weather';
+      markFail('weather');
+    }
   }
 }
 
@@ -963,8 +980,12 @@ function formatTime12(timeStr) {
 }
 
 function minutesUntil(timeStr) {
-  let diff = timeToMinutes(timeStr) - nowMinutes();
-  if (diff < 0 && timeToMinutes(timeStr) < 180) {
+  const target = timeToMinutes(timeStr);
+  const now = nowMinutes();
+  let diff = target - now;
+  // Late-night service (target before 3am) only wraps when viewer is also late evening
+  // (after 6pm). Prevents 00:05 bus from showing "23h59m" when checked at 00:10.
+  if (diff < -180 && target < 180 && now > 18 * 60) {
     diff += 24 * 60;
   }
   return diff;
@@ -1104,7 +1125,7 @@ function renderLivePredictions(predictions, label) {
 async function fetchProxy() {
   if (!PROXY_URL) return;
   try {
-    const res = await fetch(PROXY_URL);
+    const res = await fetchT(PROXY_URL);
     const data = await res.json();
     markOk('transit');
 
@@ -1222,7 +1243,7 @@ function renderHopEtas(data) {
 
 async function fetchHop() {
   try {
-    const resp = await fetch('https://passiogo.com/mapGetData.php', {
+    const resp = await fetchT('https://passiogo.com/mapGetData.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'json=' + encodeURIComponent(JSON.stringify({s0:'466',sA:1})) + '&eta=3&deviceId=web&stopIds=158942',
@@ -1255,7 +1276,7 @@ async function fetchHop() {
 async function fetchAlerts() {
   if (!PROXY_URL) return;
   try {
-    const res = await fetch(PROXY_URL + '?mode=alerts');
+    const res = await fetchT(PROXY_URL + '?mode=alerts');
     const data = await res.json();
     markOk('alerts');
     const container = document.getElementById('alertsList');
@@ -1351,6 +1372,11 @@ updateStatusBar();
 setInterval(updateTransit, 30000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
+// Reload calendar iframe every 6h to avoid Google session/iframe staleness
+setInterval(function() {
+  const f = document.getElementById('calFrame');
+  if (f && f.src) { f.src = f.src; }
+}, 6 * 60 * 60 * 1000);
 </script>
 </body>
 </html>
