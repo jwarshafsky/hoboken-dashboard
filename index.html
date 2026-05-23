@@ -194,9 +194,9 @@
     width: 143%;
     height: 150%;
     border: none;
-    /* Match dashboard's muted dark palette: invert for dark bg, hue-rotate keeps colors natural,
-       saturate down for less vibrancy, slight brightness/contrast to blend with our deep blacks */
-    filter: invert(0.92) hue-rotate(180deg) saturate(0.55) brightness(0.95) contrast(1.05);
+    /* Simple invert+hue chain ‚Äî best WebView compatibility on Android TV */
+    filter: invert(1) hue-rotate(180deg);
+    -webkit-filter: invert(1) hue-rotate(180deg);
     transform: scale(0.7);
     transform-origin: top left;
   }
