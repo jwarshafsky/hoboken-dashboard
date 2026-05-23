@@ -323,7 +323,9 @@
     flex-shrink: 0;
     border-top: 0.5px solid #1e1e2e;
     padding-top: 6px;
-    margin-top: 8px;
+    margin: 8px -12px 0 -12px;
+    padding-left: 0;
+    padding-right: 0;
     overflow: hidden;
     position: relative;
   }
@@ -637,7 +639,6 @@
 
 <!-- Row 1-2: Calendar (middle, tall) -->
 <div class="card" id="calCard">
-  <div class="card-title" ondblclick="resetCalendarChoice()" title="Double-click to change calendar">Today's Events</div>
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
     <div id="calEvents"></div>
@@ -728,6 +729,19 @@
 // PROXY
 // ============================================================
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
+
+// Trim trailing children of a container until they all fit without overflow.
+// Used for alerts + calendar so nothing is half-cut at the bottom.
+function trimOverflow(container) {
+  if (!container) return;
+  // Wait for layout
+  let safety = 200;
+  while (safety-- > 0 &&
+         container.scrollHeight > container.clientHeight + 1 &&
+         container.lastElementChild) {
+    container.removeChild(container.lastElementChild);
+  }
+}
 
 // fetch with abort timeout ‚Äî prevents hung TCP from piling up callbacks
 function fetchT(url, opts, ms) {
@@ -1380,10 +1394,9 @@ async function fetchAlerts() {
     if (items.length === 0) {
       container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
     } else {
-      const alertCount = items.filter(i => i.isAlert).length;
-      const maxItems = alertCount >= 2 ? 8 : alertCount === 1 ? 9 : 10;
+      // Render all items, then trim trailing ones that overflow the container
       let html = '';
-      for (const item of items.slice(0, maxItems)) {
+      for (const item of items) {
         const alertClass = item.isAlert ? ' is-alert' : '';
         html += `<div class="alert-item${alertClass}">`;
         html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
@@ -1391,6 +1404,7 @@ async function fetchAlerts() {
         html += '</div>';
       }
       container.innerHTML = html;
+      requestAnimationFrame(() => trimOverflow(container));
     }
 
     const stocks = data.stocks;
@@ -1608,6 +1622,23 @@ function renderCalEvents(events) {
     }
   }
   container.innerHTML = html;
+  // After paint, trim any overflowing trailing items / orphan day headers.
+  // calEvents lives inside calContent ‚Äî that's the scrolling parent we check against.
+  requestAnimationFrame(function () {
+    const scrollParent = document.getElementById('calContent');
+    if (!scrollParent) return;
+    let safety = 200;
+    while (safety-- > 0 &&
+           scrollParent.scrollHeight > scrollParent.clientHeight + 1 &&
+           container.lastElementChild) {
+      container.removeChild(container.lastElementChild);
+    }
+    // Don't leave a day header with no events under it
+    while (container.lastElementChild &&
+           container.lastElementChild.classList.contains('cal-day-header')) {
+      container.removeChild(container.lastElementChild);
+    }
+  });
 }
 
 // ============================================================
