@@ -607,7 +607,10 @@
 
 <!-- Row 1-2: Calendar (middle, tall) -->
 <div class="card" id="calCard">
-  <div class="card-title">Today's Events</div>
+  <div class="card-title" style="justify-content:space-between;">
+    <span>Today's Events</span>
+    <span style="color:#444;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;font-size:0.6rem;" onclick="resetCalendarChoice()">change</span>
+  </div>
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt">
       <div>Sign in to view your calendar</div>
@@ -1434,24 +1437,88 @@ async function fetchCalEvents() {
     return;
   }
   try {
+    const headers = { 'Authorization': 'Bearer ' + calToken };
+    const chosenCalId = localStorage.getItem('chosenCalId');
+
+    // If user hasn't picked a calendar yet, show picker
+    if (!chosenCalId) {
+      const listRes = await fetchT(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
+        { headers: headers }
+      );
+      if (listRes.status === 401) {
+        if (calTokenClient) calTokenClient.requestAccessToken({ prompt: '' });
+        return;
+      }
+      const listData = await listRes.json();
+      showCalPicker(listData.items || []);
+      return;
+    }
+
+    // Fetch events from chosen calendar
     const now = new Date();
     const future = new Date();
     future.setDate(future.getDate() + 30);
-    const url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?' +
-      'timeMin=' + encodeURIComponent(now.toISOString()) +
+    const url = 'https://www.googleapis.com/calendar/v3/calendars/' +
+      encodeURIComponent(chosenCalId) + '/events' +
+      '?timeMin=' + encodeURIComponent(now.toISOString()) +
       '&timeMax=' + encodeURIComponent(future.toISOString()) +
-      '&maxResults=30&orderBy=startTime&singleEvents=true';
-    const res = await fetchT(url, { headers: { 'Authorization': 'Bearer ' + calToken } });
+      '&maxResults=40&orderBy=startTime&singleEvents=true';
+    const res = await fetchT(url, { headers: headers });
     if (res.status === 401) {
-      // Token expired ‚Äî request silent refresh
       if (calTokenClient) calTokenClient.requestAccessToken({ prompt: '' });
       return;
     }
+    if (res.status === 404) {
+      // Chosen calendar no longer exists ‚Äî re-show picker
+      localStorage.removeItem('chosenCalId');
+      fetchCalEvents();
+      return;
+    }
     const data = await res.json();
-    renderCalEvents(data.items || []);
+    const color = localStorage.getItem('chosenCalColor') || '#6bffb8';
+    const events = (data.items || []).map(function (ev) {
+      ev._calendarColor = color;
+      return ev;
+    });
+    renderCalEvents(events);
   } catch (e) {
     console.error('Calendar fetch error:', e);
   }
+}
+
+function showCalPicker(cals) {
+  const container = document.getElementById('calEvents');
+  // Sort: primary first, then alphabetical
+  cals.sort(function (a, b) {
+    if (a.primary) return -1;
+    if (b.primary) return 1;
+    return (a.summary || '').localeCompare(b.summary || '');
+  });
+  let html = '<div style="font-size:0.75rem;color:#888;margin-bottom:8px;text-align:center;">Pick a calendar:</div>';
+  for (const c of cals) {
+    const color = c.backgroundColor || '#6bffb8';
+    const safeId = c.id.replace(/'/g, "\\'");
+    const name = (c.summary || c.id).replace(/</g, '&lt;');
+    html += '<div style="padding:6px 4px;cursor:pointer;border-bottom:1px solid #1a1a28;font-size:0.75rem;" ' +
+      'onclick="pickCalendar(\'' + safeId + '\',\'' + color + '\')">' +
+      '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' +
+      color + ';margin-right:8px;vertical-align:middle;"></span>' +
+      name + '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function pickCalendar(id, color) {
+  localStorage.setItem('chosenCalId', id);
+  localStorage.setItem('chosenCalColor', color);
+  fetchCalEvents();
+}
+
+function resetCalendarChoice() {
+  localStorage.removeItem('chosenCalId');
+  localStorage.removeItem('chosenCalColor');
+  fetchCalEvents();
 }
 
 function renderCalEvents(events) {
@@ -1517,8 +1584,11 @@ function renderCalEvents(events) {
         timeLabel = h12 + ':' + m + ' ' + ampm;
       }
       const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
+      const color = ev._calendarColor || '#6bffb8';
+      const dot = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' +
+        color + ';margin-right:6px;vertical-align:middle;"></span>';
       html += '<div class="' + evCls + '"><span class="cal-event-time">' +
-        timeLabel + '</span><span class="cal-event-title">' + title + '</span></div>';
+        timeLabel + '</span><span class="cal-event-title">' + dot + title + '</span></div>';
     }
   }
   container.innerHTML = html;
