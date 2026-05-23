@@ -244,11 +244,17 @@
     color: #000;
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
-    font-size: 0.75rem;
+    padding: 14px 28px;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    margin-top: 8px;
+    margin-top: 12px;
+    outline: none;
+  }
+
+  .cal-signin-btn:focus {
+    box-shadow: 0 0 0 3px #fff;
+    transform: scale(1.05);
   }
 
   /* Alerts ‚Äî spans both rows in right column */
@@ -614,7 +620,7 @@
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt">
       <div>Sign in to view your calendar</div>
-      <button class="cal-signin-btn" onclick="signInCal()">Sign in with Google</button>
+      <button class="cal-signin-btn" id="calSigninBtn" tabindex="0" onclick="signInCal()">Sign in with Google</button>
     </div>
     <div id="calEvents"></div>
   </div>
