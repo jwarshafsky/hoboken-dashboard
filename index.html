@@ -9,6 +9,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Hoboken Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
@@ -317,6 +319,62 @@
   .alert-badge.news {
     background: #2a2a3a;
     color: #888;
+  }
+
+  /* Map panel (replaces news in alerts card during specific hours) */
+  .map-container {
+    flex: 1;
+    min-height: 120px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0a0a0f;
+    margin-top: 6px;
+  }
+
+  .map-container .leaflet-container {
+    width: 100%;
+    height: 100%;
+    background: #0a0a0f;
+  }
+
+  /* Hide Leaflet controls ‚Äî we want a clean ambient view */
+  .leaflet-control-zoom,
+  .leaflet-control-attribution {
+    display: none !important;
+  }
+
+  /* Custom location markers */
+  .person-marker {
+    background: #6bffb8;
+    color: #000;
+    font-weight: 700;
+    font-size: 0.7rem;
+    border-radius: 50%;
+    width: 26px !important;
+    height: 26px !important;
+    line-height: 26px;
+    text-align: center;
+    border: 2px solid #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+  }
+
+  .person-list {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    padding-top: 4px;
+    color: #aaa;
+  }
+
+  .person-list .person-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #6bffb8;
+    margin-right: 4px;
+    vertical-align: middle;
   }
 
   .stock-ticker-bar {
@@ -654,6 +712,10 @@
   <div class="alerts-list" id="alertsList">
     <div class="alert-item" style="color:#444;">Loading...</div>
   </div>
+  <div class="map-container" id="mapContainer" style="display:none;">
+    <div id="hobokenMap" style="width:100%;height:100%;"></div>
+  </div>
+  <div class="person-list" id="personList" style="display:none;"></div>
   <div class="stock-ticker-bar">
     <div class="stock-ticker-track" id="stockTicker">
       <span class="stock-item"><span class="stock-symbol">Loading...</span></span>
@@ -1358,6 +1420,108 @@ async function fetchHop() {
 }
 
 // ============================================================
+// MAP MODE ‚Äî show map on weekends all day, weekdays 4-8 PM
+// ============================================================
+function isMapMode() {
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours();
+  // Weekend (Sat=6, Sun=0): always map mode
+  if (day === 0 || day === 6) return true;
+  // Weekday: 4 PM (16) to 8 PM (20)
+  return hour >= 16 && hour < 20;
+}
+
+let _hobokenMap = null;
+let _personMarkers = {};
+
+function initHobokenMap() {
+  if (_hobokenMap || typeof L === 'undefined') return;
+  _hobokenMap = L.map('hobokenMap', {
+    center: [40.744, -74.032],   // Hoboken
+    zoom: 13,
+    zoomControl: false,
+    attributionControl: false,
+    dragging: true,
+    scrollWheelZoom: false,
+  });
+  // CartoDB Dark Matter ‚Äî dark tiles to match the dashboard
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+  }).addTo(_hobokenMap);
+}
+
+async function fetchLocations() {
+  if (!PROXY_URL) return;
+  if (document.hidden || isSleeping()) return;
+  const token = localStorage.getItem('calToken') || '';
+  try {
+    const res = await fetchT(PROXY_URL + '?mode=locations',
+      { headers: { 'X-Cal-Token': token } });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderLocations(data.locations || []);
+  } catch (e) {
+    console.error('Locations fetch error:', e);
+  }
+}
+
+function renderLocations(locations) {
+  if (!_hobokenMap) return;
+  // Clear stale markers
+  const seen = new Set();
+  for (const loc of locations) {
+    seen.add(loc.tid);
+    const latlng = [loc.lat, loc.lon];
+    const label = (loc.name || loc.tid || '?').substring(0, 2).toUpperCase();
+    if (_personMarkers[loc.tid]) {
+      _personMarkers[loc.tid].setLatLng(latlng);
+    } else {
+      const icon = L.divIcon({
+        className: 'person-marker',
+        html: label,
+        iconSize: [26, 26],
+      });
+      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+    }
+  }
+  // Remove markers for people no longer in the list
+  for (const tid of Object.keys(_personMarkers)) {
+    if (!seen.has(tid)) {
+      _hobokenMap.removeLayer(_personMarkers[tid]);
+      delete _personMarkers[tid];
+    }
+  }
+  // Update person list under map
+  const list = document.getElementById('personList');
+  if (locations.length === 0) {
+    list.innerHTML = '<span style="color:#666;">No locations shared yet</span>';
+  } else {
+    list.innerHTML = locations.map(function (l) {
+      const ago = agoText(l.received_at * 1000);
+      return '<span><span class="person-dot"></span>' +
+        (l.name || l.tid) + ' <span style="color:#666;">' + ago + '</span></span>';
+    }).join('');
+  }
+}
+
+function setAlertsMode(mode) {
+  // mode: 'news' or 'map'
+  const mapEl = document.getElementById('mapContainer');
+  const listEl = document.getElementById('personList');
+  if (mode === 'map') {
+    mapEl.style.display = 'block';
+    listEl.style.display = 'flex';
+    initHobokenMap();
+    if (_hobokenMap) setTimeout(function () { _hobokenMap.invalidateSize(); }, 100);
+  } else {
+    mapEl.style.display = 'none';
+    listEl.style.display = 'none';
+  }
+}
+
+// ============================================================
 // ALERTS & NEWS
 // ============================================================
 async function fetchAlerts() {
@@ -1391,10 +1555,28 @@ async function fetchAlerts() {
       }
     }
 
-    if (items.length === 0) {
+    const mapMode = isMapMode();
+    setAlertsMode(mapMode ? 'map' : 'news');
+
+    if (mapMode) {
+      // In map mode: keep only NJT + Nixle alerts (top 3), drop news
+      const alertsOnly = items.filter(function (i) { return i.isAlert; }).slice(0, 3);
+      if (alertsOnly.length === 0) {
+        container.innerHTML = '';
+      } else {
+        let html = '';
+        for (const item of alertsOnly) {
+          html += `<div class="alert-item is-alert">`;
+          html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
+          html += item.text;
+          html += '</div>';
+        }
+        container.innerHTML = html;
+      }
+    } else if (items.length === 0) {
       container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
     } else {
-      // Render all items, then trim trailing ones that overflow the container
+      // News mode: render all items, trim overflow
       let html = '';
       for (const item of items) {
         const alertClass = item.isAlert ? ' is-alert' : '';
@@ -1622,23 +1804,27 @@ function renderCalEvents(events) {
     }
   }
   container.innerHTML = html;
-  // After paint, trim any overflowing trailing items / orphan day headers.
-  // calEvents lives inside calContent ‚Äî that's the scrolling parent we check against.
+  // After paint, trim trailing items / orphan day headers until everything fits cleanly.
+  // Use double-rAF + setTimeout to make sure layout has settled before measuring.
   requestAnimationFrame(function () {
-    const scrollParent = document.getElementById('calContent');
-    if (!scrollParent) return;
-    let safety = 200;
-    while (safety-- > 0 &&
-           scrollParent.scrollHeight > scrollParent.clientHeight + 1 &&
-           container.lastElementChild) {
-      container.removeChild(container.lastElementChild);
-    }
-    // Don't leave a day header with no events under it
-    while (container.lastElementChild &&
-           container.lastElementChild.classList.contains('cal-day-header')) {
-      container.removeChild(container.lastElementChild);
-    }
+    requestAnimationFrame(function () {
+      setTimeout(trimCalendarOverflow, 30);
+    });
   });
+}
+
+function trimCalendarOverflow() {
+  const container = document.getElementById('calEvents');
+  const scrollParent = document.getElementById('calContent');
+  if (!container || !scrollParent) return;
+  let safety = 300;
+  // Alternate: trim trailing item, then trim trailing orphan headers, repeat
+  while (safety-- > 0 && container.lastElementChild) {
+    const overflow = scrollParent.scrollHeight > scrollParent.clientHeight + 1;
+    const lastIsHeader = container.lastElementChild.classList.contains('cal-day-header');
+    if (!overflow && !lastIsHeader) break;
+    container.removeChild(container.lastElementChild);
+  }
 }
 
 // ============================================================
@@ -1683,6 +1869,9 @@ updateStatusBar();
 setInterval(updateTransit, 30000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
+setInterval(function () { if (isMapMode()) fetchLocations(); }, 60000);
+// Kick off initial location fetch (no-op if not map mode yet)
+setTimeout(function () { if (isMapMode()) { setAlertsMode('map'); fetchLocations(); } }, 1500);
 </script>
 </body>
 </html>
