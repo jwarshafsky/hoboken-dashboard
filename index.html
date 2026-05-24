@@ -1499,17 +1499,9 @@ function initHobokenMap() {
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
-  // CartoDB Dark Matter ‚Äî minimal dark theme, no highway shield badges.
-  // Base tiles (roads + water, no labels)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
-    attribution: '',
-  }).addTo(_hobokenMap);
-  // Lighter label overlay ‚Äî keeps street names but no large highway shields
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
+  // Stadia Alidade Smooth Dark
+  L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20,
     attribution: '',
   }).addTo(_hobokenMap);
 
@@ -1524,8 +1516,8 @@ function initHobokenMap() {
   });
   _homeMarker = L.marker([HOME.lat, HOME.lon], { icon: homeIcon }).addTo(_hobokenMap);
 
-  // Initial view: all of Hoboken (will auto-fit once locations come in)
-  _hobokenMap.fitBounds(HOBOKEN_BOUNDS, { padding: [4, 4] });
+  // Initial view: centered on home, zoomed in tight on Hoboken
+  _hobokenMap.setView([HOME.lat, HOME.lon], 15);
 }
 
 async function fetchLocations() {
@@ -1590,7 +1582,8 @@ function renderLocations(locations) {
     return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
   });
   if (inRange.length === 0) {
-    _hobokenMap.fitBounds(HOBOKEN_BOUNDS, { padding: [4, 4] });
+    // Default: tight on Hoboken
+    _hobokenMap.setView([HOME.lat, HOME.lon], 15);
   } else {
     const lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
     const lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
@@ -1603,7 +1596,12 @@ function renderLocations(locations) {
     minLng = Math.min(minLng, HOBOKEN_BOUNDS[0][1]);
     maxLat = Math.max(maxLat, HOBOKEN_BOUNDS[1][0]);
     maxLng = Math.max(maxLng, HOBOKEN_BOUNDS[1][1]);
-    _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [10, 10] });
+    _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
+      padding: [10, 10],
+      maxZoom: 16,  // never tighter than ~3 blocks
+    });
+    // After fit, if we ended up wider than zoom 15 (Hoboken), don't pull tighter than that.
+    if (_hobokenMap.getZoom() > 16) _hobokenMap.setZoom(16);
   }
 }
 
