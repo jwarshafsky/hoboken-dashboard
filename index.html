@@ -1452,7 +1452,11 @@ let _personMarkers = {};
 // Add entries here as you set up family members in Owntracks.
 // Images can be hosted in the GitHub repo (faces/jeff.jpg) or any public URL.
 const FACE_IMAGES = {
+  // OwnTracks truncates TID to 2 chars (takes the last two of what you typed).
+  // "JHW" became "HW", "JXW" will become "XW".
+  'HW':  'jeff.jpg',
   'JHW': 'jeff.jpg',
+  'XW':  'jenny.jpg',
   'JXW': 'jenny.jpg',
 };
 
