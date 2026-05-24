@@ -1,4 +1,12 @@
 <!DOCTYPE html>
+<!--
+  Hoboken Family Dashboard
+  ========================
+  Charter: A wall display that tells the Warshafskys where their people are
+  and what's next. Family presence is the primary use case; transit, weather,
+  and alerts are supporting data. Anything that doesn't serve that single
+  sentence goes in a "maybe" file, not in here.
+-->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -15,6 +23,35 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
+  /* ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
+     Design tokens ‚Äî keep all radii, font sizes, and key colors here.
+     New panels MUST reuse these instead of introducing new values.
+     ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
+  :root {
+    /* Border radii */
+    --r-card:  14px;
+    --r-chip:  8px;
+    --r-pill:  999px;
+    --r-badge: 4px;
+
+    /* Font sizes (4-tier + 1 sub for emphasis numbers) */
+    --fs-micro: 0.6rem;   /* tiny labels (badges, day headers, micro status) */
+    --fs-label: 0.75rem;  /* secondary text */
+    --fs-body:  0.95rem;  /* primary readable content */
+    --fs-sub:   1.4rem;   /* secondary numbers (tunnel min, hop ETA) */
+    --fs-hero:  2.4rem;   /* time, temperature */
+
+    /* Semantic colors */
+    --c-live:   #6bffb8;  /* GREEN: reserved for live-state ONLY */
+    --c-urgent: #ff6b6b;  /* RED: actionable urgency (‚â§5min bus, alerts) */
+    --c-warn:   #ffb84d;  /* AMBER: warnings */
+    --c-text:   #e8e8ec;
+    --c-label:  #9a9aa8;
+    --c-mute:   #888;
+    --c-deep:   #0a0a0f;
+    --c-border: #2a2a35;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
@@ -230,7 +267,8 @@
     white-space: nowrap;
   }
   .ms-name { color: #fff; font-weight: 600; }
-  .ms-ago { color: #999; margin-left: 4px; }
+  .ms-status { color: #ddd; margin-left: 5px; }
+  .ms-ago { color: #777; margin-left: 5px; font-size: 0.5rem; }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -271,6 +309,17 @@
     font-size: 0.62rem;
     margin-left: 4px;
     white-space: nowrap;
+  }
+
+  .cal-leave-by {
+    color: #ffb84d;
+    font-size: 0.6rem;
+    font-weight: 600;
+    margin-top: 1px;
+  }
+  .cal-leave-mode {
+    color: #aaa;
+    font-weight: 400;
   }
 
   .cal-event-title {
@@ -404,10 +453,10 @@
     width: 36px !important;
     height: 36px !important;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 1.5px solid rgba(255,255,255,0.45);
     box-shadow: 0 0 4px rgba(0,0,0,0.6);
     overflow: hidden;
-    background: #6bffb8;
+    background: #3a3a48;
     color: #000;
     font-weight: 700;
     font-size: 0.8rem;
@@ -436,7 +485,7 @@
     height: 30px !important;
     background: #3a7bd5;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 1.5px solid rgba(255,255,255,0.45);
     box-shadow: 0 0 4px rgba(0,0,0,0.6);
     display: flex !important;
     align-items: center;
@@ -448,7 +497,7 @@
     height: 20px !important;
     background: #888;
     border-radius: 50%;
-    border: 1.5px solid #fff;
+    border: 1px solid rgba(255,255,255,0.45);
     box-shadow: 0 0 3px rgba(0,0,0,0.6);
     font-size: 0.55rem;
     font-weight: 700;
@@ -456,7 +505,7 @@
     line-height: 18px;
     text-align: center;
   }
-  .bus-marker.load-empty  { background: #6bffb8; }
+  .bus-marker.load-empty  { background: #8a9aa0; }
   .bus-marker.load-light  { background: #a0e060; }
   .bus-marker.load-medium { background: #e0c040; }
   .bus-marker.load-heavy  { background: #ff9b40; }
@@ -468,7 +517,7 @@
     height: 26px !important;
     background: #c870ff;
     border-radius: 50%;
-    border: 2px solid #fff;
+    border: 1.5px solid rgba(255,255,255,0.45);
     box-shadow: 0 0 4px rgba(0,0,0,0.6);
     font-size: 0.85rem;
     font-weight: 700;
@@ -533,7 +582,7 @@
   }
 
   .stock-pct { font-weight: 500; }
-  .stock-up { color: #6bffb8; }
+  .stock-up { color: #8a9aa0; }
   .stock-down { color: #ff6b6b; }
 
   /* Transit cards - full width */
@@ -667,7 +716,7 @@
   .load-bar:nth-child(3) { height: 7px; }
   .load-bar:nth-child(4) { height: 10px; }
 
-  .load-bar.lvl-1 { background: #6bffb8; }
+  .load-bar.lvl-1 { background: #8a9aa0; }
   .load-bar.lvl-2 { background: #a0e060; }
   .load-bar.lvl-3 { background: #e0c040; }
   .load-bar.lvl-4 { background: #ff9b40; }
@@ -1596,6 +1645,7 @@ let _personMarkers = {};
 let _busMarkers = {};
 let _tileMarkers = {};
 let _homeMarker = null;
+let _lastBuses = [];  // cached for personStatus() narrative
 
 // Tile device display config ‚Äî map the device name (as set in the Tile app)
 // to a display icon and label. Update once you have the devices set up.
@@ -1630,6 +1680,22 @@ const PERSON_NAMES = {
 
 function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
+}
+
+// Compute a short narrative status for a person.
+// "at home" / "on 126" / "near home" / "X.X mi away"
+function personStatus(loc) {
+  const dHome = distMi(HOME, loc);
+  if (dHome < 0.05) return 'at home';
+  // On a bus: within ~600 ft of an active bus
+  for (const b of _lastBuses) {
+    if (b.lat == null || b.lon == null) continue;
+    if (distMi(loc, { lat: b.lat, lon: b.lon }) < 0.12) {
+      return 'on ' + b.route;
+    }
+  }
+  if (dHome < 0.5) return 'near home';
+  return dHome.toFixed(1) + ' mi away';
 }
 
 function distMi(a, b) {
@@ -1688,8 +1754,8 @@ async function fetchLocations() {
       { headers: { 'X-Cal-Token': token } });
     if (!res.ok) return;
     const data = await res.json();
+    renderBuses(data.buses || []);     // first so _lastBuses is populated
     renderLocations(data.locations || []);
-    renderBuses(data.buses || []);
     renderTiles(data.tiles || []);
   } catch (e) {
     console.error('Locations fetch error:', e);
@@ -1738,6 +1804,7 @@ function busLoadClass(passload) {
 }
 
 function renderBuses(buses) {
+  _lastBuses = buses || [];  // cache for personStatus
   if (!_hobokenMap) return;
   const seen = new Set();
   for (const b of buses) {
@@ -1873,8 +1940,10 @@ function renderLocations(locations) {
       overlay.innerHTML = '';
     } else {
       overlay.innerHTML = locations.map(function (l) {
+        const status = personStatus(l);
         const ago = agoText(l.received_at * 1000);
         return '<span class="ms-pill"><span class="ms-name">' + displayName(l) +
+          '</span><span class="ms-status">' + status +
           '</span><span class="ms-ago">' + ago + '</span></span>';
       }).join('');
     }
@@ -1932,17 +2001,15 @@ async function fetchAlerts() {
     const container = document.getElementById('alertsList');
     let items = [];
 
+    // Only NJT alerts that mention routes/services the family rides (126, 119, ferry).
+    // Nixle and broader NJT system-wide noise are filtered out by default.
+    const RELEVANT_KEYWORDS = /\b(126|119|ferry|hoboken|all bus|systemwide)\b/i;
     if (Array.isArray(data.njt_alerts)) {
       for (const a of data.njt_alerts) {
         if (a.error) continue;
-        items.push({ text: a.description || a.title || '', badge: 'njt', badgeText: 'NJT', isAlert: true });
-      }
-    }
-
-    if (Array.isArray(data.nixle_alerts)) {
-      for (const a of data.nixle_alerts) {
-        if (a.error) continue;
-        items.push({ text: a.title || '', badge: 'nixle', badgeText: 'Nixle', isAlert: true });
+        const text = a.description || a.title || '';
+        if (!RELEVANT_KEYWORDS.test(text)) continue;
+        items.push({ text: text, badge: 'njt', badgeText: 'NJT', isAlert: true });
       }
     }
 
@@ -2094,6 +2161,7 @@ function renderCalEvents(events) {
       }
       return {
         summary: e.summary,
+        location: e.location || '',
         start: { date: startStr },
         end: { date: endStr },
         isMultiDay: isMultiDay,
@@ -2108,6 +2176,7 @@ function renderCalEvents(events) {
         String(d.getDate()).padStart(2, '0');
       return {
         summary: e.summary,
+        location: e.location || '',
         start: { dateTime: e.start },
         end: e.end ? { dateTime: e.end } : null,
         isMultiDay: false,
@@ -2162,7 +2231,29 @@ function renderCalEvents(events) {
       }
       const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
       const timeHtml = timeLabel ? '<span class="cal-event-time">(' + timeLabel + ')</span>' : '';
-      html += '<div class="' + evCls + '">' + title + timeHtml + '</div>';
+
+      // "Leave by X" only for timed events with a location, within the next 24h.
+      let leaveHtml = '';
+      if (ev.location && ev.start.dateTime) {
+        const eventMs = new Date(ev.start.dateTime).getTime();
+        const hrsUntil = (eventMs - Date.now()) / 3600000;
+        if (hrsUntil > 0 && hrsUntil < 24) {
+          // Heuristic mode: city (NYC) ‚Üí bus; otherwise drive
+          const isNYC = /\b(NY|NYC|New York|Manhattan)\b/i.test(ev.location);
+          const travelMin = isNYC ? 45 : 20;
+          const mode = isNYC ? '126/119' : 'drive';
+          const leaveMs = eventMs - travelMin * 60000;
+          const leaveDate = new Date(leaveMs);
+          const lh = leaveDate.getHours();
+          const lm = String(leaveDate.getMinutes()).padStart(2, '0');
+          const lampm = lh >= 12 ? 'PM' : 'AM';
+          const lh12 = lh % 12 || 12;
+          const leaveStr = lh12 + ':' + lm + ' ' + lampm;
+          leaveHtml = '<div class="cal-leave-by">Leave ' + leaveStr +
+            ' <span class="cal-leave-mode">(' + mode + ')</span></div>';
+        }
+      }
+      html += '<div class="' + evCls + '">' + title + timeHtml + leaveHtml + '</div>';
     }
   }
   container.innerHTML = html;
