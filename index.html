@@ -337,9 +337,9 @@
     background: #0a0a0f;
   }
 
-  /* Darken the map tiles slightly so they blend with the dashboard's dark theme */
+  /* Subtle tone adjustment on map tiles */
   .map-container .leaflet-tile-pane {
-    filter: brightness(0.65) contrast(1.05) saturate(0.85);
+    filter: brightness(0.95);
   }
 
   /* Hide Leaflet controls ‚Äî we want a clean ambient view */
@@ -1468,13 +1468,17 @@ function initHobokenMap() {
     dragging: true,
     scrollWheelZoom: false,
   });
-  // Bounds tight around Hoboken + the two NYC anchors: 32 Old Slip (40.704, -74.008)
-  // and 42nd & 8th (40.757, -73.990).
-  _hobokenMap.fitBounds([[40.703, -74.037], [40.760, -73.985]], { padding: [4, 4] });
-  // CartoDB Voyager ‚Äî colorful light tiles, easier to read than dark
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
+  // Bounds match the area shown in user's reference screenshot:
+  // West: Hoboken (Palisade Ave area)
+  // East: Manhattan East Side (~2nd/3rd Ave)
+  // North: Midtown around 46th St
+  // South: Lower Manhattan / Hoboken Historic Downtown / Grand St area
+  _hobokenMap.fitBounds([[40.713, -74.035], [40.768, -73.972]], { padding: [2, 2] });
+  // Stadia Alidade Smooth Dark ‚Äî clean dark theme with built-in labels.
+  // Free tier works without API key from authorized domains (register at stadiamaps.com if needed).
+  L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20,
+    attribution: '',
   }).addTo(_hobokenMap);
 }
 
