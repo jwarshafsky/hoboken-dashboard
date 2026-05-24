@@ -283,11 +283,12 @@
   }
 
   .alerts-list {
-    flex: 1;
+    flex-shrink: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     gap: 5px;
+    max-height: 50%;
   }
 
   .alert-item {
@@ -782,7 +783,7 @@
     <div id="calEvents"></div>
   </div>
   <div class="cal-alert-divider"></div>
-  <div class="alerts-list" id="alertsList" style="max-height:35%;overflow:hidden;flex-shrink:0;">
+  <div class="alerts-list" id="alertsList">
     <div class="alert-item" style="color:#444;">Loading...</div>
   </div>
 </div>
@@ -1827,9 +1828,14 @@ async function fetchAlerts() {
     }
 
     // Alerts only ‚Äî no news, no stocks
+    const divider = document.querySelector('.cal-alert-divider');
     if (items.length === 0) {
-      container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts</div>';
+      container.innerHTML = '';
+      container.style.display = 'none';
+      if (divider) divider.style.display = 'none';
     } else {
+      container.style.display = 'flex';
+      if (divider) divider.style.display = 'block';
       let html = '';
       for (const item of items) {
         html += `<div class="alert-item is-alert">`;
