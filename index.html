@@ -403,6 +403,21 @@
   .bus-marker.load-heavy  { background: #ff9b40; }
   .bus-marker.load-full   { background: #ff5050; }
 
+  /* Tile (Life360) tracker markers ‚Äî purple */
+  .tile-marker {
+    width: 26px !important;
+    height: 26px !important;
+    background: #c870ff;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #000;
+    line-height: 22px;
+    text-align: center;
+  }
+
   .person-list {
     display: flex;
     gap: 10px;
@@ -1483,7 +1498,16 @@ function isMapMode() {
 let _hobokenMap = null;
 let _personMarkers = {};
 let _busMarkers = {};
+let _tileMarkers = {};
 let _homeMarker = null;
+
+// Tile device display config ‚Äî map the device name (as set in the Tile app)
+// to a display icon and label. Update once you have the devices set up.
+const TILE_DEVICES = {
+  // 'Buddy Collar':    { icon: 'üêï', color: '#c87000' },
+  // 'Kid 1 Backpack':  { icon: 'S',  color: '#c870ff' },
+  // 'Kid 2 Backpack':  { icon: 'M',  color: '#70b8ff' },
+};
 
 // Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
 const HOME = { lat: 40.75202, lon: -74.02816, name: 'Home' };
@@ -1570,8 +1594,40 @@ async function fetchLocations() {
     const data = await res.json();
     renderLocations(data.locations || []);
     renderBuses(data.buses || []);
+    renderTiles(data.tiles || []);
   } catch (e) {
     console.error('Locations fetch error:', e);
+  }
+}
+
+function renderTiles(tiles) {
+  if (!_hobokenMap) return;
+  const seen = new Set();
+  for (const t of tiles) {
+    const key = t.uuid;
+    seen.add(key);
+    const latlng = [t.lat, t.lon];
+    const cfg = TILE_DEVICES[t.name] || {};
+    const label = cfg.icon || (t.name || '?').substring(0, 2).toUpperCase();
+    const style = cfg.color ? ('background:' + cfg.color + ';') : '';
+    const icon = L.divIcon({
+      className: 'tile-marker',
+      html: '<div style="' + style + 'width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;">' + label + '</div>',
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+    });
+    if (_tileMarkers[key]) {
+      _tileMarkers[key].setLatLng(latlng);
+      _tileMarkers[key].setIcon(icon);
+    } else {
+      _tileMarkers[key] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+    }
+  }
+  for (const key of Object.keys(_tileMarkers)) {
+    if (!seen.has(key)) {
+      _hobokenMap.removeLayer(_tileMarkers[key]);
+      delete _tileMarkers[key];
+    }
   }
 }
 
