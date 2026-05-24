@@ -1500,6 +1500,18 @@ const FACE_IMAGES = {
   'JXW': 'jenny.jpg',
 };
 
+// Display name override per TID (overrides whatever username Owntracks reports)
+const PERSON_NAMES = {
+  'HW':  'Jeff',
+  'JHW': 'Jeff',
+  'XW':  'Jenny',
+  'JXW': 'Jenny',
+};
+
+function displayName(loc) {
+  return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
+}
+
 function distMi(a, b) {
   const R = 3959; // miles
   const dLat = (b.lat - a.lat) * Math.PI / 180;
@@ -1538,7 +1550,10 @@ function initHobokenMap() {
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   });
-  _homeMarker = L.marker([HOME.lat, HOME.lon], { icon: homeIcon }).addTo(_hobokenMap);
+  _homeMarker = L.marker([HOME.lat, HOME.lon], {
+    icon: homeIcon,
+    zIndexOffset: 1000,  // keep home on top of person markers
+  }).addTo(_hobokenMap);
 
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
@@ -1602,15 +1617,59 @@ function renderBuses(buses) {
 
 function renderLocations(locations) {
   if (!_hobokenMap) return;
+  // Compute display positions ‚Äî offset overlapping markers so the home icon
+  // is always visible and multiple people at the same place don't stack.
+  // Within ~265 ft of any other marker, spread them in a small ring.
+  const OVERLAP_MI = 0.05;        // ~265 ft
+  const RING_RADIUS_DEG = 0.0003; // ~110 ft
+  const positions = {};
+  for (const loc of locations) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
+
+  // Cluster people who are near HOME ‚Äî distribute around home
+  const nearHome = locations.filter(function (l) { return distMi(HOME, l) < OVERLAP_MI; });
+  if (nearHome.length > 0) {
+    nearHome.forEach(function (l, idx) {
+      const angle = (idx / Math.max(nearHome.length, 1)) * 2 * Math.PI + 0.5;
+      positions[l.tid].lat = HOME.lat + RING_RADIUS_DEG * Math.cos(angle);
+      positions[l.tid].lon = HOME.lon + RING_RADIUS_DEG * Math.sin(angle);
+    });
+  }
+
+  // Cluster people near each other but not at home
+  const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= OVERLAP_MI; });
+  const handled = new Set();
+  for (let i = 0; i < elsewhere.length; i++) {
+    if (handled.has(elsewhere[i].tid)) continue;
+    const cluster = [elsewhere[i]];
+    handled.add(elsewhere[i].tid);
+    for (let j = i + 1; j < elsewhere.length; j++) {
+      if (handled.has(elsewhere[j].tid)) continue;
+      if (distMi(elsewhere[i], elsewhere[j]) < OVERLAP_MI) {
+        cluster.push(elsewhere[j]);
+        handled.add(elsewhere[j].tid);
+      }
+    }
+    if (cluster.length > 1) {
+      const cx = cluster.reduce(function (s, c) { return s + c.lat; }, 0) / cluster.length;
+      const cy = cluster.reduce(function (s, c) { return s + c.lon; }, 0) / cluster.length;
+      cluster.forEach(function (c, idx) {
+        const angle = (idx / cluster.length) * 2 * Math.PI + 0.5;
+        positions[c.tid].lat = cx + RING_RADIUS_DEG * Math.cos(angle);
+        positions[c.tid].lon = cy + RING_RADIUS_DEG * Math.sin(angle);
+      });
+    }
+  }
+
   // Clear stale markers
   const seen = new Set();
   for (const loc of locations) {
     seen.add(loc.tid);
-    const latlng = [loc.lat, loc.lon];
+    const pos = positions[loc.tid];
+    const latlng = [pos.lat, pos.lon];
     const faceUrl = FACE_IMAGES[loc.tid];
     const html = faceUrl
-      ? '<img src="' + faceUrl + '" alt="' + (loc.name || loc.tid) + '"/>'
-      : (loc.name || loc.tid || '?').substring(0, 2).toUpperCase();
+      ? '<img src="' + faceUrl + '" alt="' + displayName(loc) + '"/>'
+      : (displayName(loc) || '?').substring(0, 2).toUpperCase();
     if (_personMarkers[loc.tid]) {
       _personMarkers[loc.tid].setLatLng(latlng);
     } else {
@@ -1638,7 +1697,7 @@ function renderLocations(locations) {
     list.innerHTML = locations.map(function (l) {
       const ago = agoText(l.received_at * 1000);
       return '<span><span class="person-dot"></span>' +
-        (l.name || l.tid) + ' <span style="color:#666;">' + ago + '</span></span>';
+        displayName(l) + ' <span style="color:#666;">' + ago + '</span></span>';
     }).join('');
   }
 
