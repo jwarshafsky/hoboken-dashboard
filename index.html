@@ -30,6 +30,21 @@
     padding: 12px;
   }
 
+  /* TV simulation mode ‚Äî body becomes a fixed 1920x1080 surface that's scaled
+     to fit the browser window. Activate by adding ?tv to the URL. */
+  html.tv-sim {
+    background: #000;
+    overflow: hidden;
+  }
+  html.tv-sim body {
+    width: 1920px;
+    height: 1080px;
+    transform-origin: top left;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
   /* Cards */
   .card {
     background: #0a0a0f;
@@ -852,6 +867,25 @@
 </div>
 
 <script>
+// ============================================================
+// TV SIMULATION MODE ‚Äî ?tv in URL renders the dashboard at fixed 1920x1080,
+// scaled to fit any browser window while preserving TV proportions.
+// ============================================================
+(function setupTvSimulation() {
+  if (!/(\?|&)tv(=|&|$)/.test(location.search)) return;
+  document.documentElement.classList.add('tv-sim');
+  function applyScale() {
+    const targetW = 1920, targetH = 1080;
+    const scale = Math.min(window.innerWidth / targetW, window.innerHeight / targetH);
+    const offsetX = (window.innerWidth  - targetW * scale) / 2;
+    const offsetY = (window.innerHeight - targetH * scale) / 2;
+    document.body.style.transform = 'translate(' + offsetX + 'px,' + offsetY + 'px) scale(' + scale + ')';
+  }
+  if (document.body) applyScale();
+  else window.addEventListener('DOMContentLoaded', applyScale);
+  window.addEventListener('resize', applyScale);
+})();
+
 // ============================================================
 // PROXY
 // ============================================================
