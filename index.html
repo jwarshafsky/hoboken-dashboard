@@ -1517,7 +1517,7 @@ function initHobokenMap() {
   _homeMarker = L.marker([HOME.lat, HOME.lon], { icon: homeIcon }).addTo(_hobokenMap);
 
   // Initial view: tight on home (will re-fit once locations arrive)
-  _hobokenMap.setView([HOME.lat, HOME.lon], 13);
+  _hobokenMap.setView([HOME.lat, HOME.lon], 11);
 }
 
 async function fetchLocations() {
@@ -1583,7 +1583,7 @@ function renderLocations(locations) {
   });
   if (inRange.length === 0) {
     // Nobody in range ‚Äî tight on home (Hoboken-wide view)
-    _hobokenMap.setView([HOME.lat, HOME.lon], 13);
+    _hobokenMap.setView([HOME.lat, HOME.lon], 11);
   } else {
     // Fit tightly around home + in-range people. No Hoboken-include constraint ‚Äî
     // padding gives a bit of context and maxZoom caps how tight we go.
@@ -1595,7 +1595,7 @@ function renderLocations(locations) {
     const maxLng = Math.max.apply(null, lngs);
     _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
       padding: [20, 20],
-      maxZoom: 14,
+      maxZoom: 12,
     });
   }
 }
