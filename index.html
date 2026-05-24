@@ -205,7 +205,31 @@
     overflow: hidden;
   }
 
+  #mapCard { position: relative; }
   #mapCard #hobokenMap { width: 100%; height: 100%; }
+
+  /* Overlay showing when each person last updated, sitting on top of the map */
+  #mapStatusOverlay {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 1000;
+    pointer-events: none;
+    font-size: 0.55rem;
+    color: #ddd;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 4px 8px;
+    border-radius: 6px;
+    line-height: 1.3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+  #mapStatusOverlay:empty { display: none; }
+  #mapStatusOverlay .ms-name { color: #fff; font-weight: 600; }
+  #mapStatusOverlay .ms-ago { color: #999; margin-left: 3px; }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -796,6 +820,7 @@
 <!-- Row 1-2: Map (middle, always visible, fills its panel) -->
 <div class="card" id="mapCard">
   <div id="hobokenMap"></div>
+  <div id="mapStatusOverlay"></div>
 </div>
 
 <!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
@@ -933,10 +958,16 @@ const apiStatus = {
 function markOk(key) {
   apiStatus[key].ok = true;
   apiStatus[key].lastUpdate = Date.now();
+  apiStatus[key].failCount = 0;
 }
 
 function markFail(key) {
-  apiStatus[key].ok = false;
+  // Require 2 consecutive failures before flagging offline ‚Äî prevents flashes
+  // from transient Cloud Run cold starts or network blips.
+  apiStatus[key].failCount = (apiStatus[key].failCount || 0) + 1;
+  if (apiStatus[key].failCount >= 2) {
+    apiStatus[key].ok = false;
+  }
 }
 
 function agoText(ts) {
@@ -1363,24 +1394,29 @@ function renderLivePredictions(predictions, label) {
   if (Array.isArray(predictions) && predictions.length > 0) {
     let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
     const items = predictions.slice(0, 3);
+    // Compute the absolute arrival time (Unix ms) for each prediction by using
+    // the proxy's fetched_at + the countdown that was true at that moment.
+    // Then derive mins from current time. Conservative (floor) so we don't show
+    // a longer countdown than reality and have the user miss the bus.
+    const fetchedAtMs = (window._transitFetchedAt || Math.floor(Date.now() / 1000)) * 1000;
     for (const p of items) {
-      const mins = parseInt(p.countdown, 10);
+      const reportedMins = parseInt(p.countdown, 10);
+      const arrivalMs = fetchedAtMs + reportedMins * 60000;
+      const msUntil = arrivalMs - Date.now();
+      const mins = Math.max(0, Math.floor(msUntil / 60000));  // conservative
       const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-      // For live API, we only have countdown minutes ‚Äî compute the clock time
       let displayTime;
       if (mins === 0) {
         displayTime = 'Due';
       } else {
-        const now = new Date();
-        const arrive = new Date(now.getTime() + mins * 60000);
+        const arrive = new Date(arrivalMs);
         const hh = arrive.getHours();
         const mm = String(arrive.getMinutes()).padStart(2, '0');
         const ampm = hh >= 12 ? 'PM' : 'AM';
         const h12 = hh % 12 || 12;
         displayTime = `${h12}:${mm} ${ampm}`;
       }
-      const dot = '';  // load indicator removed
-      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span>${dot}</div>`;
+      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
     }
     html += '</div></div>';
     return html;
@@ -1395,6 +1431,9 @@ async function fetchProxy() {
     const res = await fetchT(PROXY_URL);
     const data = await res.json();
     markOk('transit');
+
+    // Stash fetched_at so renderLivePredictions can reconcile against current time
+    window._transitFetchedAt = data.fetched_at || Math.floor(Date.now() / 1000);
 
     if (data.tunnel && !data.tunnel.error) {
       const t = data.tunnel;
@@ -1826,16 +1865,18 @@ function renderLocations(locations) {
       delete _personMarkers[tid];
     }
   }
-  // Update person list under map
-  const list = document.getElementById('personList');
-  if (locations.length === 0) {
-    list.innerHTML = '<span style="color:#666;">No locations shared yet</span>';
-  } else {
-    list.innerHTML = locations.map(function (l) {
-      const ago = agoText(l.received_at * 1000);
-      return '<span><span class="person-dot"></span>' +
-        displayName(l) + ' <span style="color:#666;">' + ago + '</span></span>';
-    }).join('');
+  // Update overlay showing each person's last-updated timestamp
+  const overlay = document.getElementById('mapStatusOverlay');
+  if (overlay) {
+    if (locations.length === 0) {
+      overlay.innerHTML = '';
+    } else {
+      overlay.innerHTML = locations.map(function (l) {
+        const ago = agoText(l.received_at * 1000);
+        return '<span><span class="ms-name">' + displayName(l) +
+          '</span><span class="ms-ago">' + ago + '</span></span>';
+      }).join('');
+    }
   }
 
   // Auto-fit: include home + any person within 5mi. If none in range, default Hoboken view.
@@ -1843,11 +1884,12 @@ function renderLocations(locations) {
     return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
   });
   if (inRange.length === 0) {
-    // Nobody in range ‚Äî tight on home (Hoboken-wide view)
     _hobokenMap.setView([HOME.lat, HOME.lon], 14);
+  } else if (locations.length > 0 && inRange.length === locations.length &&
+             inRange.every(function (l) { return distMi(HOME, l) < 0.05; })) {
+    // Everyone is AT home ‚Äî zoom in one extra level
+    _hobokenMap.setView([HOME.lat, HOME.lon], 15);
   } else {
-    // Fit tightly around home + in-range people. No Hoboken-include constraint ‚Äî
-    // padding gives a bit of context and maxZoom caps how tight we go.
     const lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
     const lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
     const minLat = Math.min.apply(null, lats);
