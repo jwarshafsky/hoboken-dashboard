@@ -2087,7 +2087,7 @@ updateStatusBar();
 setInterval(updateTransit, 30000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
-setInterval(function () { if (isMapMode()) fetchLocations(); }, 60000);
+setInterval(function () { if (isMapMode()) fetchLocations(); }, 30000);
 // Kick off initial location fetch (no-op if not map mode yet)
 setTimeout(function () { if (isMapMode()) { setAlertsMode('map'); fetchLocations(); } }, 1500);
 </script>
