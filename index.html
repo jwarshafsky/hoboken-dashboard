@@ -1463,18 +1463,16 @@ const FACE_IMAGES = {
 
 function initHobokenMap() {
   if (_hobokenMap || typeof L === 'undefined') return;
-  _hobokenMap = L.map('hobokenMap', {
+  const hasRotate = typeof L.Map.prototype.setBearing === 'function';
+  _hobokenMap = L.map('hobokenMap', Object.assign({
     zoomControl: false,
     attributionControl: false,
     dragging: true,
     scrollWheelZoom: false,
-    rotate: true,
-    bearing: -29,  // Manhattan grid alignment: avenues run vertically, streets horizontal
-    touchRotate: false,
-  });
-  // Tighter bounds ‚Äî area shown in user's reference screenshot
-  // (Hoboken Home through Midtown around 42-46th St)
-  _hobokenMap.fitBounds([[40.735, -74.030], [40.766, -73.978]], { padding: [2, 2] });
+  }, hasRotate ? { rotate: true, bearing: -29, touchRotate: false } : {}));
+  // Use setView with center+zoom (works better with rotation than fitBounds)
+  // Center: between Hoboken and Midtown Manhattan
+  _hobokenMap.setView([40.750, -74.003], 14);
   // Stadia Alidade Smooth Dark ‚Äî clean dark theme with built-in labels.
   // Free tier works without API key from authorized domains (register at stadiamaps.com if needed).
   L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
