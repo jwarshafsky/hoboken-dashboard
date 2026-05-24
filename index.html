@@ -1516,8 +1516,8 @@ function initHobokenMap() {
   });
   _homeMarker = L.marker([HOME.lat, HOME.lon], { icon: homeIcon }).addTo(_hobokenMap);
 
-  // Initial view: centered on home, zoomed in tight on Hoboken
-  _hobokenMap.setView([HOME.lat, HOME.lon], 15);
+  // Initial view: tight on home (will re-fit once locations arrive)
+  _hobokenMap.setView([HOME.lat, HOME.lon], 16);
 }
 
 async function fetchLocations() {
@@ -1582,26 +1582,21 @@ function renderLocations(locations) {
     return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
   });
   if (inRange.length === 0) {
-    // Default: tight on Hoboken
-    _hobokenMap.setView([HOME.lat, HOME.lon], 15);
+    // Nobody in range ‚Äî tight on home (Hoboken-wide view)
+    _hobokenMap.setView([HOME.lat, HOME.lon], 16);
   } else {
+    // Fit tightly around home + in-range people. No Hoboken-include constraint ‚Äî
+    // padding gives a bit of context and maxZoom caps how tight we go.
     const lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
     const lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
-    let minLat = Math.min.apply(null, lats);
-    let maxLat = Math.max.apply(null, lats);
-    let minLng = Math.min.apply(null, lngs);
-    let maxLng = Math.max.apply(null, lngs);
-    // Never zoom tighter than Hoboken
-    minLat = Math.min(minLat, HOBOKEN_BOUNDS[0][0]);
-    minLng = Math.min(minLng, HOBOKEN_BOUNDS[0][1]);
-    maxLat = Math.max(maxLat, HOBOKEN_BOUNDS[1][0]);
-    maxLng = Math.max(maxLng, HOBOKEN_BOUNDS[1][1]);
+    const minLat = Math.min.apply(null, lats);
+    const maxLat = Math.max.apply(null, lats);
+    const minLng = Math.min.apply(null, lngs);
+    const maxLng = Math.max.apply(null, lngs);
     _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
-      padding: [10, 10],
-      maxZoom: 16,  // never tighter than ~3 blocks
+      padding: [20, 20],
+      maxZoom: 17,
     });
-    // After fit, if we ended up wider than zoom 15 (Hoboken), don't pull tighter than that.
-    if (_hobokenMap.getZoom() > 16) _hobokenMap.setZoom(16);
   }
 }
 
