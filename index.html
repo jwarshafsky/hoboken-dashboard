@@ -37,8 +37,8 @@
     overflow: hidden;
   }
   html.tv-sim body {
-    width: 1920px;
-    height: 1080px;
+    width: 930px;
+    height: 539px;
     transform-origin: top left;
     position: absolute;
     top: 0;
@@ -863,7 +863,6 @@
 
 <div class="status-bar">
   <span id="statusFreshness">Loading...</span>
-  <span id="statusViewport" style="color:#6bffb8;font-size:1.2rem;font-weight:700;background:#000;padding:4px 8px;border-radius:6px;border:1px solid #6bffb8;"></span>
   <span id="statusErrors" class="status-ok"></span>
 </div>
 
@@ -876,7 +875,7 @@
   if (!/(\?|&)tv(=|&|$)/.test(location.search)) return;
   document.documentElement.classList.add('tv-sim');
   function applyScale() {
-    const targetW = 1920, targetH = 1080;
+    const targetW = 930, targetH = 539;
     const scale = Math.min(window.innerWidth / targetW, window.innerHeight / targetH);
     const offsetX = (window.innerWidth  - targetW * scale) / 2;
     const offsetY = (window.innerHeight - targetH * scale) / 2;
