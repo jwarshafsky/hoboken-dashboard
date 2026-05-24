@@ -24,7 +24,7 @@
     height: 100vh;
     overflow: hidden;
     display: grid;
-    grid-template-columns: 0.8fr 1.26fr 1.14fr;
+    grid-template-columns: 0.7fr 1.7fr 0.85fr;
     grid-template-rows: auto 1fr auto auto;
     gap: 10px;
     padding: 12px;
@@ -176,11 +176,21 @@
     color: #ccc;
   }
 
-  /* Calendar ‚Äî spans both rows in middle column */
+  /* Calendar ‚Äî spans both rows in right column */
   #calCard {
     grid-row: 1 / 3;
-    grid-column: 2;
+    grid-column: 3;
   }
+
+  /* Map card ‚Äî spans both rows in middle column, no padding so map fills it */
+  #mapCard {
+    grid-row: 1 / 3;
+    grid-column: 2;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #mapCard #hobokenMap { width: 100%; height: 100%; }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -259,10 +269,10 @@
     transform: scale(1.05);
   }
 
-  /* Alerts ‚Äî spans both rows in right column */
-  #alertsCard {
-    grid-row: 1 / 3;
-    grid-column: 3;
+  /* Alerts now stacked inside the calendar card (right column) */
+  .cal-alert-divider {
+    border-top: 0.5px solid #2a2a35;
+    margin: 8px -12px 6px -12px;
   }
 
   .alerts-panel {
@@ -760,27 +770,20 @@
   <div class="date-line" id="dateLine">---</div>
 </div>
 
-<!-- Row 1-2: Calendar (middle, tall) -->
+<!-- Row 1-2: Map (middle, always visible, fills its panel) -->
+<div class="card" id="mapCard">
+  <div id="hobokenMap"></div>
+</div>
+
+<!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
 <div class="card" id="calCard">
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
     <div id="calEvents"></div>
   </div>
-</div>
-
-<!-- Row 1-2: Alerts & News (right, tall) -->
-<div class="card alerts-panel" id="alertsCard">
-  <div class="alerts-list" id="alertsList">
+  <div class="cal-alert-divider"></div>
+  <div class="alerts-list" id="alertsList" style="max-height:35%;overflow:hidden;flex-shrink:0;">
     <div class="alert-item" style="color:#444;">Loading...</div>
-  </div>
-  <div class="map-container" id="mapContainer" style="display:none;">
-    <div id="hobokenMap" style="width:100%;height:100%;"></div>
-  </div>
-  <div class="person-list" id="personList" style="display:none;"></div>
-  <div class="stock-ticker-bar">
-    <div class="stock-ticker-track" id="stockTicker">
-      <span class="stock-item"><span class="stock-symbol">Loading...</span></span>
-    </div>
   </div>
 </div>
 
@@ -1823,58 +1826,19 @@ async function fetchAlerts() {
       }
     }
 
-    if (Array.isArray(data.news)) {
-      for (const n of data.news) {
-        if (n.error) continue;
-        items.push({ text: n.title || '', badge: 'news', badgeText: n.source || 'News', isAlert: false });
-      }
-    }
-
-    const mapMode = isMapMode();
-    setAlertsMode(mapMode ? 'map' : 'news');
-
-    if (mapMode) {
-      // In map mode: keep only NJT + Nixle alerts (top 3), drop news
-      const alertsOnly = items.filter(function (i) { return i.isAlert; }).slice(0, 3);
-      if (alertsOnly.length === 0) {
-        container.innerHTML = '';
-      } else {
-        let html = '';
-        for (const item of alertsOnly) {
-          html += `<div class="alert-item is-alert">`;
-          html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
-          html += item.text;
-          html += '</div>';
-        }
-        container.innerHTML = html;
-      }
-    } else if (items.length === 0) {
-      container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts or news</div>';
+    // Alerts only ‚Äî no news, no stocks
+    if (items.length === 0) {
+      container.innerHTML = '<div class="alert-item" style="color:#444;">No alerts</div>';
     } else {
-      // News mode: render all items, trim overflow
       let html = '';
       for (const item of items) {
-        const alertClass = item.isAlert ? ' is-alert' : '';
-        html += `<div class="alert-item${alertClass}">`;
+        html += `<div class="alert-item is-alert">`;
         html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
         html += item.text;
         html += '</div>';
       }
       container.innerHTML = html;
       requestAnimationFrame(() => trimOverflow(container));
-    }
-
-    const stocks = data.stocks;
-    const tickerEl = document.getElementById('stockTicker');
-    if (Array.isArray(stocks) && stocks.length > 0) {
-      let tickerHtml = '';
-      for (const s of stocks) {
-        if (s.error) continue;
-        const sign = s.direction === 'up' ? '+' : '';
-        const cls = s.direction === 'up' ? 'stock-up' : 'stock-down';
-        tickerHtml += `<span class="stock-item"><span class="stock-symbol">${s.symbol}</span><span class="stock-pct ${cls}">${sign}${s.pctChange}%</span></span>`;
-      }
-      tickerEl.innerHTML = tickerHtml + tickerHtml;
     }
   } catch (e) {
     console.error('Alerts fetch error:', e);
@@ -2144,9 +2108,9 @@ updateStatusBar();
 setInterval(updateTransit, 30000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
-setInterval(function () { if (isMapMode()) fetchLocations(); }, 30000);
+setInterval(fetchLocations, 30000);
 // Kick off initial location fetch (no-op if not map mode yet)
-setTimeout(function () { if (isMapMode()) { setAlertsMode('map'); fetchLocations(); } }, 1500);
+setTimeout(function () { initHobokenMap(); fetchLocations(); }, 1500);
 </script>
 </body>
 </html>
