@@ -1463,9 +1463,9 @@ let _personMarkers = {};
 let _homeMarker = null;
 
 // Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
-const HOME = { lat: 40.7548, lon: -74.0306, name: 'Home' };
-// All of Hoboken ‚Äî never zoom tighter than this.
-const HOBOKEN_BOUNDS = [[40.733, -74.038], [40.762, -74.024]];
+const HOME = { lat: 40.75202, lon: -74.02816, name: 'Home' };
+// All of Hoboken ‚Äî never zoom tighter than this. West edge ~ Jackson St.
+const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
 const AUTO_FIT_RADIUS_MI = 5;
 
@@ -1499,9 +1499,17 @@ function initHobokenMap() {
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
-  // Stadia Alidade Smooth Dark ‚Äî clean dark theme with built-in labels.
-  L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20,
+  // CartoDB Dark Matter ‚Äî minimal dark theme, no highway shield badges.
+  // Base tiles (roads + water, no labels)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+    attribution: '',
+  }).addTo(_hobokenMap);
+  // Lighter label overlay ‚Äî keeps street names but no large highway shields
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
     attribution: '',
   }).addTo(_hobokenMap);
 
