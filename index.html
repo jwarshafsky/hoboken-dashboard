@@ -10,7 +10,8 @@
 <meta http-equiv="Expires" content="0">
 <title>Hoboken Dashboard</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
@@ -1467,13 +1468,13 @@ function initHobokenMap() {
     attributionControl: false,
     dragging: true,
     scrollWheelZoom: false,
+    rotate: true,
+    bearing: -29,  // Manhattan grid alignment: avenues run vertically, streets horizontal
+    touchRotate: false,
   });
-  // Bounds match the area shown in user's reference screenshot:
-  // West: Hoboken (Palisade Ave area)
-  // East: Manhattan East Side (~2nd/3rd Ave)
-  // North: Midtown around 46th St
-  // South: Lower Manhattan / Hoboken Historic Downtown / Grand St area
-  _hobokenMap.fitBounds([[40.713, -74.035], [40.768, -73.972]], { padding: [2, 2] });
+  // Tighter bounds ‚Äî area shown in user's reference screenshot
+  // (Hoboken Home through Midtown around 42-46th St)
+  _hobokenMap.fitBounds([[40.735, -74.030], [40.766, -73.978]], { padding: [2, 2] });
   // Stadia Alidade Smooth Dark ‚Äî clean dark theme with built-in labels.
   // Free tier works without API key from authorized domains (register at stadiamaps.com if needed).
   L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
