@@ -337,6 +337,11 @@
     background: #0a0a0f;
   }
 
+  /* Darken the map tiles slightly so they blend with the dashboard's dark theme */
+  .map-container .leaflet-tile-pane {
+    filter: brightness(0.65) contrast(1.05) saturate(0.85);
+  }
+
   /* Hide Leaflet controls ‚Äî we want a clean ambient view */
   .leaflet-control-zoom,
   .leaflet-control-attribution {
@@ -1459,10 +1464,9 @@ function initHobokenMap() {
     dragging: true,
     scrollWheelZoom: false,
   });
-  // Bounds that include Hoboken + Lower Manhattan (32 Old Slip) + Midtown (42nd & 8th)
-  // SW corner: south of Wall St, west of Hoboken
-  // NE corner: north of 42nd, east of 8th Ave
-  _hobokenMap.fitBounds([[40.695, -74.045], [40.762, -73.980]], { padding: [8, 8] });
+  // Bounds tight around Hoboken + the two NYC anchors: 32 Old Slip (40.704, -74.008)
+  // and 42nd & 8th (40.757, -73.990).
+  _hobokenMap.fitBounds([[40.703, -74.037], [40.760, -73.985]], { padding: [4, 4] });
   // CartoDB Voyager ‚Äî colorful light tiles, easier to read than dark
   L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
