@@ -511,6 +511,16 @@
   .bus-marker.load-heavy  { background: #ff9b40; }
   .bus-marker.load-full   { background: #ff5050; }
 
+  /* Hoboken Hop shuttle marker ‚Äî bus icon, color is set inline per bus
+     (red for Red Hop, green for Green Hop) */
+  .hop-marker {
+    width: 22px !important;
+    height: 22px !important;
+    background: transparent;
+    border: none;
+    filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+  }
+
   /* Tile (Life360) tracker markers ‚Äî purple */
   .tile-marker {
     width: 26px !important;
@@ -1449,14 +1459,23 @@ function renderLivePredictions(predictions, label) {
     // Then derive mins from current time. Conservative (floor) so we don't show
     // a longer countdown than reality and have the user miss the bus.
     const fetchedAtMs = (window._transitFetchedAt || Math.floor(Date.now() / 1000)) * 1000;
+    // NJT seems to round their countdowns up, so shift the predicted arrival
+    // ~30s earlier than reported. Makes the displayed countdown feel right ‚Äî
+    // not over-promising on time available.
+    const DISPLAY_SHIFT_MS = 30000;
     for (const p of items) {
       const reportedMins = parseInt(p.countdown, 10);
-      const arrivalMs = fetchedAtMs + reportedMins * 60000;
+      const arrivalMs = fetchedAtMs + reportedMins * 60000 - DISPLAY_SHIFT_MS;
       const msUntil = arrivalMs - Date.now();
-      const mins = Math.max(0, Math.floor(msUntil / 60000));  // conservative
+      // Hide buses that are clearly more than 2 min past arrival.
+      if (msUntil < -120000) continue;
+      // Anything in (-2 min, +1 min) shows as "Due" so the imminent bus stays
+      // visible until it's actually departed.
+      const isDue = msUntil < 60000;
+      const mins = isDue ? 0 : Math.floor(msUntil / 60000);
       const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
       let displayTime;
-      if (mins === 0) {
+      if (isDue) {
         displayTime = 'Due';
       } else {
         const arrive = new Date(arrivalMs);
@@ -1606,6 +1625,8 @@ async function fetchHop() {
       body: 'json=' + encodeURIComponent(JSON.stringify({s0:'466',sA:1})) + '&eta=3&deviceId=web&stopIds=158942',
     });
     const data = await resp.json();
+
+    // ETAs
     const etas = [];
     for (const [key, entries] of Object.entries(data.ETAs || {})) {
       for (const entry of entries) {
@@ -1619,11 +1640,88 @@ async function fetchHop() {
     } else {
       renderHopEtas({ status: 'no vehicles' });
     }
+
+    // Build a routeId ‚Üí route name map (PassioGo returns "routes" alongside "buses")
+    const routeNameById = {};
+    const routesArr = data.routes || [];
+    if (Array.isArray(routesArr)) {
+      for (const r of routesArr) {
+        routeNameById[r.id || r.routeId] = (r.name || r.routeName || '').toString();
+      }
+    } else if (typeof routesArr === 'object') {
+      for (const k of Object.keys(routesArr)) {
+        routeNameById[k] = (routesArr[k].name || routesArr[k].routeName || '').toString();
+      }
+    }
+
+    // Live bus positions
+    const hopBuses = [];
+    const busesData = data.buses || {};
+    for (const routeId of Object.keys(busesData)) {
+      const arr = busesData[routeId];
+      if (!Array.isArray(arr)) continue;
+      const routeName = routeNameById[routeId] || '';
+      for (const b of arr) {
+        if (b.outOfService === '1' || b.outOfService === 1) continue;
+        const lat = parseFloat(b.latitude);
+        const lon = parseFloat(b.longitude);
+        if (!isFinite(lat) || !isFinite(lon)) continue;
+        // Determine color by route name (or bus name as fallback)
+        const probe = (routeName + ' ' + (b.busName || b.name || '')).toLowerCase();
+        let color = '#b070ff';  // generic purple fallback
+        if (probe.includes('red'))   color = '#ff5050';
+        if (probe.includes('green')) color = '#6bffb8';
+        hopBuses.push({
+          name: b.busName || b.name || 'Hop',
+          lat: lat,
+          lon: lon,
+          route: routeName || 'Hop',
+          color: color,
+        });
+      }
+    }
+    renderHopBuses(hopBuses);
     markOk('hop');
   } catch (e) {
     console.error('Hop fetch error:', e);
     renderHopEtas({ error: e.message });
+    renderHopBuses([]);  // clear stale markers on error
     markFail('hop');
+  }
+}
+
+let _hopMarkers = {};
+let _lastHopBuses = [];  // cached for personStatus()
+
+const HOP_BUS_SVG =
+  '<svg viewBox="0 0 24 24" width="100%" height="100%" style="display:block;">' +
+  '<path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z" fill="currentColor"/></svg>';
+
+function renderHopBuses(hopBuses) {
+  _lastHopBuses = hopBuses || [];
+  if (!_hobokenMap) return;
+  const seen = new Set();
+  for (const b of hopBuses) {
+    const key = b.name + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4);
+    seen.add(key);
+    const icon = L.divIcon({
+      className: 'hop-marker',
+      html: '<div style="color:' + b.color + ';width:100%;height:100%;">' + HOP_BUS_SVG + '</div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+    });
+    if (_hopMarkers[key]) {
+      _hopMarkers[key].setLatLng([b.lat, b.lon]);
+      _hopMarkers[key].setIcon(icon);
+    } else {
+      _hopMarkers[key] = L.marker([b.lat, b.lon], { icon: icon }).addTo(_hobokenMap);
+    }
+  }
+  for (const key of Object.keys(_hopMarkers)) {
+    if (!seen.has(key)) {
+      _hobokenMap.removeLayer(_hopMarkers[key]);
+      delete _hopMarkers[key];
+    }
   }
 }
 
@@ -1682,18 +1780,65 @@ function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
 }
 
-// Compute a short narrative status for a person.
-// "at home" / "on 126" / "near home" / "X.X mi away"
+// Hudson River bounding box ‚Äî anyone in this lon/lat strip is over the water,
+// so we assume they're on the ferry.
+function isOverWater(lat, lon) {
+  return lat >= 40.700 && lat <= 40.770 &&
+         lon >= -74.020 && lon <= -74.011;
+}
+
+// Persistence tracker: only claim "on bus/Hop" if the person has been near
+// the SAME vehicle for at least 60 seconds (avoids false positives from
+// momentarily passing a stopped bus or standing at a stop).
+const _statusPersistence = {};  // tid ‚Üí { candidate, since, confirmed }
+
 function personStatus(loc) {
   const dHome = distMi(HOME, loc);
   if (dHome < 0.05) return 'at home';
-  // On a bus: within ~600 ft of an active bus
+
+  const now = Date.now();
+  const tid = loc.tid || 'XX';
+  const p = _statusPersistence[tid] || (_statusPersistence[tid] = {});
+
+  // Detect near a vehicle (NJT bus or Hop). Pick whichever is closer.
+  let candidate = null;
   for (const b of _lastBuses) {
     if (b.lat == null || b.lon == null) continue;
     if (distMi(loc, { lat: b.lat, lon: b.lon }) < 0.12) {
-      return 'on ' + b.route;
+      candidate = 'on ' + b.route;
+      break;
     }
   }
+  if (!candidate) {
+    for (const b of _lastHopBuses) {
+      if (distMi(loc, { lat: b.lat, lon: b.lon }) < 0.08) {
+        const probe = (b.route || '').toLowerCase();
+        candidate = probe.includes('red')   ? 'on Red Hop' :
+                    probe.includes('green') ? 'on Green Hop' :
+                    'on Hop';
+        break;
+      }
+    }
+  }
+
+  // Update persistence tracking
+  if (candidate) {
+    if (p.candidate !== candidate) {
+      p.candidate = candidate;
+      p.since = now;
+    }
+    if (now - p.since >= 60000) {
+      return candidate;  // confirmed ‚Äî been alongside the vehicle 60+ sec
+    }
+  } else {
+    p.candidate = null;
+    p.since = null;
+  }
+
+  // Over water ‚Üí on ferry (no persistence check needed; physically impossible
+  // to be over the Hudson without being on a boat)
+  if (isOverWater(loc.lat, loc.lon)) return 'on ferry';
+
   if (dHome < 0.5) return 'near home';
   return dHome.toFixed(1) + ' mi away';
 }
