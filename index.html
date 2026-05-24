@@ -387,7 +387,7 @@
   .bus-marker {
     width: 20px !important;
     height: 20px !important;
-    background: #ff9b6b;
+    background: #888;
     border-radius: 50%;
     border: 1.5px solid #fff;
     box-shadow: 0 0 3px rgba(0,0,0,0.6);
@@ -397,6 +397,11 @@
     line-height: 18px;
     text-align: center;
   }
+  .bus-marker.load-empty  { background: #6bffb8; }
+  .bus-marker.load-light  { background: #a0e060; }
+  .bus-marker.load-medium { background: #e0c040; }
+  .bus-marker.load-heavy  { background: #ff9b40; }
+  .bus-marker.load-full   { background: #ff5050; }
 
   .person-list {
     display: flex;
@@ -1555,6 +1560,16 @@ async function fetchLocations() {
   }
 }
 
+function busLoadClass(passload) {
+  const p = (passload || '').toUpperCase();
+  if (p === 'EMPTY')                            return 'load-empty';
+  if (p === 'LIGHT')                            return 'load-light';
+  if (p === 'MEDIUM')                           return 'load-medium';
+  if (p === 'HEAVY')                            return 'load-heavy';
+  if (p === 'FULL' || p === 'OVERLOADED')       return 'load-full';
+  return ''; // no data ‚Üí default grey
+}
+
 function renderBuses(buses) {
   if (!_hobokenMap) return;
   const seen = new Set();
@@ -1562,15 +1577,18 @@ function renderBuses(buses) {
     const key = b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4));
     seen.add(key);
     const latlng = [b.lat, b.lon];
+    const loadCls = busLoadClass(b.passload);
+    // Recreate the icon each refresh so passload changes are reflected
+    const icon = L.divIcon({
+      className: 'bus-marker ' + loadCls,
+      html: b.route,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    });
     if (_busMarkers[key]) {
       _busMarkers[key].setLatLng(latlng);
+      _busMarkers[key].setIcon(icon);
     } else {
-      const icon = L.divIcon({
-        className: 'bus-marker',
-        html: b.route,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
-      });
       _busMarkers[key] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
     }
   }
