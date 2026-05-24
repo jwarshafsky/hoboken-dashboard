@@ -345,17 +345,25 @@
 
   /* Custom location markers */
   .person-marker {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    overflow: hidden;
     background: #6bffb8;
     color: #000;
     font-weight: 700;
-    font-size: 0.7rem;
-    border-radius: 50%;
-    width: 26px !important;
-    height: 26px !important;
-    line-height: 26px;
+    font-size: 0.8rem;
+    line-height: 36px;
     text-align: center;
-    border: 2px solid #fff;
-    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+  }
+
+  .person-marker img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
   .person-list {
@@ -1435,18 +1443,28 @@ function isMapMode() {
 let _hobokenMap = null;
 let _personMarkers = {};
 
+// Mapping from Owntracks tracker ID (TID) to face image URL.
+// Add entries here as you set up family members in Owntracks.
+// Images can be hosted in the GitHub repo (faces/jeff.jpg) or any public URL.
+const FACE_IMAGES = {
+  'JHW': 'jeff.jpg',
+  'JXW': 'jenny.jpg',
+};
+
 function initHobokenMap() {
   if (_hobokenMap || typeof L === 'undefined') return;
   _hobokenMap = L.map('hobokenMap', {
-    center: [40.744, -74.032],   // Hoboken
-    zoom: 13,
     zoomControl: false,
     attributionControl: false,
     dragging: true,
     scrollWheelZoom: false,
   });
-  // CartoDB Dark Matter ‚Äî dark tiles to match the dashboard
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  // Bounds that include Hoboken + Lower Manhattan (32 Old Slip) + Midtown (42nd & 8th)
+  // SW corner: south of Wall St, west of Hoboken
+  // NE corner: north of 42nd, east of 8th Ave
+  _hobokenMap.fitBounds([[40.695, -74.045], [40.762, -73.980]], { padding: [8, 8] });
+  // CartoDB Voyager ‚Äî colorful light tiles, easier to read than dark
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     maxZoom: 19,
     subdomains: 'abcd',
   }).addTo(_hobokenMap);
@@ -1474,14 +1492,18 @@ function renderLocations(locations) {
   for (const loc of locations) {
     seen.add(loc.tid);
     const latlng = [loc.lat, loc.lon];
-    const label = (loc.name || loc.tid || '?').substring(0, 2).toUpperCase();
+    const faceUrl = FACE_IMAGES[loc.tid];
+    const html = faceUrl
+      ? '<img src="' + faceUrl + '" alt="' + (loc.name || loc.tid) + '"/>'
+      : (loc.name || loc.tid || '?').substring(0, 2).toUpperCase();
     if (_personMarkers[loc.tid]) {
       _personMarkers[loc.tid].setLatLng(latlng);
     } else {
       const icon = L.divIcon({
         className: 'person-marker',
-        html: label,
-        iconSize: [26, 26],
+        html: html,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
       });
       _personMarkers[loc.tid] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
     }
