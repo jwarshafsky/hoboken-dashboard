@@ -24,7 +24,7 @@
     height: 100vh;
     overflow: hidden;
     display: grid;
-    grid-template-columns: 0.8fr 1.4fr 1fr;
+    grid-template-columns: 0.8fr 1.26fr 1.14fr;
     grid-template-rows: auto 1fr auto auto;
     gap: 10px;
     padding: 12px;
@@ -281,7 +281,7 @@
   }
 
   .alert-item {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     line-height: 1.3;
     color: #ccc;
     padding: 3px 0;
@@ -324,12 +324,14 @@
 
   /* Map panel (replaces news in alerts card during specific hours) */
   .map-container {
-    flex: 1;
-    min-height: 120px;
+    flex: 2;
+    min-height: 220px;
     border-radius: 8px;
     overflow: hidden;
     background: #0a0a0f;
-    margin-top: 6px;
+    margin-top: 8px;
+    border-top: 0.5px solid #2a2a35;
+    padding-top: 8px;
   }
 
   .map-container .leaflet-container {
@@ -720,15 +722,16 @@
 
   .status-bar {
     position: fixed;
-    bottom: 3px;
-    right: 10px;
-    left: 10px;
+    bottom: 1px;
+    right: 14px;
+    left: 14px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.55rem;
-    color: #666;
+    font-size: 0.42rem;
+    color: #555;
     pointer-events: none;
+    line-height: 1;
   }
 
   .status-warning {
@@ -768,10 +771,6 @@
 
 <!-- Row 1-2: Alerts & News (right, tall) -->
 <div class="card alerts-panel" id="alertsCard">
-  <div class="card-title">
-    <svg viewBox="0 0 24 24" fill="#666" width="14" height="14"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-    Alerts &amp; News
-  </div>
   <div class="alerts-list" id="alertsList">
     <div class="alert-item" style="color:#444;">Loading...</div>
   </div>
@@ -922,7 +921,10 @@ function updateStatusBar() {
   const errEl = document.getElementById('statusErrors');
   if (failed.length > 0) {
     errEl.className = 'status-warning';
-    errEl.textContent = `‚ö† ${failed.join(', ')} offline`;
+    errEl.innerHTML =
+      '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="vertical-align:middle;margin-right:3px;">' +
+      '<path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>' +
+      failed.join(', ') + ' offline';
   } else {
     errEl.className = 'status-ok';
     errEl.textContent = '';
