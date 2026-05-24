@@ -235,10 +235,7 @@
   .cal-day-header.is-future { color: #9a9aa8; }
 
   .cal-event {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    padding: 3px 0;
+    padding: 2px 0;
     font-size: 0.7rem;
     line-height: 1.25;
   }
@@ -246,12 +243,9 @@
   .cal-event-time {
     color: #888;
     font-weight: 500;
-    font-size: 0.58rem;
-    order: 2;
-  }
-
-  .cal-event-title {
-    order: 1;
+    font-size: 0.62rem;
+    margin-left: 4px;
+    white-space: nowrap;
   }
 
   .cal-event-title {
@@ -2090,8 +2084,8 @@ function renderCalEvents(events) {
         timeLabel = h12 + ':' + m + ' ' + ampm;
       }
       const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
-      html += '<div class="' + evCls + '"><span class="cal-event-title">' +
-        title + '</span><span class="cal-event-time">' + timeLabel + '</span></div>';
+      html += '<div class="' + evCls + '">' + title +
+        '<span class="cal-event-time">(' + timeLabel + ')</span></div>';
     }
   }
   container.innerHTML = html;
