@@ -372,6 +372,18 @@
     display: block;
   }
 
+  .home-marker {
+    width: 30px !important;
+    height: 30px !important;
+    background: #3a7bd5;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
   .person-list {
     display: flex;
     gap: 10px;
@@ -1448,18 +1460,32 @@ function isMapMode() {
 
 let _hobokenMap = null;
 let _personMarkers = {};
+let _homeMarker = null;
+
+// Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
+const HOME = { lat: 40.7548, lon: -74.0306, name: 'Home' };
+// All of Hoboken ‚Äî never zoom tighter than this.
+const HOBOKEN_BOUNDS = [[40.733, -74.038], [40.762, -74.024]];
+// People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
+const AUTO_FIT_RADIUS_MI = 5;
 
 // Mapping from Owntracks tracker ID (TID) to face image URL.
-// Add entries here as you set up family members in Owntracks.
-// Images can be hosted in the GitHub repo (faces/jeff.jpg) or any public URL.
 const FACE_IMAGES = {
-  // OwnTracks truncates TID to 2 chars (takes the last two of what you typed).
-  // "JHW" became "HW", "JXW" will become "XW".
   'HW':  'jeff.jpg',
   'JHW': 'jeff.jpg',
   'XW':  'jenny.jpg',
   'JXW': 'jenny.jpg',
 };
+
+function distMi(a, b) {
+  const R = 3959; // miles
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLng = (b.lon - a.lon) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
 
 function initHobokenMap() {
   if (_hobokenMap || typeof L === 'undefined') return;
@@ -1474,11 +1500,24 @@ function initHobokenMap() {
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
   // Stadia Alidade Smooth Dark ‚Äî clean dark theme with built-in labels.
-  // Free tier works without API key from authorized domains (register at stadiamaps.com if needed).
   L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
     maxZoom: 20,
     attribution: '',
   }).addTo(_hobokenMap);
+
+  // Home marker ‚Äî blue house icon (always shown)
+  const homeIcon = L.divIcon({
+    className: 'home-marker',
+    html:
+      '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff">' +
+      '<path d="M12 3 3 11h2v8h5v-5h4v5h5v-8h2z"/></svg>',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+  _homeMarker = L.marker([HOME.lat, HOME.lon], { icon: homeIcon }).addTo(_hobokenMap);
+
+  // Initial view: all of Hoboken (will auto-fit once locations come in)
+  _hobokenMap.fitBounds(HOBOKEN_BOUNDS, { padding: [4, 4] });
 }
 
 async function fetchLocations() {
@@ -1536,6 +1575,27 @@ function renderLocations(locations) {
       return '<span><span class="person-dot"></span>' +
         (l.name || l.tid) + ' <span style="color:#666;">' + ago + '</span></span>';
     }).join('');
+  }
+
+  // Auto-fit: include home + any person within 5mi. If none in range, default Hoboken view.
+  const inRange = locations.filter(function (l) {
+    return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
+  });
+  if (inRange.length === 0) {
+    _hobokenMap.fitBounds(HOBOKEN_BOUNDS, { padding: [4, 4] });
+  } else {
+    const lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
+    const lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
+    let minLat = Math.min.apply(null, lats);
+    let maxLat = Math.max.apply(null, lats);
+    let minLng = Math.min.apply(null, lngs);
+    let maxLng = Math.max.apply(null, lngs);
+    // Never zoom tighter than Hoboken
+    minLat = Math.min(minLat, HOBOKEN_BOUNDS[0][0]);
+    minLng = Math.min(minLng, HOBOKEN_BOUNDS[0][1]);
+    maxLat = Math.max(maxLat, HOBOKEN_BOUNDS[1][0]);
+    maxLng = Math.max(maxLng, HOBOKEN_BOUNDS[1][1]);
+    _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [10, 10] });
   }
 }
 
