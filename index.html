@@ -208,28 +208,29 @@
   #mapCard { position: relative; }
   #mapCard #hobokenMap { width: 100%; height: 100%; }
 
-  /* Overlay showing when each person last updated, sitting on top of the map */
+  /* Overlay showing when each person last updated ‚Äî one pill per person,
+     sitting in the bottom-left corner of the map. */
   #mapStatusOverlay {
     position: absolute;
     bottom: 8px;
     left: 8px;
-    right: 8px;
     z-index: 1000;
     pointer-events: none;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .ms-pill {
+    background: rgba(0, 0, 0, 0.55);
+    padding: 3px 8px;
+    border-radius: 12px;
     font-size: 0.55rem;
     color: #ddd;
-    background: rgba(0, 0, 0, 0.55);
-    padding: 4px 8px;
-    border-radius: 6px;
     line-height: 1.3;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
+    white-space: nowrap;
   }
-  #mapStatusOverlay:empty { display: none; }
-  #mapStatusOverlay .ms-name { color: #fff; font-weight: 600; }
-  #mapStatusOverlay .ms-ago { color: #999; margin-left: 3px; }
+  .ms-name { color: #fff; font-weight: 600; }
+  .ms-ago { color: #999; margin-left: 4px; }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -1865,7 +1866,7 @@ function renderLocations(locations) {
       delete _personMarkers[tid];
     }
   }
-  // Update overlay showing each person's last-updated timestamp
+  // Update overlay ‚Äî one semi-transparent pill per person, left-aligned
   const overlay = document.getElementById('mapStatusOverlay');
   if (overlay) {
     if (locations.length === 0) {
@@ -1873,7 +1874,7 @@ function renderLocations(locations) {
     } else {
       overlay.innerHTML = locations.map(function (l) {
         const ago = agoText(l.received_at * 1000);
-        return '<span><span class="ms-name">' + displayName(l) +
+        return '<span class="ms-pill"><span class="ms-name">' + displayName(l) +
           '</span><span class="ms-ago">' + ago + '</span></span>';
       }).join('');
     }
