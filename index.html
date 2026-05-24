@@ -384,6 +384,20 @@
     justify-content: center;
   }
 
+  .bus-marker {
+    width: 20px !important;
+    height: 20px !important;
+    background: #ff9b6b;
+    border-radius: 50%;
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 3px rgba(0,0,0,0.6);
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: #000;
+    line-height: 18px;
+    text-align: center;
+  }
+
   .person-list {
     display: flex;
     gap: 10px;
@@ -468,6 +482,9 @@
   .transit-body {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .transit-title {
@@ -1286,7 +1303,7 @@ function renderLivePredictions(predictions, label) {
         const h12 = hh % 12 || 12;
         displayTime = `${h12}:${mm} ${ampm}`;
       }
-      const dot = loadDot(p.passload);
+      const dot = '';  // load indicator removed
       html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span>${dot}</div>`;
     }
     html += '</div></div>';
@@ -1460,6 +1477,7 @@ function isMapMode() {
 
 let _hobokenMap = null;
 let _personMarkers = {};
+let _busMarkers = {};
 let _homeMarker = null;
 
 // Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
@@ -1531,8 +1549,36 @@ async function fetchLocations() {
     if (!res.ok) return;
     const data = await res.json();
     renderLocations(data.locations || []);
+    renderBuses(data.buses || []);
   } catch (e) {
     console.error('Locations fetch error:', e);
+  }
+}
+
+function renderBuses(buses) {
+  if (!_hobokenMap) return;
+  const seen = new Set();
+  for (const b of buses) {
+    const key = b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4));
+    seen.add(key);
+    const latlng = [b.lat, b.lon];
+    if (_busMarkers[key]) {
+      _busMarkers[key].setLatLng(latlng);
+    } else {
+      const icon = L.divIcon({
+        className: 'bus-marker',
+        html: b.route,
+        iconSize: [20, 20],
+        iconAnchor: [10, 10],
+      });
+      _busMarkers[key] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+    }
+  }
+  for (const key of Object.keys(_busMarkers)) {
+    if (!seen.has(key)) {
+      _hobokenMap.removeLayer(_busMarkers[key]);
+      delete _busMarkers[key];
+    }
   }
 }
 
