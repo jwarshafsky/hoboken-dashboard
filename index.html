@@ -1499,9 +1499,10 @@ function initHobokenMap() {
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
-  // Stadia Alidade Smooth Dark
-  L.tileLayer('https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20,
+  // Jawg.Dark ‚Äî clean dark theme, no road shield badges
+  L.tileLayer('https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq', {
+    maxZoom: 22,
+    subdomains: 'abcd',
     attribution: '',
   }).addTo(_hobokenMap);
 
@@ -1939,7 +1940,7 @@ function updateTransit() {
 // ============================================================
 function isSleeping() {
   const h = new Date().getHours();
-  return h >= 0 && h < 7;
+  return h >= 1 && h < 7;
 }
 
 function checkSleepMode() {
