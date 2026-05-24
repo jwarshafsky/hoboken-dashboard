@@ -863,6 +863,7 @@
 
 <div class="status-bar">
   <span id="statusFreshness">Loading...</span>
+  <span id="statusViewport" style="color:#333;font-size:0.4rem;"></span>
   <span id="statusErrors" class="status-ok"></span>
 </div>
 
@@ -940,7 +941,17 @@ function agoText(ts) {
   return `${Math.floor(sec / 3600)}h ago`;
 }
 
+// Show actual viewport dims so we can compare TV vs PC
+function updateViewportDiag() {
+  const el = document.getElementById('statusViewport');
+  if (!el) return;
+  el.textContent = window.innerWidth + 'x' + window.innerHeight +
+    ' @' + (window.devicePixelRatio || 1) + 'x';
+}
+window.addEventListener('resize', updateViewportDiag);
+
 function updateStatusBar() {
+  updateViewportDiag();
   // Freshness: oldest successful update
   let oldest = null;
   for (const key of Object.keys(apiStatus)) {
