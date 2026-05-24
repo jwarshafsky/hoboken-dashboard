@@ -255,7 +255,7 @@
     text-overflow: ellipsis;
   }
 
-  .cal-event.all-day .cal-event-time { color: #9a9aa8; font-style: italic; }
+  .cal-event.all-day .cal-event-time { color: #9a9aa8; }
 
   .cal-empty, .cal-signin-prompt {
     font-size: 0.75rem;
@@ -395,6 +395,15 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  /* Small "orbit" face used when a person is at home */
+  .person-marker.small {
+    width: 20px !important;
+    height: 20px !important;
+    line-height: 18px;
+    font-size: 0.6rem;
+    border-width: 1.5px;
   }
 
   .home-marker {
@@ -1720,26 +1729,36 @@ function renderBuses(buses) {
 
 function renderLocations(locations) {
   if (!_hobokenMap) return;
-  // Compute display positions ‚Äî offset overlapping markers so the home icon
-  // is always visible and multiple people at the same place don't stack.
-  // Within ~265 ft of any other marker, spread them in a small ring.
   const OVERLAP_MI = 0.05;        // ~265 ft
-  const RING_RADIUS_DEG = 0.0003; // ~110 ft
-  const positions = {};
-  for (const loc of locations) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
+  const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
-  // Cluster people who are near HOME ‚Äî distribute around home
-  const nearHome = locations.filter(function (l) { return distMi(HOME, l) < OVERLAP_MI; });
-  if (nearHome.length > 0) {
-    nearHome.forEach(function (l, idx) {
-      const angle = (idx / Math.max(nearHome.length, 1)) * 2 * Math.PI + 0.5;
-      positions[l.tid].lat = HOME.lat + RING_RADIUS_DEG * Math.cos(angle);
-      positions[l.tid].lon = HOME.lon + RING_RADIUS_DEG * Math.sin(angle);
-    });
-  }
-
-  // Cluster people near each other but not at home
+  // Split into at-home vs elsewhere
+  const atHome = locations.filter(function (l) { return distMi(HOME, l) < OVERLAP_MI; });
   const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= OVERLAP_MI; });
+
+  // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
+  // from home). Smaller icon so they look like satellites orbiting the home badge.
+  const HOME_FACE_SIZE = 20;
+  const HOME_ORBIT_RADIUS = 18; // px from home center to face center
+  const homeIconConfig = {};
+  atHome.forEach(function (l, idx) {
+    const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
+    const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
+    // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
+    // the icon's visual center by (dx, dy), we offset the anchor by (-dx, -dy)
+    // from the icon's natural center (size/2).
+    homeIconConfig[l.tid] = {
+      latlng: [HOME.lat, HOME.lon],
+      iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
+      iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
+      className: 'person-marker small',
+    };
+  });
+
+  // Cluster elsewhere people who happen to be near each other
+  const positions = {};
+  for (const loc of elsewhere) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
   const handled = new Set();
   for (let i = 0; i < elsewhere.length; i++) {
     if (handled.has(elsewhere[i].tid)) continue;
@@ -1763,25 +1782,40 @@ function renderLocations(locations) {
     }
   }
 
-  // Clear stale markers
+  // Render markers
   const seen = new Set();
   for (const loc of locations) {
     seen.add(loc.tid);
-    const pos = positions[loc.tid];
-    const latlng = [pos.lat, pos.lon];
     const faceUrl = FACE_IMAGES[loc.tid];
     const html = faceUrl
       ? '<img src="' + faceUrl + '" alt="' + displayName(loc) + '"/>'
       : (displayName(loc) || '?').substring(0, 2).toUpperCase();
+
+    let latlng, iconSize, iconAnchor, className;
+    if (homeIconConfig[loc.tid]) {
+      const cfg = homeIconConfig[loc.tid];
+      latlng = cfg.latlng;
+      iconSize = cfg.iconSize;
+      iconAnchor = cfg.iconAnchor;
+      className = cfg.className;
+    } else {
+      const pos = positions[loc.tid] || { lat: loc.lat, lon: loc.lon };
+      latlng = [pos.lat, pos.lon];
+      iconSize = [36, 36];
+      iconAnchor = [18, 18];
+      className = 'person-marker';
+    }
+
+    const icon = L.divIcon({
+      className: className,
+      html: html,
+      iconSize: iconSize,
+      iconAnchor: iconAnchor,
+    });
     if (_personMarkers[loc.tid]) {
       _personMarkers[loc.tid].setLatLng(latlng);
+      _personMarkers[loc.tid].setIcon(icon);
     } else {
-      const icon = L.divIcon({
-        className: 'person-marker',
-        html: html,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
       _personMarkers[loc.tid] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
     }
   }
@@ -2066,14 +2100,14 @@ function renderCalEvents(events) {
     html += '<div class="cal-day-header ' + cls + '">' + dayLabel + '</div>';
 
     for (const ev of byDate[dateKey]) {
-      let timeLabel;
+      let timeLabel = '';
       let evCls = 'cal-event';
       if (ev.start.date) {
         evCls += ' all-day';
+        // Only show a label if it's a multi-day event (date range). Single-day
+        // all-day events don't need "(All day)" ‚Äî the day header above implies it.
         if (ev.isMultiDay) {
           timeLabel = fmtMonthDay(ev.start.date) + ' - ' + fmtMonthDay(ev.lastDay);
-        } else {
-          timeLabel = 'All day';
         }
       } else {
         const startDate = new Date(ev.start.dateTime);
@@ -2084,8 +2118,8 @@ function renderCalEvents(events) {
         timeLabel = h12 + ':' + m + ' ' + ampm;
       }
       const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
-      html += '<div class="' + evCls + '">' + title +
-        '<span class="cal-event-time">(' + timeLabel + ')</span></div>';
+      const timeHtml = timeLabel ? '<span class="cal-event-time">(' + timeLabel + ')</span>' : '';
+      html += '<div class="' + evCls + '">' + title + timeHtml + '</div>';
     }
   }
   container.innerHTML = html;
