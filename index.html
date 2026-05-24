@@ -236,8 +236,9 @@
 
   .cal-event {
     display: flex;
-    gap: 6px;
-    padding: 2px 0;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 0;
     font-size: 0.7rem;
     line-height: 1.25;
   }
@@ -245,9 +246,12 @@
   .cal-event-time {
     color: #888;
     font-weight: 500;
-    flex-shrink: 0;
-    min-width: 60px;
-    font-size: 0.62rem;
+    font-size: 0.58rem;
+    order: 2;
+  }
+
+  .cal-event-title {
+    order: 1;
   }
 
   .cal-event-title {
@@ -1900,6 +1904,7 @@ async function fetchAlerts() {
 // CALENDAR (private ICS feed via proxy, token stored per-device)
 // ============================================================
 function initCalAuth() {
+  watchCalendarResize();
   const token = localStorage.getItem('calToken');
   if (!token) {
     showCalTokenPrompt();
@@ -2085,11 +2090,8 @@ function renderCalEvents(events) {
         timeLabel = h12 + ':' + m + ' ' + ampm;
       }
       const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
-      const color = ev._calendarColor || '#6bffb8';
-      const dot = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:' +
-        color + ';margin-right:6px;vertical-align:middle;"></span>';
-      html += '<div class="' + evCls + '"><span class="cal-event-time">' +
-        timeLabel + '</span><span class="cal-event-title">' + dot + title + '</span></div>';
+      html += '<div class="' + evCls + '"><span class="cal-event-title">' +
+        title + '</span><span class="cal-event-time">' + timeLabel + '</span></div>';
     }
   }
   container.innerHTML = html;
@@ -2107,13 +2109,34 @@ function trimCalendarOverflow() {
   const scrollParent = document.getElementById('calContent');
   if (!container || !scrollParent) return;
   let safety = 300;
-  // Alternate: trim trailing item, then trim trailing orphan headers, repeat
   while (safety-- > 0 && container.lastElementChild) {
     const overflow = scrollParent.scrollHeight > scrollParent.clientHeight + 1;
     const lastIsHeader = container.lastElementChild.classList.contains('cal-day-header');
     if (!overflow && !lastIsHeader) break;
     container.removeChild(container.lastElementChild);
   }
+}
+
+// Re-trim the calendar whenever its container resizes (e.g. when alerts panel
+// grows below it and reduces available height).
+let _calResizeObserver = null;
+function watchCalendarResize() {
+  if (_calResizeObserver || typeof ResizeObserver === 'undefined') return;
+  const target = document.getElementById('calContent');
+  if (!target) return;
+  let _lastCalHeight = target.clientHeight;
+  _calResizeObserver = new ResizeObserver(function () {
+    const h = target.clientHeight;
+    if (h < _lastCalHeight - 4) {
+      // Panel shrank ‚Äî trim trailing events that no longer fit
+      trimCalendarOverflow();
+    } else if (h > _lastCalHeight + 20) {
+      // Panel grew significantly ‚Äî re-render so we use the new space
+      fetchCalEvents();
+    }
+    _lastCalHeight = h;
+  });
+  _calResizeObserver.observe(target);
 }
 
 // ============================================================
