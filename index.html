@@ -1829,6 +1829,9 @@ const FACE_IMAGES = {
   'JHW': 'jeff.jpg',
   'XW':  'jenny.jpg',
   'JXW': 'jenny.jpg',
+  'SY':  'sydney.jpg',
+  'EL':  'elizabeth.jpg',
+  'JU':  'juno.jpg',
 };
 
 // Display name override per TID (overrides whatever username Owntracks reports)
@@ -1837,7 +1840,18 @@ const PERSON_NAMES = {
   'JHW': 'Jeff',
   'XW':  'Jenny',
   'JXW': 'Jenny',
+  'SY':  'Sydney',
+  'EL':  'Elizabeth',
+  'JU':  'Juno',
 };
+
+// Static home stubs — shown at home until real Tile data arrives.
+// When a Tile with matching TID comes online, the live position takes over.
+const HOME_STUBS = [
+  { tid: 'SY', name: 'Sydney',    lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+  { tid: 'EL', name: 'Elizabeth', lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+  { tid: 'JU', name: 'Juno',      lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+];
 
 function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
@@ -1951,6 +1965,9 @@ function initHobokenMap() {
 
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
+
+  // Seed home stubs so face bubbles appear before first network fetch
+  renderLocations(HOME_STUBS);
 }
 
 async function fetchLocations() {
@@ -1963,7 +1980,10 @@ async function fetchLocations() {
     if (!res.ok) return;
     const data = await res.json();
     renderBuses(data.buses || []);     // first so _lastBuses is populated
-    renderLocations(data.locations || []);
+    const liveLocs = data.locations || [];
+    const liveTids = new Set(liveLocs.map(l => l.tid));
+    const stubs = HOME_STUBS.filter(s => !liveTids.has(s.tid));
+    renderLocations([...stubs, ...liveLocs]);
     renderTiles(data.tiles || []);
   } catch (e) {
     console.error('Locations fetch error:', e);
