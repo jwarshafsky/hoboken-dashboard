@@ -1779,8 +1779,8 @@ function _slideTo(id, marker, lat, lon) {
 let _busHeadings = {};
 
 function _snapToGrid(heading) {
-  var offset = ((heading - 29) % 360 + 360) % 360;
-  return (Math.round(offset / 45) * 45 + 29) % 360;
+  var offset = ((heading - 6) % 360 + 360) % 360;
+  return (Math.round(offset / 45) * 45 + 6) % 360;
 }
 
 function _computeHeading(lat1, lon1, lat2, lon2) {
