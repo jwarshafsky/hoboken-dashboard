@@ -1699,13 +1699,13 @@ function renderHopBuses(hopBuses) {
     if (heading == null && _hopMarkers[key]) {
       const prev = _hopMarkers[key].getLatLng();
       const dist = Math.abs(prev.lat - b.lat) + Math.abs(prev.lng - b.lon);
-      if (dist > 0.0001) {
+      if (dist > 0.0005) {
         heading = _computeHeading(prev.lat, prev.lng, b.lat, b.lon);
       } else {
         heading = _busHeadings[key] || null;
       }
     }
-    if (heading != null) _busHeadings[key] = heading;
+    if (heading != null) _busHeadings[key] = _snapToGrid(heading);
     const rot = _busHeadings[key] != null ? 'transform:rotate(' + _busHeadings[key] + 'deg);' : '';
     const icon = L.divIcon({
       className: 'hop-marker',
@@ -1777,6 +1777,11 @@ function _slideTo(id, marker, lat, lon) {
 }
 
 let _busHeadings = {};
+
+function _snapToGrid(heading) {
+  var offset = ((heading - 29) % 360 + 360) % 360;
+  return (Math.round(offset / 45) * 45 + 29) % 360;
+}
 
 function _computeHeading(lat1, lon1, lat2, lon2) {
   const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -2016,13 +2021,13 @@ function renderBuses(buses) {
     if (heading == null && _busMarkers[key]) {
       const prev = _busMarkers[key].getLatLng();
       const dist = Math.abs(prev.lat - b.lat) + Math.abs(prev.lng - b.lon);
-      if (dist > 0.0001) {
+      if (dist > 0.0005) {
         heading = _computeHeading(prev.lat, prev.lng, b.lat, b.lon);
       } else {
         heading = _busHeadings[key] || null;
       }
     }
-    if (heading != null) _busHeadings[key] = heading;
+    if (heading != null) _busHeadings[key] = _snapToGrid(heading);
     const color = busLoadColor(b.passload);
     const rot = _busHeadings[key] != null ? 'transform:rotate(' + _busHeadings[key] + 'deg);' : '';
     const icon = L.divIcon({
