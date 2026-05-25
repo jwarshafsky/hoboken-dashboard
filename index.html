@@ -493,23 +493,11 @@
   }
 
   .bus-marker {
-    width: 20px !important;
-    height: 20px !important;
-    background: #888;
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    box-shadow: 0 0 3px rgba(0,0,0,0.6);
-    font-size: 0.55rem;
-    font-weight: 700;
-    color: #000;
-    line-height: 18px;
-    text-align: center;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
   }
-  .bus-marker.load-empty  { background: #8a9aa0; }
-  .bus-marker.load-light  { background: #a0e060; }
-  .bus-marker.load-medium { background: #e0c040; }
-  .bus-marker.load-heavy  { background: #ff9b40; }
-  .bus-marker.load-full   { background: #ff5050; }
 
   /* Hoboken Hop shuttle marker ‚Äî bus icon, color is set inline per bus
      (red for Red Hop, green for Green Hop) */
@@ -1049,14 +1037,14 @@ window.addEventListener('resize', updateViewportDiag);
 
 function updateStatusBar() {
   updateViewportDiag();
-  // Freshness: oldest successful update
-  let oldest = null;
+  // Freshness: most recent successful update (transit/hop update every 15s)
+  let newest = null;
   for (const key of Object.keys(apiStatus)) {
     const ts = apiStatus[key].lastUpdate;
-    if (ts && (oldest === null || ts < oldest)) oldest = ts;
+    if (ts && (newest === null || ts > newest)) newest = ts;
   }
   document.getElementById('statusFreshness').textContent =
-    oldest ? `Updated ${agoText(oldest)}` : 'Loading...';
+    newest ? `Updated ${agoText(newest)}` : 'Loading...';
 
   // Errors: list any failed APIs
   const failed = [];
@@ -1671,10 +1659,13 @@ async function fetchHop() {
         let color = '#b070ff';  // generic purple fallback
         if (probe.includes('red'))   color = '#ff5050';
         if (probe.includes('green')) color = '#6bffb8';
+        const course = parseFloat(b.calculatedCourse || b.course);
         hopBuses.push({
+          busId: b.busId || b.id || b.busName || b.name || '',
           name: b.busName || b.name || 'Hop',
           lat: lat,
           lon: lon,
+          heading: isFinite(course) ? course : null,
           route: routeName || 'Hop',
           color: color,
         });
@@ -1702,17 +1693,29 @@ function renderHopBuses(hopBuses) {
   if (!_hobokenMap) return;
   const seen = new Set();
   for (const b of hopBuses) {
-    const key = b.name + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4);
+    const key = 'hop_' + (b.busId || b.name || 'unknown');
     seen.add(key);
+    let heading = b.heading;
+    if (heading == null && _hopMarkers[key]) {
+      const prev = _hopMarkers[key].getLatLng();
+      const dist = Math.abs(prev.lat - b.lat) + Math.abs(prev.lng - b.lon);
+      if (dist > 0.0001) {
+        heading = _computeHeading(prev.lat, prev.lng, b.lat, b.lon);
+      } else {
+        heading = _busHeadings[key] || null;
+      }
+    }
+    if (heading != null) _busHeadings[key] = heading;
+    const rot = _busHeadings[key] != null ? 'transform:rotate(' + _busHeadings[key] + 'deg);' : '';
     const icon = L.divIcon({
       className: 'hop-marker',
-      html: '<div style="color:' + b.color + ';width:100%;height:100%;">' + HOP_BUS_SVG + '</div>',
+      html: '<div style="color:' + b.color + ';width:100%;height:100%;' + rot + '">' + HOP_BUS_SVG + '</div>',
       iconSize: [22, 22],
       iconAnchor: [11, 11],
     });
     if (_hopMarkers[key]) {
-      _hopMarkers[key].setLatLng([b.lat, b.lon]);
       _hopMarkers[key].setIcon(icon);
+      _slideTo(key, _hopMarkers[key], b.lat, b.lon);
     } else {
       _hopMarkers[key] = L.marker([b.lat, b.lon], { icon: icon }).addTo(_hobokenMap);
     }
@@ -1721,6 +1724,8 @@ function renderHopBuses(hopBuses) {
     if (!seen.has(key)) {
       _hobokenMap.removeLayer(_hopMarkers[key]);
       delete _hopMarkers[key];
+      delete _markerAnims[key];
+      delete _busHeadings[key];
     }
   }
 }
@@ -1741,6 +1746,46 @@ function isMapMode() {
 let _hobokenMap = null;
 let _personMarkers = {};
 let _busMarkers = {};
+
+// Animation state for smooth bus/hop marker movement between polls
+const MARKER_ANIM_MS = 14000;
+let _markerAnims = {};
+let _markerAnimFrame = null;
+
+function _animateMarkers() {
+  const now = performance.now();
+  let active = false;
+  for (const id of Object.keys(_markerAnims)) {
+    const a = _markerAnims[id];
+    if (!a.marker) { delete _markerAnims[id]; continue; }
+    const t = Math.min((now - a.t0) / MARKER_ANIM_MS, 1);
+    a.marker.setLatLng([
+      a.lat0 + (a.lat1 - a.lat0) * t,
+      a.lon0 + (a.lon1 - a.lon0) * t,
+    ]);
+    if (t < 1) active = true;
+    else delete _markerAnims[id];
+  }
+  _markerAnimFrame = active ? requestAnimationFrame(_animateMarkers) : null;
+}
+
+function _slideTo(id, marker, lat, lon) {
+  const cur = marker.getLatLng();
+  if (Math.abs(cur.lat - lat) < 0.00001 && Math.abs(cur.lng - lon) < 0.00001) return;
+  _markerAnims[id] = { marker, lat0: cur.lat, lon0: cur.lng, lat1: lat, lon1: lon, t0: performance.now() };
+  if (!_markerAnimFrame) _markerAnimFrame = requestAnimationFrame(_animateMarkers);
+}
+
+let _busHeadings = {};
+
+function _computeHeading(lat1, lon1, lat2, lon2) {
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
+  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
+            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
+  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+}
+
 let _tileMarkers = {};
 let _homeMarker = null;
 let _lastBuses = [];  // cached for personStatus() narrative
@@ -1938,43 +1983,75 @@ function renderTiles(tiles) {
   }
 }
 
-function busLoadClass(passload) {
+function busLoadColor(passload) {
   const p = (passload || '').toUpperCase();
-  if (p === 'EMPTY')                            return 'load-empty';
-  if (p === 'LIGHT')                            return 'load-light';
-  if (p === 'MEDIUM')                           return 'load-medium';
-  if (p === 'HEAVY')                            return 'load-heavy';
-  if (p === 'FULL' || p === 'OVERLOADED')       return 'load-full';
-  return ''; // no data ‚Üí default grey
+  if (p === 'EMPTY')                      return '#8a9aa0';
+  if (p === 'LIGHT')                      return '#a0e060';
+  if (p === 'MEDIUM')                     return '#e0c040';
+  if (p === 'HEAVY')                      return '#ff9b40';
+  if (p === 'FULL' || p === 'OVERLOADED') return '#ff5050';
+  return '#7090a0';
+}
+
+function _busSvg(route, color) {
+  return '<svg viewBox="0 0 40 50" width="34" height="42">' +
+    // direction pointer
+    '<polygon points="20,0 14,9 26,9" fill="#fff"/>' +
+    // white circle background with load-colored ring
+    '<circle cx="20" cy="29" r="18" fill="#fff" stroke="' + color + '" stroke-width="2.5"/>' +
+    // bus body (front view)
+    '<path d="M12,17 C12,14.5 28,14.5 28,17 L28,38 C28,40 26.5,40.5 25,40.5 L15,40.5 C13.5,40.5 12,40 12,38 Z" fill="#2c3e50"/>' +
+    // windshield
+    '<rect x="14" y="16" width="12" height="9" rx="1.5" fill="#4a80a8"/>' +
+    // route number
+    '<text x="20" y="23.5" text-anchor="middle" font-size="8" font-weight="700" fill="#fff" font-family="system-ui,sans-serif">' + route + '</text>' +
+    // headlights
+    '<circle cx="14.5" cy="37" r="1.8" fill="' + color + '"/>' +
+    '<circle cx="25.5" cy="37" r="1.8" fill="' + color + '"/>' +
+    // bumper
+    '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#1a252f"/>' +
+    '</svg>';
 }
 
 function renderBuses(buses) {
-  _lastBuses = buses || [];  // cache for personStatus
+  _lastBuses = buses || [];
   if (!_hobokenMap) return;
   const seen = new Set();
   for (const b of buses) {
-    const key = b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4));
+    const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
     seen.add(key);
-    const latlng = [b.lat, b.lon];
-    const loadCls = busLoadClass(b.passload);
-    // Recreate the icon each refresh so passload changes are reflected
+    let heading = b.heading;
+    if (heading == null && _busMarkers[key]) {
+      const prev = _busMarkers[key].getLatLng();
+      const dist = Math.abs(prev.lat - b.lat) + Math.abs(prev.lng - b.lon);
+      if (dist > 0.0001) {
+        heading = _computeHeading(prev.lat, prev.lng, b.lat, b.lon);
+      } else {
+        heading = _busHeadings[key] || null;
+      }
+    }
+    if (heading != null) _busHeadings[key] = heading;
+    const color = busLoadColor(b.passload);
+    const rot = _busHeadings[key] != null ? 'transform:rotate(' + _busHeadings[key] + 'deg);' : '';
     const icon = L.divIcon({
-      className: 'bus-marker ' + loadCls,
-      html: b.route,
-      iconSize: [20, 20],
-      iconAnchor: [10, 10],
+      className: 'bus-marker',
+      html: '<div style="' + rot + '">' + _busSvg(b.route, color) + '</div>',
+      iconSize: [34, 42],
+      iconAnchor: [17, 25],
     });
     if (_busMarkers[key]) {
-      _busMarkers[key].setLatLng(latlng);
       _busMarkers[key].setIcon(icon);
+      _slideTo(key, _busMarkers[key], b.lat, b.lon);
     } else {
-      _busMarkers[key] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+      _busMarkers[key] = L.marker([b.lat, b.lon], { icon: icon }).addTo(_hobokenMap);
     }
   }
   for (const key of Object.keys(_busMarkers)) {
     if (!seen.has(key)) {
       _hobokenMap.removeLayer(_busMarkers[key]);
       delete _busMarkers[key];
+      delete _markerAnims[key];
+      delete _busHeadings[key];
     }
   }
 }
@@ -2485,10 +2562,10 @@ setInterval(updateClock, 1000);
 setInterval(checkSleepMode, 60000);
 setInterval(updateStatusBar, 10000);
 updateStatusBar();
-setInterval(updateTransit, 30000);
+setInterval(updateTransit, 15000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
-setInterval(fetchLocations, 30000);
+setInterval(fetchLocations, 15000);
 // Kick off initial location fetch (no-op if not map mode yet)
 setTimeout(function () { initHobokenMap(); fetchLocations(); }, 1500);
 </script>
