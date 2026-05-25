@@ -293,8 +293,8 @@
   }
 
   .cal-header-time {
-    font-weight: 400;
-    font-size: var(--fs-micro);
+    font-weight: 200;
+    font-size: var(--fs-sub);
     color: #fff;
     letter-spacing: 0;
     text-transform: none;
@@ -302,7 +302,11 @@
 
   .cal-day-header:first-child { margin-top: 0; }
 
-  .cal-day-header.is-today { color: #6bffb8; }
+  .cal-day-header.is-today {
+    color: #fff;
+    font-size: var(--fs-sub);
+    margin-bottom: 8px;
+  }
   .cal-day-header.is-future { color: #9a9aa8; }
 
   .cal-event {
