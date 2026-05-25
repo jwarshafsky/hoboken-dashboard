@@ -62,7 +62,7 @@
     overflow: hidden;
     display: grid;
     grid-template-columns: 0.7fr 1.7fr 0.85fr;
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-rows: 1fr auto auto;
     gap: 10px;
     padding: 12px;
   }
@@ -119,6 +119,8 @@
     align-items: center;
     justify-content: center;
     padding: 10px;
+    grid-row: 1;
+    grid-column: 1;
   }
 
   .time {
@@ -137,37 +139,34 @@
     margin-top: 4px;
   }
 
-  /* Weather card — below clock */
+  /* Weather card — bottom-right, reoriented as compact vertical panel */
   .weather-card {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: 1fr auto;
-    gap: 0 10px;
-  }
-
-  .weather-main {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    gap: 6px;
   }
+
+  .weather-main { display: contents; }  /* transparent wrapper */
 
   .weather-top {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
   }
 
-  .weather-icon { font-size: var(--fs-hero); line-height: 1; }
+  .weather-icon { font-size: 1.8rem; line-height: 1; flex-shrink: 0; }
 
   .weather-temp {
-    font-size: var(--fs-hero);
+    font-size: var(--fs-sub);
     font-weight: 200;
     color: #fff;
     line-height: 1;
   }
 
   .weather-temp-c {
-    font-size: var(--fs-body);
+    font-size: var(--fs-label);
     font-weight: 200;
     color: #888;
     line-height: 1;
@@ -176,19 +175,16 @@
   .weather-desc {
     font-size: var(--fs-label);
     color: #aaa;
-    margin-top: 3px;
   }
 
   .weather-details {
-    grid-column: 1 / -1;
     display: flex;
     justify-content: center;
     gap: 16px;
     font-size: var(--fs-label);
     color: #777;
-    padding-top: 6px;
+    padding-top: 5px;
     border-top: 0.5px solid #1e1e2e;
-    margin-top: 6px;
     white-space: nowrap;
   }
 
@@ -196,25 +192,23 @@
 
   .weather-forecast {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    overflow: visible;
-    border-left: 0.5px solid #1e1e2e;
-    padding-left: 8px;
-    justify-content: center;
-    min-width: 90px;
+    flex-direction: row;
+    gap: 0;
+    justify-content: space-around;
+    border-top: 0.5px solid #1e1e2e;
+    padding-top: 5px;
   }
 
   .weather-hour {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
+    gap: 2px;
   }
 
   .weather-hour .wh-time {
     font-size: var(--fs-micro);
     color: #9a9aa8;
-    min-width: 38px;
   }
 
   .weather-hour .wh-icon {
@@ -228,18 +222,24 @@
     color: #ccc;
   }
 
-  /* Calendar — spans both rows in right column */
+  /* Calendar — top row, right column */
   #calCard {
-    grid-row: 1 / 3;
+    grid-row: 1;
     grid-column: 3;
   }
 
-  /* Map card — spans both rows in middle column, no padding so map fills it */
+  /* Map card — top row, middle column */
   #mapCard {
-    grid-row: 1 / 3;
+    grid-row: 1;
     grid-column: 2;
     padding: 0;
     overflow: hidden;
+  }
+
+  /* Weather card — bottom right, spans bus + ferry rows */
+  #weatherCard {
+    grid-row: 2 / 4;
+    grid-column: 3;
   }
 
   #mapCard { position: relative; }
@@ -585,7 +585,7 @@
 
   /* Transit cards - full width */
   .transit-card {
-    grid-column: 1 / -1;
+    grid-column: 1 / 3;
     flex-direction: row;
     align-items: center;
     gap: 12px;
@@ -659,11 +659,12 @@
     align-items: center;
     gap: 0;
     background: #1a1a2a;
-    padding: 4px 8px;
+    padding: 4px 6px;
     border-radius: 6px;
-    min-width: 52px;
+    width: 60px;
     text-align: center;
     box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   .dep-chip:first-child {
@@ -853,10 +854,12 @@
       grid-template-columns: 1fr;
       grid-template-rows: auto auto auto auto auto auto;
     }
-    #calCard, #alertsCard { grid-row: auto; grid-column: auto; }
-    .transit-card { flex-direction: column; align-items: flex-start; }
+    #calCard, #alertsCard, #weatherCard { grid-row: auto; grid-column: auto; }
+    .transit-card { grid-column: auto; flex-direction: column; align-items: flex-start; }
+    .clock-card { grid-row: auto; grid-column: auto; }
     .time { font-size: var(--fs-hero); }
     .weather-temp { font-size: var(--fs-hero); }
+    .weather-forecast { flex-direction: row; flex-wrap: wrap; }
   }
 </style>
 </head>
