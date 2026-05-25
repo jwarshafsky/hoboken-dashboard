@@ -23,10 +23,10 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
 <style>
-  /* ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ
-     Design tokens ‚Äî keep all radii, font sizes, and key colors here.
+  /* ─────────────────────────────────────────────────────────────────
+     Design tokens — keep all radii, font sizes, and key colors here.
      New panels MUST reuse these instead of introducing new values.
-     ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ‚îÄ */
+     ───────────────────────────────────────────────────────────────── */
   :root {
     /* Border radii */
     --r-card:  14px;
@@ -43,7 +43,7 @@
 
     /* Semantic colors */
     --c-live:   #6bffb8;  /* GREEN: reserved for live-state ONLY */
-    --c-urgent: #ff6b6b;  /* RED: actionable urgency (‚â§5min bus, alerts) */
+    --c-urgent: #ff6b6b;  /* RED: actionable urgency (≤5min bus, alerts) */
     --c-warn:   #ffb84d;  /* AMBER: warnings */
     --c-text:   #e8e8ec;
     --c-label:  #9a9aa8;
@@ -67,7 +67,7 @@
     padding: 12px;
   }
 
-  /* TV simulation mode ‚Äî body becomes a fixed 1920x1080 surface that's scaled
+  /* TV simulation mode — body becomes a fixed 1920x1080 surface that's scaled
      to fit the browser window. Activate by adding ?tv to the URL. */
   html.tv-sim {
     background: #000;
@@ -94,7 +94,7 @@
   }
 
   .card-title {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -112,7 +112,7 @@
     flex-shrink: 0;
   }
 
-  /* Clock card ‚Äî top left */
+  /* Clock card — top left */
   .clock-card {
     display: flex;
     flex-direction: column;
@@ -122,7 +122,7 @@
   }
 
   .time {
-    font-size: 2.4rem;
+    font-size: var(--fs-hero);
     font-weight: 200;
     letter-spacing: 0.02em;
     line-height: 1;
@@ -131,13 +131,13 @@
   }
 
   .date-line {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     font-weight: 300;
     color: #888;
     margin-top: 4px;
   }
 
-  /* Weather card ‚Äî below clock */
+  /* Weather card — below clock */
   .weather-card {
     display: grid;
     grid-template-columns: 1fr auto;
@@ -157,24 +157,24 @@
     gap: 4px;
   }
 
-  .weather-icon { font-size: 2.4rem; line-height: 1; }
+  .weather-icon { font-size: var(--fs-hero); line-height: 1; }
 
   .weather-temp {
-    font-size: 2.4rem;
+    font-size: var(--fs-hero);
     font-weight: 200;
     color: #fff;
     line-height: 1;
   }
 
   .weather-temp-c {
-    font-size: 1rem;
+    font-size: var(--fs-body);
     font-weight: 200;
     color: #888;
     line-height: 1;
   }
 
   .weather-desc {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: #aaa;
     margin-top: 3px;
   }
@@ -184,7 +184,7 @@
     display: flex;
     justify-content: center;
     gap: 16px;
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: #777;
     padding-top: 6px;
     border-top: 0.5px solid #1e1e2e;
@@ -212,29 +212,29 @@
   }
 
   .weather-hour .wh-time {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     color: #9a9aa8;
     min-width: 38px;
   }
 
   .weather-hour .wh-icon {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     line-height: 1;
   }
 
   .weather-hour .wh-temp {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     font-weight: 500;
     color: #ccc;
   }
 
-  /* Calendar ‚Äî spans both rows in right column */
+  /* Calendar — spans both rows in right column */
   #calCard {
     grid-row: 1 / 3;
     grid-column: 3;
   }
 
-  /* Map card ‚Äî spans both rows in middle column, no padding so map fills it */
+  /* Map card — spans both rows in middle column, no padding so map fills it */
   #mapCard {
     grid-row: 1 / 3;
     grid-column: 2;
@@ -245,7 +245,7 @@
   #mapCard { position: relative; }
   #mapCard #hobokenMap { width: 100%; height: 100%; }
 
-  /* Overlay showing when each person last updated ‚Äî one pill per person,
+  /* Overlay showing when each person last updated — one pill per person,
      sitting in the bottom-left corner of the map. */
   #mapStatusOverlay {
     position: absolute;
@@ -261,14 +261,14 @@
     background: rgba(0, 0, 0, 0.55);
     padding: 3px 8px;
     border-radius: 12px;
-    font-size: 0.55rem;
+    font-size: var(--fs-micro);
     color: #ddd;
     line-height: 1.3;
     white-space: nowrap;
   }
   .ms-name { color: #fff; font-weight: 600; }
   .ms-status { color: #ddd; margin-left: 5px; }
-  .ms-ago { color: #777; margin-left: 5px; font-size: 0.5rem; }
+  .ms-ago { color: #777; margin-left: 5px; font-size: var(--fs-micro); }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -282,7 +282,7 @@
   .cal-content::-webkit-scrollbar { width: 0; }
 
   .cal-day-header {
-    font-size: 0.55rem;
+    font-size: var(--fs-micro);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -299,21 +299,21 @@
 
   .cal-event {
     padding: 2px 0;
-    font-size: 0.7rem;
+    font-size: var(--fs-label);
     line-height: 1.25;
   }
 
   .cal-event-time {
     color: #888;
     font-weight: 500;
-    font-size: 0.62rem;
+    font-size: var(--fs-micro);
     margin-left: 4px;
     white-space: nowrap;
   }
 
   .cal-leave-by {
     color: #ffb84d;
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 600;
     margin-top: 1px;
   }
@@ -332,7 +332,7 @@
   .cal-event.all-day .cal-event-time { color: #9a9aa8; }
 
   .cal-empty, .cal-signin-prompt {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: #9a9aa8;
     padding: 20px 8px;
     text-align: center;
@@ -344,7 +344,7 @@
     border: none;
     border-radius: 6px;
     padding: 14px 28px;
-    font-size: 1rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     cursor: pointer;
     margin-top: 12px;
@@ -379,7 +379,7 @@
   }
 
   .alert-item {
-    font-size: 0.65rem;
+    font-size: var(--fs-micro);
     line-height: 1.3;
     color: #ccc;
     padding: 3px 0;
@@ -395,7 +395,7 @@
 
   .alert-badge {
     display: inline-block;
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -442,7 +442,7 @@
     filter: brightness(0.95);
   }
 
-  /* Hide Leaflet controls ‚Äî we want a clean ambient view */
+  /* Hide Leaflet controls — we want a clean ambient view */
   .leaflet-control-zoom,
   .leaflet-control-attribution {
     display: none !important;
@@ -459,7 +459,7 @@
     background: #3a3a48;
     color: #000;
     font-weight: 700;
-    font-size: 0.8rem;
+    font-size: var(--fs-label);
     line-height: 36px;
     text-align: center;
   }
@@ -476,7 +476,7 @@
     width: 20px !important;
     height: 20px !important;
     line-height: 18px;
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     border-width: 1.5px;
   }
 
@@ -499,7 +499,7 @@
     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
   }
 
-  /* Hoboken Hop shuttle marker ‚Äî bus icon, color is set inline per bus
+  /* Hoboken Hop shuttle marker — bus icon, color is set inline per bus
      (red for Red Hop, green for Green Hop) */
   .hop-marker {
     width: 22px !important;
@@ -509,7 +509,7 @@
     filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
   }
 
-  /* Tile (Life360) tracker markers ‚Äî purple */
+  /* Tile (Life360) tracker markers — purple */
   .tile-marker {
     width: 26px !important;
     height: 26px !important;
@@ -517,7 +517,7 @@
     border-radius: 50%;
     border: 1.5px solid rgba(255,255,255,0.45);
     box-shadow: 0 0 4px rgba(0,0,0,0.6);
-    font-size: 0.85rem;
+    font-size: var(--fs-body);
     font-weight: 700;
     color: #000;
     line-height: 22px;
@@ -528,7 +528,7 @@
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
-    font-size: 0.7rem;
+    font-size: var(--fs-label);
     padding-top: 4px;
     color: #aaa;
   }
@@ -571,7 +571,7 @@
     align-items: center;
     gap: 5px;
     white-space: nowrap;
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
   }
 
   .stock-symbol {
@@ -614,7 +614,7 @@
   }
 
   .transit-title {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -638,7 +638,7 @@
   }
 
   .route-label {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -674,7 +674,7 @@
   }
 
   .dep-chip .t {
-    font-size: 0.65rem;
+    font-size: var(--fs-micro);
     font-weight: 400;
     color: #888;
     order: 2;
@@ -682,11 +682,11 @@
   }
 
   .dep-chip:first-child .t {
-    font-size: 0.65rem;
+    font-size: var(--fs-micro);
   }
 
   .dep-chip .cd {
-    font-size: 1.05rem;
+    font-size: var(--fs-body);
     font-weight: 600;
     color: #fff;
     order: 1;
@@ -734,7 +734,7 @@
   }
 
   .tunnel-label {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -743,29 +743,29 @@
   }
 
   .tunnel-time {
-    font-size: 1.4rem;
+    font-size: var(--fs-sub);
     font-weight: 300;
     color: #fff;
   }
 
   .tunnel-min {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: #888;
   }
 
   .tunnel-status {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
 
   .no-service {
-    font-size: 0.75rem;
+    font-size: var(--fs-label);
     color: #444;
   }
 
-  /* Bus headlights ‚Äî green when API live, red when offline */
+  /* Bus headlights — green when API live, red when offline */
   .bus-headlight { filter: none; }
   .bus-headlight.live { fill: #6bffb8; }
   .bus-headlight.schedule { fill: #c0392b; }
@@ -814,13 +814,13 @@
   }
 
   .hop-eta-time {
-    font-size: 1rem;
+    font-size: var(--fs-body);
     font-weight: 300;
     color: #fff;
   }
 
   .hop-no-service {
-    font-size: 0.6rem;
+    font-size: var(--fs-micro);
     color: #444;
   }
 
@@ -832,7 +832,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 0.42rem;
+    font-size: var(--fs-micro);
     color: #555;
     pointer-events: none;
     line-height: 1;
@@ -852,8 +852,8 @@
     }
     #calCard, #alertsCard { grid-row: auto; grid-column: auto; }
     .transit-card { flex-direction: column; align-items: flex-start; }
-    .time { font-size: 2.4rem; }
-    .weather-temp { font-size: 2.4rem; }
+    .time { font-size: var(--fs-hero); }
+    .weather-temp { font-size: var(--fs-hero); }
   }
 </style>
 </head>
@@ -892,8 +892,8 @@
         <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
-        <div id="weatherRain" style="font-size:0.75rem;margin-top:3px;color:#f0c040;display:none;align-items:center;gap:4px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="#f0c040" style="flex-shrink:0;"><path d="M12 2C7 2 2.7 5.3 1 10c1.7 4.7 6 8 11 8s9.3-3.3 11-8C21.3 5.3 17 2 12 2zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10v4l3 3-1 1-4-4V6h2z" opacity="0"/><path d="M17 13.96c0 .61-.49 1.1-1.1 1.1H15v6c0 .55-.45 1-1 1s-1-.45-1-1v-6h-2v6c0 .55-.45 1-1 1s-1-.45-1-1v-6H8.1c-.61 0-1.1-.49-1.1-1.1 0-3.86 2.5-7.05 5-7.45V5c0-.55.45-1 1-1s1 .45 1 1v1.51c2.5.4 5 3.59 5 7.45z"/></svg><span id="weatherRainPct">--</span>% rain</div>
-        <div style="font-size:0.6rem;color:#777;margin-top:2px;white-space:nowrap;">Hi&nbsp;<span style="color:#bbb" id="weatherHi">--</span>&deg;&nbsp;/&nbsp;Lo&nbsp;<span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
+        <div id="weatherRain" style="font-size:var(--fs-label);margin-top:3px;color:#f0c040;display:none;align-items:center;gap:4px;"><svg viewBox="0 0 24 24" width="14" height="14" fill="#f0c040" style="flex-shrink:0;"><path d="M12 2C7 2 2.7 5.3 1 10c1.7 4.7 6 8 11 8s9.3-3.3 11-8C21.3 5.3 17 2 12 2zm0 14c-3.3 0-6-2.7-6-6s2.7-6 6-6 6 2.7 6 6-2.7 6-6 6zm0-10v4l3 3-1 1-4-4V6h2z" opacity="0"/><path d="M17 13.96c0 .61-.49 1.1-1.1 1.1H15v6c0 .55-.45 1-1 1s-1-.45-1-1v-6h-2v6c0 .55-.45 1-1 1s-1-.45-1-1v-6H8.1c-.61 0-1.1-.49-1.1-1.1 0-3.86 2.5-7.05 5-7.45V5c0-.55.45-1 1-1s1 .45 1 1v1.51c2.5.4 5 3.59 5 7.45z"/></svg><span id="weatherRainPct">--</span>% rain</div>
+        <div style="font-size:var(--fs-micro);color:#777;margin-top:2px;white-space:nowrap;">Hi&nbsp;<span style="color:#bbb" id="weatherHi">--</span>&deg;&nbsp;/&nbsp;Lo&nbsp;<span style="color:#bbb" id="weatherLo">--</span>&deg;</div>
       </div>
     </div>
   </div>
@@ -948,7 +948,7 @@
 
 <script>
 // ============================================================
-// TV SIMULATION MODE ‚Äî ?tv in URL renders the dashboard at fixed 1920x1080,
+// TV SIMULATION MODE — ?tv in URL renders the dashboard at fixed 1920x1080,
 // scaled to fit any browser window while preserving TV proportions.
 // ============================================================
 (function setupTvSimulation() {
@@ -984,7 +984,7 @@ function trimOverflow(container) {
   }
 }
 
-// fetch with abort timeout ‚Äî prevents hung TCP from piling up callbacks
+// fetch with abort timeout — prevents hung TCP from piling up callbacks
 function fetchT(url, opts, ms) {
   ms = ms || 15000;
   const c = new AbortController();
@@ -1010,7 +1010,7 @@ function markOk(key) {
 }
 
 function markFail(key) {
-  // Require 2 consecutive failures before flagging offline ‚Äî prevents flashes
+  // Require 2 consecutive failures before flagging offline — prevents flashes
   // from transient Cloud Run cold starts or network blips.
   apiStatus[key].failCount = (apiStatus[key].failCount || 0) + 1;
   if (apiStatus[key].failCount >= 2) {
@@ -1448,7 +1448,7 @@ function renderLivePredictions(predictions, label) {
     // a longer countdown than reality and have the user miss the bus.
     const fetchedAtMs = (window._transitFetchedAt || Math.floor(Date.now() / 1000)) * 1000;
     // NJT seems to round their countdowns up, so shift the predicted arrival
-    // ~30s earlier than reported. Makes the displayed countdown feel right ‚Äî
+    // ~30s earlier than reported. Makes the displayed countdown feel right —
     // not over-promising on time available.
     const DISPLAY_SHIFT_MS = 30000;
     for (const p of items) {
@@ -1629,7 +1629,7 @@ async function fetchHop() {
       renderHopEtas({ status: 'no vehicles' });
     }
 
-    // Build a routeId ‚Üí route name map (PassioGo returns "routes" alongside "buses")
+    // Build a routeId → route name map (PassioGo returns "routes" alongside "buses")
     const routeNameById = {};
     const routesArr = data.routes || [];
     if (Array.isArray(routesArr)) {
@@ -1731,7 +1731,7 @@ function renderHopBuses(hopBuses) {
 }
 
 // ============================================================
-// MAP MODE ‚Äî show map on weekends all day, weekdays 4-8 PM
+// MAP MODE — show map on weekends all day, weekdays 4-8 PM
 // ============================================================
 function isMapMode() {
   const now = new Date();
@@ -1778,9 +1778,15 @@ function _slideTo(id, marker, lat, lon) {
 
 let _busHeadings = {};
 
+// Snap heading to Hoboken's street grid (avenues ≈29°/209°, streets ≈119°/299°)
+var _GRID_DIRS = [29, 119, 209, 299];
 function _snapToGrid(heading) {
-  var offset = ((heading - 6) % 360 + 360) % 360;
-  return (Math.round(offset / 45) * 45 + 6) % 360;
+  var best = _GRID_DIRS[0], bestDiff = 360;
+  for (var i = 0; i < _GRID_DIRS.length; i++) {
+    var diff = Math.abs(((heading - _GRID_DIRS[i] + 540) % 360) - 180);
+    if (diff < bestDiff) { bestDiff = diff; best = _GRID_DIRS[i]; }
+  }
+  return best;
 }
 
 function _computeHeading(lat1, lon1, lat2, lon2) {
@@ -1795,19 +1801,19 @@ let _tileMarkers = {};
 let _homeMarker = null;
 let _lastBuses = [];  // cached for personStatus() narrative
 
-// Tile device display config ‚Äî map the device name (as set in the Tile app)
+// Tile device display config — map the device name (as set in the Tile app)
 // to a display icon and label. Update once you have the devices set up.
 const TILE_DEVICES = {
-  // 'Buddy Collar':    { icon: 'üêï', color: '#c87000' },
+  // 'Buddy Collar':    { icon: '🐕', color: '#c87000' },
   // 'Kid 1 Backpack':  { icon: 'S',  color: '#c870ff' },
   // 'Kid 2 Backpack':  { icon: 'M',  color: '#70b8ff' },
 };
 
-// Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
+// Home: 1227 Garden St, Hoboken — also used as the radius center for the auto-fit logic.
 const HOME = { lat: 40.75202, lon: -74.02816, name: 'Home' };
-const HOME_RADIUS_MI = 0.01;      // ~50 ft ‚Äî actually inside the house
-const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks ‚Äî triggers close-up zoom
-// All of Hoboken ‚Äî never zoom tighter than this. West edge ~ Jackson St.
+const HOME_RADIUS_MI = 0.014;     // ~75 ft — inside the house
+const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
+// All of Hoboken — never zoom tighter than this. West edge ~ Jackson St.
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
 const AUTO_FIT_RADIUS_MI = 5;
@@ -1832,7 +1838,7 @@ function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
 }
 
-// Hudson River bounding box ‚Äî anyone in this lon/lat strip is over the water,
+// Hudson River bounding box — anyone in this lon/lat strip is over the water,
 // so we assume they're on the ferry.
 function isOverWater(lat, lon) {
   return lat >= 40.700 && lat <= 40.770 &&
@@ -1842,7 +1848,7 @@ function isOverWater(lat, lon) {
 // Persistence tracker: only claim "on bus/Hop" if the person has been near
 // the SAME vehicle for at least 60 seconds (avoids false positives from
 // momentarily passing a stopped bus or standing at a stop).
-const _statusPersistence = {};  // tid ‚Üí { candidate, since, confirmed }
+const _statusPersistence = {};  // tid → { candidate, since, confirmed }
 
 function personStatus(loc) {
   const dHome = distMi(HOME, loc);
@@ -1880,14 +1886,14 @@ function personStatus(loc) {
       p.since = now;
     }
     if (now - p.since >= 60000) {
-      return candidate;  // confirmed ‚Äî been alongside the vehicle 60+ sec
+      return candidate;  // confirmed — been alongside the vehicle 60+ sec
     }
   } else {
     p.candidate = null;
     p.since = null;
   }
 
-  // Over water ‚Üí on ferry (no persistence check needed; physically impossible
+  // Over water → on ferry (no persistence check needed; physically impossible
   // to be over the Hudson without being on a boat)
   if (isOverWater(loc.lat, loc.lon)) return 'on ferry';
 
@@ -1917,14 +1923,14 @@ function initHobokenMap() {
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
-  // Jawg.Dark ‚Äî clean dark theme, no road shield badges
+  // Jawg.Dark — clean dark theme, no road shield badges
   L.tileLayer('https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq', {
     maxZoom: 22,
     subdomains: 'abcd',
     attribution: '',
   }).addTo(_hobokenMap);
 
-  // Home marker ‚Äî blue house icon (always shown)
+  // Home marker — blue house icon (always shown)
   const homeIcon = L.divIcon({
     className: 'home-marker',
     html:
@@ -2055,6 +2061,21 @@ function renderBuses(buses) {
   }
 }
 
+var _lastZoomKey = null;
+function _smoothZoomTo(center, zoom) {
+  var key = center[0].toFixed(5) + ',' + center[1].toFixed(5) + ',' + zoom;
+  if (_lastZoomKey === key) return;
+  _lastZoomKey = key;
+  _hobokenMap.flyTo(center, zoom, { duration: 1.2 });
+}
+function _smoothZoomBounds(bounds, opts) {
+  var key = bounds[0][0].toFixed(5) + ',' + bounds[0][1].toFixed(5) + ',' +
+            bounds[1][0].toFixed(5) + ',' + bounds[1][1].toFixed(5) + ',' + (opts.maxZoom || '');
+  if (_lastZoomKey === key) return;
+  _lastZoomKey = key;
+  _hobokenMap.flyToBounds(bounds, Object.assign({ duration: 1.2 }, opts));
+}
+
 function renderLocations(locations) {
   if (!_hobokenMap) return;
   const OVERLAP_MI = 0.05;        // ~265 ft for clustering non-home people
@@ -2154,7 +2175,7 @@ function renderLocations(locations) {
       delete _personMarkers[tid];
     }
   }
-  // Update overlay ‚Äî one semi-transparent pill per person, left-aligned
+  // Update overlay — one semi-transparent pill per person, left-aligned
   const overlay = document.getElementById('mapStatusOverlay');
   if (overlay) {
     if (locations.length === 0) {
@@ -2179,16 +2200,15 @@ function renderLocations(locations) {
     return d >= HOME_RADIUS_MI && d <= NEAR_HOME_RADIUS_MI;
   });
   if (inRange.length === 0) {
-    _hobokenMap.setView([HOME.lat, HOME.lon], 14);
+    _smoothZoomTo([HOME.lat, HOME.lon], 14);
   } else if (locations.length > 0 && inRange.length === locations.length &&
              inRange.every(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; })) {
-    _hobokenMap.setView([HOME.lat, HOME.lon], 15);
+    _smoothZoomTo([HOME.lat, HOME.lon], 15);
   } else if (anyApproaching) {
-    // Someone is near home ‚Äî zoom in tight so family can watch them approach
     var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
     var lats = [HOME.lat].concat(approaching.map(function (l) { return l.lat; }));
     var lngs = [HOME.lon].concat(approaching.map(function (l) { return l.lon; }));
-    _hobokenMap.fitBounds(
+    _smoothZoomBounds(
       [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
        [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
       { padding: [30, 30], maxZoom: 18 }
@@ -2200,7 +2220,7 @@ function renderLocations(locations) {
     var maxLat = Math.max.apply(null, lats);
     var minLng = Math.min.apply(null, lngs);
     var maxLng = Math.max.apply(null, lngs);
-    _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
+    _smoothZoomBounds([[minLat, minLng], [maxLat, maxLng]], {
       padding: [20, 20],
       maxZoom: 15,
     });
@@ -2247,7 +2267,7 @@ async function fetchAlerts() {
       }
     }
 
-    // Alerts only ‚Äî no news, no stocks
+    // Alerts only — no news, no stocks
     const divider = document.querySelector('.cal-alert-divider');
     if (items.length === 0) {
       container.innerHTML = '';
@@ -2293,7 +2313,7 @@ function showCalTokenPrompt() {
     '<div style="margin-bottom:10px;">Enter calendar token:</div>' +
     '<input id="calTokenInput" type="password" autocomplete="off" ' +
     'style="background:#1a1a2a;border:0.5px solid #2a2a35;border-radius:6px;' +
-    'color:#fff;padding:8px 12px;font-size:0.85rem;width:80%;outline:none;" />' +
+    'color:#fff;padding:8px 12px;font-size:var(--fs-body);width:80%;outline:none;" />' +
     '<div><button class="cal-signin-btn" onclick="saveCalToken()">Save</button></div>' +
     '</div>';
   setTimeout(function () {
@@ -2310,7 +2330,7 @@ function saveCalToken() {
 }
 
 function resetCalendarChoice() {
-  // Triggered by double-click on calendar title ‚Äî clear the saved token so the user
+  // Triggered by double-click on calendar title — clear the saved token so the user
   // can re-enter it. To actually switch to a different calendar's ICS feed,
   // update the CALENDAR_ICS_URL env var on Cloud Run.
   if (confirm('Reset calendar token? You will need to re-enter it.')) {
@@ -2327,7 +2347,7 @@ async function fetchCalEvents() {
     const res = await fetchT(PROXY_URL + '?mode=calendar',
       { headers: { 'X-Cal-Token': token } });
     if (res.status === 403) {
-      // Bad token ‚Äî re-prompt
+      // Bad token — re-prompt
       localStorage.removeItem('calToken');
       showCalTokenPrompt();
       return;
@@ -2381,7 +2401,7 @@ function renderCalEvents(events) {
     const endStr = e.end || '';
     let anchorDate;
     if (isAllDay) {
-      // ICS DTEND is exclusive ‚Äî a multi-day all-day event runs [start, end)
+      // ICS DTEND is exclusive — a multi-day all-day event runs [start, end)
       const isMultiDay = endStr && daysBetween(startStr, endStr) > 1;
       const lastDayInclusive = isMultiDay
         ? new Date(new Date(endStr + 'T00:00:00').getTime() - 86400000)
@@ -2451,7 +2471,7 @@ function renderCalEvents(events) {
       if (ev.start.date) {
         evCls += ' all-day';
         // Only show a label if it's a multi-day event (date range). Single-day
-        // all-day events don't need "(All day)" ‚Äî the day header above implies it.
+        // all-day events don't need "(All day)" — the day header above implies it.
         if (ev.isMultiDay) {
           timeLabel = fmtMonthDay(ev.start.date) + ' - ' + fmtMonthDay(ev.lastDay);
         }
@@ -2472,7 +2492,7 @@ function renderCalEvents(events) {
         const eventMs = new Date(ev.start.dateTime).getTime();
         const hrsUntil = (eventMs - Date.now()) / 3600000;
         if (hrsUntil > 0 && hrsUntil < 24) {
-          // Heuristic mode: city (NYC) ‚Üí bus; otherwise drive
+          // Heuristic mode: city (NYC) → bus; otherwise drive
           const isNYC = /\b(NY|NYC|New York|Manhattan)\b/i.test(ev.location);
           const travelMin = isNYC ? 45 : 20;
           const mode = isNYC ? '126/119' : 'drive';
@@ -2524,10 +2544,10 @@ function watchCalendarResize() {
   _calResizeObserver = new ResizeObserver(function () {
     const h = target.clientHeight;
     if (h < _lastCalHeight - 4) {
-      // Panel shrank ‚Äî trim trailing events that no longer fit
+      // Panel shrank — trim trailing events that no longer fit
       trimCalendarOverflow();
     } else if (h > _lastCalHeight + 20) {
-      // Panel grew significantly ‚Äî re-render so we use the new space
+      // Panel grew significantly — re-render so we use the new space
       fetchCalEvents();
     }
     _lastCalHeight = h;
@@ -2549,7 +2569,7 @@ function updateTransit() {
 }
 
 // ============================================================
-// SLEEP MODE ‚Äî black screen midnight to 7am (also pauses animations + polls)
+// SLEEP MODE — black screen midnight to 7am (also pauses animations + polls)
 // ============================================================
 function isSleeping() {
   const h = new Date().getHours();
