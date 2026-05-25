@@ -2007,20 +2007,20 @@ function busLoadColor(passload) {
   return '#7090a0';
 }
 
-function _busSvg(color) {
-  return '<svg viewBox="0 0 40 50" width="24" height="30">' +
-    '<polygon points="20,0 14,9 26,9" fill="' + color + '"/>' +
-    '<circle cx="20" cy="29" r="18" fill="' + color + '" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>' +
+function _busSvg(arrowColor, toNYC) {
+  const body =
+    '<circle cx="20" cy="29" r="18" fill="#8a9aa0" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>' +
     '<path d="M12,17 C12,14.5 28,14.5 28,17 L28,38 C28,40 26.5,40.5 25,40.5 L15,40.5 C13.5,40.5 12,40 12,38 Z" fill="#1a2530"/>' +
     '<rect x="14" y="16" width="12" height="8" rx="1.5" fill="rgba(60,120,170,0.5)"/>' +
     '<circle cx="14.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
     '<circle cx="25.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
-    '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#0e1820"/>' +
+    '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#0e1820"/>';
+  // Up arrow sits above body; down arrow renders after body so it overlays the base
+  const arrowUp   = '<polygon points="20,0 14,9 26,9" fill="' + arrowColor + '"/>';
+  const arrowDown = '<polygon points="20,50 14,41 26,41" fill="' + arrowColor + '"/>';
+  return '<svg viewBox="0 0 40 50" width="24" height="30">' +
+    (toNYC ? arrowUp + body : body + arrowDown) +
     '</svg>';
-}
-
-function _rotFromDest(dest) {
-  return (dest || '').toUpperCase().includes('NEW YORK') ? 0 : 180;
 }
 
 function renderBuses(buses) {
@@ -2030,11 +2030,11 @@ function renderBuses(buses) {
   for (const b of buses) {
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
     seen.add(key);
-    const rot = 'transform:rotate(' + _rotFromDest(b.destination) + 'deg);';
-    const color = busLoadColor(b.passload);
+    const toNYC = (b.destination || '').toUpperCase().includes('NEW YORK');
+    const arrowColor = busLoadColor(b.passload);
     const icon = L.divIcon({
       className: 'bus-marker',
-      html: '<div style="' + rot + '">' + _busSvg(color) + '</div>',
+      html: '<div>' + _busSvg(arrowColor, toNYC) + '</div>',
       iconSize: [24, 30],
       iconAnchor: [12, 18],
     });
