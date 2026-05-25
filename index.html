@@ -1805,6 +1805,8 @@ const TILE_DEVICES = {
 
 // Home: 1227 Garden St, Hoboken ‚Äî also used as the radius center for the auto-fit logic.
 const HOME = { lat: 40.75202, lon: -74.02816, name: 'Home' };
+const HOME_RADIUS_MI = 0.01;      // ~50 ft ‚Äî actually inside the house
+const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks ‚Äî triggers close-up zoom
 // All of Hoboken ‚Äî never zoom tighter than this. West edge ~ Jackson St.
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
@@ -1844,7 +1846,7 @@ const _statusPersistence = {};  // tid ‚Üí { candidate, since, confirmed }
 
 function personStatus(loc) {
   const dHome = distMi(HOME, loc);
-  if (dHome < 0.05) return 'at home';
+  if (dHome < HOME_RADIUS_MI) return 'at home';
 
   const now = Date.now();
   const tid = loc.tid || 'XX';
@@ -2000,13 +2002,13 @@ function busLoadColor(passload) {
 
 function _busSvg(color) {
   return '<svg viewBox="0 0 40 50" width="24" height="30">' +
-    '<polygon points="20,0 14,9 26,9" fill="#fff"/>' +
-    '<circle cx="20" cy="29" r="18" fill="#fff" stroke="' + color + '" stroke-width="2.5"/>' +
-    '<path d="M12,17 C12,14.5 28,14.5 28,17 L28,38 C28,40 26.5,40.5 25,40.5 L15,40.5 C13.5,40.5 12,40 12,38 Z" fill="#2c3e50"/>' +
-    '<rect x="14" y="16" width="12" height="8" rx="1.5" fill="#4a80a8"/>' +
-    '<circle cx="14.5" cy="37" r="1.8" fill="' + color + '"/>' +
-    '<circle cx="25.5" cy="37" r="1.8" fill="' + color + '"/>' +
-    '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#1a252f"/>' +
+    '<polygon points="20,0 14,9 26,9" fill="' + color + '"/>' +
+    '<circle cx="20" cy="29" r="18" fill="' + color + '" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>' +
+    '<path d="M12,17 C12,14.5 28,14.5 28,17 L28,38 C28,40 26.5,40.5 25,40.5 L15,40.5 C13.5,40.5 12,40 12,38 Z" fill="#1a2530"/>' +
+    '<rect x="14" y="16" width="12" height="8" rx="1.5" fill="rgba(60,120,170,0.5)"/>' +
+    '<circle cx="14.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
+    '<circle cx="25.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
+    '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#0e1820"/>' +
     '</svg>';
 }
 
@@ -2055,12 +2057,12 @@ function renderBuses(buses) {
 
 function renderLocations(locations) {
   if (!_hobokenMap) return;
-  const OVERLAP_MI = 0.05;        // ~265 ft
+  const OVERLAP_MI = 0.05;        // ~265 ft for clustering non-home people
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
   // Split into at-home vs elsewhere
-  const atHome = locations.filter(function (l) { return distMi(HOME, l) < OVERLAP_MI; });
-  const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= OVERLAP_MI; });
+  const atHome = locations.filter(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; });
+  const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= HOME_RADIUS_MI; });
 
   // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
   // from home). Smaller icon so they look like satellites orbiting the home badge.
@@ -2172,19 +2174,32 @@ function renderLocations(locations) {
   const inRange = locations.filter(function (l) {
     return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
   });
+  var anyApproaching = inRange.some(function (l) {
+    var d = distMi(HOME, l);
+    return d >= HOME_RADIUS_MI && d <= NEAR_HOME_RADIUS_MI;
+  });
   if (inRange.length === 0) {
     _hobokenMap.setView([HOME.lat, HOME.lon], 14);
   } else if (locations.length > 0 && inRange.length === locations.length &&
-             inRange.every(function (l) { return distMi(HOME, l) < 0.05; })) {
-    // Everyone is AT home ‚Äî zoom in one extra level
+             inRange.every(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; })) {
     _hobokenMap.setView([HOME.lat, HOME.lon], 15);
+  } else if (anyApproaching) {
+    // Someone is near home ‚Äî zoom in tight so family can watch them approach
+    var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
+    var lats = [HOME.lat].concat(approaching.map(function (l) { return l.lat; }));
+    var lngs = [HOME.lon].concat(approaching.map(function (l) { return l.lon; }));
+    _hobokenMap.fitBounds(
+      [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
+       [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
+      { padding: [30, 30], maxZoom: 18 }
+    );
   } else {
-    const lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
-    const lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
-    const minLat = Math.min.apply(null, lats);
-    const maxLat = Math.max.apply(null, lats);
-    const minLng = Math.min.apply(null, lngs);
-    const maxLng = Math.max.apply(null, lngs);
+    var lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
+    var lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
+    var minLat = Math.min.apply(null, lats);
+    var maxLat = Math.max.apply(null, lats);
+    var minLng = Math.min.apply(null, lngs);
+    var maxLng = Math.max.apply(null, lngs);
     _hobokenMap.fitBounds([[minLat, minLng], [maxLat, maxLng]], {
       padding: [20, 20],
       maxZoom: 15,
