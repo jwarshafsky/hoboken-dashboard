@@ -1778,7 +1778,8 @@ function _slideTo(id, marker, lat, lon) {
 
 let _busHeadings = {};
 
-// Snap heading to Hoboken's street grid (avenues ≈29°/209°, streets ≈119°/299°)
+// Snap compass heading to Hoboken's street grid then convert to screen-space rotation.
+// Markers live outside leaflet-rotate-pane (screen space), so subtract map bearing (29°).
 var _GRID_DIRS = [29, 119, 209, 299];
 function _snapToGrid(heading) {
   var best = _GRID_DIRS[0], bestDiff = 360;
@@ -1786,7 +1787,7 @@ function _snapToGrid(heading) {
     var diff = Math.abs(((heading - _GRID_DIRS[i] + 540) % 360) - 180);
     if (diff < bestDiff) { bestDiff = diff; best = _GRID_DIRS[i]; }
   }
-  return best;
+  return (best - 29 + 360) % 360;
 }
 
 function _computeHeading(lat1, lon1, lat2, lon2) {
