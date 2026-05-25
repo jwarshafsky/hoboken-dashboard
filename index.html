@@ -624,11 +624,10 @@
 
   .transit-routes {
     display: flex;
-    flex-wrap: nowrap;
-    gap: 6px 16px;
-    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
     overflow: hidden;
-    white-space: nowrap;
   }
 
   .route-group {
@@ -644,6 +643,8 @@
     letter-spacing: 0.04em;
     color: #9a9aa8;
     white-space: nowrap;
+    min-width: 74px;
+    flex-shrink: 0;
   }
 
   .dep-row {
@@ -654,23 +655,24 @@
 
   .dep-chip {
     display: flex;
-    align-items: baseline;
-    gap: 4px;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
     background: #1a1a2a;
-    padding: 3px 8px;
+    padding: 4px 8px;
     border-radius: 6px;
+    min-width: 52px;
+    text-align: center;
+    box-sizing: border-box;
   }
 
   .dep-chip:first-child {
     background: #1a2a1a;
   }
 
-  .dep-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    padding: 4px 8px;
+  .dep-chip .cd-unit {
+    font-size: 0.65em;
+    font-weight: 400;
   }
 
   .dep-chip .t {
@@ -722,7 +724,7 @@
   .tunnel-traffic {
     flex-shrink: 0;
     text-align: center;
-    padding: 3px 14px;
+    padding: 0 14px;
     border-left: 0.5px solid #1e1e2e;
     margin-left: 10px;
     display: flex;
@@ -731,6 +733,7 @@
     justify-content: center;
     width: 130px;
     box-sizing: border-box;
+    align-self: stretch;
   }
 
   .tunnel-label {
@@ -1337,11 +1340,12 @@ function minutesUntil(timeStr) {
 }
 
 function countdownText(mins) {
+  const u = s => `<span class="cd-unit">${s}</span>`;
   if (mins <= 0) return 'now';
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins}${u('m')}`;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m > 0 ? `${h}h${m}m` : `${h}h`;
+  return m > 0 ? `${h}${u('h')}${m}${u('m')}` : `${h}${u('h')}`;
 }
 
 function isWeekend() {
@@ -1999,7 +2003,7 @@ function renderTiles(tiles) {
 
 function busLoadColor(passload) {
   const p = (passload || '').toUpperCase();
-  if (p === 'EMPTY')                      return '#c8dde5';
+  if (p === 'EMPTY')                      return '#44ee44';
   if (p === 'LIGHT')                      return '#a0e060';
   if (p === 'MEDIUM')                     return '#e0c040';
   if (p === 'HEAVY')                      return '#ff9b40';
