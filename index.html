@@ -1999,7 +1999,7 @@ function renderTiles(tiles) {
 
 function busLoadColor(passload) {
   const p = (passload || '').toUpperCase();
-  if (p === 'EMPTY')                      return '#8a9aa0';
+  if (p === 'EMPTY')                      return '#c8dde5';
   if (p === 'LIGHT')                      return '#a0e060';
   if (p === 'MEDIUM')                     return '#e0c040';
   if (p === 'HEAVY')                      return '#ff9b40';
@@ -2015,10 +2015,13 @@ function _busSvg(arrowColor, toNYC) {
     '<circle cx="14.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
     '<circle cx="25.5" cy="37" r="1.8" fill="rgba(255,255,200,0.5)"/>' +
     '<rect x="13" y="39.5" width="14" height="1.5" rx="0.75" fill="#0e1820"/>';
-  // Up arrow sits above body; down arrow renders after body so it overlays the base
-  const arrowUp   = '<polygon points="20,0 14,9 26,9" fill="' + arrowColor + '"/>';
-  const arrowDown = '<polygon points="20,50 14,41 26,41" fill="' + arrowColor + '"/>';
-  return '<svg viewBox="0 0 40 50" width="24" height="30">' +
+  // viewBox y: -12 to 62 gives arrows room outside the bus circle (circle: y=11..47)
+  // arrowUp: tip at y=-10, base at y=11 — body renders on top but arrow visible above circle
+  // arrowDown: base at y=39, tip at y=60 — renders on top of body, fully visible
+  const stroke = '" stroke="rgba(20,30,40,0.75)" stroke-width="1.5" stroke-linejoin="round"/>';
+  const arrowUp   = '<polygon points="20,-10 9,11 31,11" fill="' + arrowColor + stroke;
+  const arrowDown = '<polygon points="20,60 9,39 31,39" fill="' + arrowColor + stroke;
+  return '<svg viewBox="0 -12 40 74" width="26" height="40">' +
     (toNYC ? arrowUp + body : body + arrowDown) +
     '</svg>';
 }
@@ -2035,8 +2038,8 @@ function renderBuses(buses) {
     const icon = L.divIcon({
       className: 'bus-marker',
       html: '<div>' + _busSvg(arrowColor, toNYC) + '</div>',
-      iconSize: [24, 30],
-      iconAnchor: [12, 18],
+      iconSize: [26, 40],
+      iconAnchor: [13, 22],
     });
     if (_busMarkers[key]) {
       _busMarkers[key].setIcon(icon);
