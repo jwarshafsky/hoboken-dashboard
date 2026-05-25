@@ -2019,6 +2019,10 @@ function _busSvg(color) {
     '</svg>';
 }
 
+function _rotFromDest(dest) {
+  return (dest || '').toUpperCase().includes('NEW YORK') ? 0 : 180;
+}
+
 function renderBuses(buses) {
   _lastBuses = buses || [];
   if (!_hobokenMap) return;
@@ -2026,19 +2030,8 @@ function renderBuses(buses) {
   for (const b of buses) {
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
     seen.add(key);
-    let heading = b.heading;
-    if (heading == null && _busMarkers[key]) {
-      const prev = _busMarkers[key].getLatLng();
-      const dist = Math.abs(prev.lat - b.lat) + Math.abs(prev.lng - b.lon);
-      if (dist > 0.0005) {
-        heading = _computeHeading(prev.lat, prev.lng, b.lat, b.lon);
-      } else {
-        heading = _busHeadings[key] || null;
-      }
-    }
-    if (heading != null) _busHeadings[key] = _snapToGrid(heading);
+    const rot = 'transform:rotate(' + _rotFromDest(b.destination) + 'deg);';
     const color = busLoadColor(b.passload);
-    const rot = _busHeadings[key] != null ? 'transform:rotate(' + _busHeadings[key] + 'deg);' : '';
     const icon = L.divIcon({
       className: 'bus-marker',
       html: '<div style="' + rot + '">' + _busSvg(color) + '</div>',
@@ -2057,7 +2050,6 @@ function renderBuses(buses) {
       _hobokenMap.removeLayer(_busMarkers[key]);
       delete _busMarkers[key];
       delete _markerAnims[key];
-      delete _busHeadings[key];
     }
   }
 }
