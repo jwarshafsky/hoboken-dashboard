@@ -167,6 +167,91 @@
   }
   .weather-icon svg { width: 100%; height: 100%; }
 
+  /* Weather icon animations — applied only to the main (hero) icon, not the
+     small hourly icons (which would be too busy at 20px). Each weather type
+     gets a subtle motion appropriate to its phenomenon. Respects
+     prefers-reduced-motion (see global rule near ferry-wave). */
+
+  /* Sun: slow rotation — rays sweep around the disc. */
+  .weather-icon .wi-sun .sun-body,
+  .weather-icon .wi-partly_cloudy .sun-body {
+    transform-origin: 12px 12px;
+    transform-box: fill-box;
+    animation: wx-sun-spin 30s linear infinite;
+  }
+  .weather-icon .wi-partly_cloudy .sun-body {
+    transform-origin: 6.5px 6.5px;
+    animation-duration: 25s;
+  }
+
+  /* Cloud floats gently side-to-side (whole icon for plain cloud/fog). */
+  .weather-icon .wi-cloud,
+  .weather-icon .wi-fog {
+    animation: wx-drift 6s ease-in-out infinite;
+  }
+
+  /* Rain drops fall + fade in sequence. */
+  .weather-icon .rain-drop {
+    transform-box: fill-box;
+    transform-origin: top center;
+    opacity: 0;
+    animation: wx-rain-fall 1.4s ease-in infinite;
+  }
+  .weather-icon .wi-rain .rd1 { animation-delay: 0s; }
+  .weather-icon .wi-rain .rd2 { animation-delay: 0.45s; }
+  .weather-icon .wi-rain .rd3 { animation-delay: 0.9s; }
+
+  /* Snow flakes drift down + fade, slower than rain. */
+  .weather-icon .snow-flake {
+    transform-box: fill-box;
+    transform-origin: center;
+    opacity: 0;
+    animation: wx-snow-fall 2.6s ease-in-out infinite;
+  }
+  .weather-icon .wi-snow .sf1 { animation-delay: 0s; }
+  .weather-icon .wi-snow .sf2 { animation-delay: 0.85s; }
+  .weather-icon .wi-snow .sf3 { animation-delay: 1.7s; }
+
+  /* Lightning bolt flickers — bright most of the time with brief dim flashes. */
+  .weather-icon .lightning {
+    animation: wx-flash 3.5s ease-in-out infinite;
+  }
+
+  /* Fog lines drift horizontally with slight stagger. */
+  .weather-icon .fog-line {
+    animation: wx-fog-drift 5s ease-in-out infinite;
+  }
+  .weather-icon .wi-fog .fg2 { animation-delay: 1.2s; animation-direction: reverse; }
+
+  @keyframes wx-sun-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  @keyframes wx-drift {
+    0%, 100% { transform: translateX(-1.5px); }
+    50%      { transform: translateX(1.5px); }
+  }
+  @keyframes wx-rain-fall {
+    0%   { opacity: 0; transform: translateY(-2px); }
+    15%  { opacity: 0.9; }
+    80%  { opacity: 0.9; }
+    100% { opacity: 0; transform: translateY(4px); }
+  }
+  @keyframes wx-snow-fall {
+    0%   { opacity: 0; transform: translateY(-1.5px); }
+    20%  { opacity: 1; }
+    85%  { opacity: 0.85; }
+    100% { opacity: 0; transform: translateY(3px); }
+  }
+  @keyframes wx-flash {
+    0%, 88%, 100% { opacity: 1; }
+    91%, 95%      { opacity: 0.25; }
+  }
+  @keyframes wx-fog-drift {
+    0%, 100% { transform: translateX(-1px); opacity: 0.7; }
+    50%      { transform: translateX(1px); opacity: 1; }
+  }
+
   .weather-hero {
     flex: 1;
     min-width: 0;
@@ -175,26 +260,12 @@
     gap: 1px;
   }
 
-  .weather-temp-row {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    line-height: 1;
-  }
-
   .weather-temp {
     font-size: var(--fs-hero);
     font-weight: 200;
     color: #fff;
     line-height: 1;
     letter-spacing: -0.01em;
-  }
-
-  .weather-temp-c {
-    font-size: var(--fs-label);
-    font-weight: 300;
-    color: var(--c-mute);
-    line-height: 1;
   }
 
   .weather-desc {
@@ -901,14 +972,17 @@
 
   /* Pause animations during sleep mode to save CPU/GPU on slow hardware */
   body.sleeping .stock-ticker-track,
-  body.sleeping .ferry-wave {
+  body.sleeping .ferry-wave,
+  body.sleeping .weather-icon * {
     animation-play-state: paused;
   }
 
   /* Respect user/system reduced-motion preference */
   @media (prefers-reduced-motion: reduce) {
     .stock-ticker-track,
-    .ferry-wave.active {
+    .ferry-wave.active,
+    .weather-icon *,
+    .weather-icon {
       animation: none !important;
     }
   }
@@ -1006,10 +1080,7 @@
     <div class="weather-top">
       <div class="weather-icon" id="weatherIcon">--</div>
       <div class="weather-hero">
-        <div class="weather-temp-row">
-          <div class="weather-temp" id="weatherTemp">--&deg;F</div>
-          <div class="weather-temp-c" id="weatherTempC">--&deg;C</div>
-        </div>
+        <div class="weather-temp" id="weatherTemp">--&deg;F</div>
         <div class="weather-desc" id="weatherDesc">Loading...</div>
         <div class="weather-meta">
           <div class="wm-hilo">Hi&nbsp;<span id="weatherHi">--</span>&deg;&nbsp;&middot;&nbsp;Lo&nbsp;<span id="weatherLo">--</span>&deg;</div>
@@ -1290,19 +1361,42 @@ const BUS_119_SCHEDULE = {
 // ============================================================
 // WEATHER ICONS (SVG paths) \u2014 render reliably without emoji fonts
 // ============================================================
+// SVG icons. Sub-elements that animate are wrapped in groups / given classes
+// (.sun-body, .rain-drop, .snow-flake, .lightning) so per-element CSS keyframes
+// can move just that part. Static parts (the cloud body) stay as-is.
 const SVG_ICONS = {
-  sun: '<path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13l2 .01c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0l2 .01c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1-.55 0-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" fill="#f9c948"/>',
-  cloud: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/>',
-  partly_cloudy: '<path d="M9 17h7c2.21 0 4-1.79 4-4 0-2.05-1.53-3.74-3.5-3.97-.07-2.79-2.34-5.03-5.14-5.03-2.4 0-4.41 1.65-4.97 3.88-.04 0-.07 0-.11 0-2.21 0-4 1.79-4 4 0 1.95 1.4 3.57 3.24 3.92" fill="#9aa5b8"/><circle cx="6.5" cy="6.5" r="2.5" fill="#f9c948"/>',
-  rain: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/><path d="M7 19l-1.5 3M11 19l-1.5 3M15 19l-1.5 3" stroke="#5fa3e0" stroke-width="1.5" stroke-linecap="round"/>',
-  snow: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/><circle cx="7" cy="20.5" r="0.8" fill="#fff"/><circle cx="11" cy="20.5" r="0.8" fill="#fff"/><circle cx="15" cy="20.5" r="0.8" fill="#fff"/>',
-  fog: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8" opacity="0.6"/><line x1="2" y1="20" x2="22" y2="20" stroke="#9aa5b8" stroke-width="1.5"/><line x1="4" y1="22.5" x2="20" y2="22.5" stroke="#9aa5b8" stroke-width="1.5"/>',
-  storm: '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#6a7080"/><path d="M11 17l-3 5h3l-1 4 4-6h-3l1-3z" fill="#f9c948"/>',
+  sun:
+    '<g class="sun-body">' +
+      '<path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13l2 .01c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0l2 .01c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1-.55 0-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z" fill="#f9c948"/>' +
+    '</g>',
+  cloud:
+    '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/>',
+  partly_cloudy:
+    '<circle class="sun-body" cx="6.5" cy="6.5" r="2.5" fill="#f9c948"/>' +
+    '<path d="M9 17h7c2.21 0 4-1.79 4-4 0-2.05-1.53-3.74-3.5-3.97-.07-2.79-2.34-5.03-5.14-5.03-2.4 0-4.41 1.65-4.97 3.88-.04 0-.07 0-.11 0-2.21 0-4 1.79-4 4 0 1.95 1.4 3.57 3.24 3.92" fill="#9aa5b8"/>',
+  rain:
+    '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/>' +
+    '<path class="rain-drop rd1" d="M7 19l-1.5 3" stroke="#5fa3e0" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<path class="rain-drop rd2" d="M11 19l-1.5 3" stroke="#5fa3e0" stroke-width="1.5" stroke-linecap="round"/>' +
+    '<path class="rain-drop rd3" d="M15 19l-1.5 3" stroke="#5fa3e0" stroke-width="1.5" stroke-linecap="round"/>',
+  snow:
+    '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8"/>' +
+    '<circle class="snow-flake sf1" cx="7" cy="20.5" r="0.8" fill="#fff"/>' +
+    '<circle class="snow-flake sf2" cx="11" cy="20.5" r="0.8" fill="#fff"/>' +
+    '<circle class="snow-flake sf3" cx="15" cy="20.5" r="0.8" fill="#fff"/>',
+  fog:
+    '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#9aa5b8" opacity="0.6"/>' +
+    '<line class="fog-line fg1" x1="2" y1="20" x2="22" y2="20" stroke="#9aa5b8" stroke-width="1.5"/>' +
+    '<line class="fog-line fg2" x1="4" y1="22.5" x2="20" y2="22.5" stroke="#9aa5b8" stroke-width="1.5"/>',
+  storm:
+    '<path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z" fill="#6a7080"/>' +
+    '<path class="lightning" d="M11 17l-3 5h3l-1 4 4-6h-3l1-3z" fill="#f9c948"/>',
 };
 
 function wIcon(key, size) {
   const s = size || 24;
-  return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" style="display:inline-block;vertical-align:middle;">${SVG_ICONS[key] || SVG_ICONS.cloud}</svg>`;
+  const cls = 'wi wi-' + (SVG_ICONS[key] ? key : 'cloud');
+  return `<svg class="${cls}" viewBox="0 0 24 24" width="${s}" height="${s}" style="display:inline-block;vertical-align:middle;overflow:visible;">${SVG_ICONS[key] || SVG_ICONS.cloud}</svg>`;
 }
 
 const WMO_CODES = {
@@ -1368,9 +1462,7 @@ async function updateWeather() {
     const code = WMO_CODES[cw.weathercode] || ["Unknown", "?"];
 
     const tempF = Math.round(cw.temperature);
-    const tempC = Math.round((tempF - 32) * 5 / 9);
     document.getElementById('weatherTemp').innerHTML = `${tempF}&deg;F`;
-    document.getElementById('weatherTempC').innerHTML = `${tempC}&deg;C`;
     document.getElementById('weatherDesc').textContent = code[0];
     document.getElementById('weatherIcon').innerHTML = wIcon(code[1], 44);
     document.getElementById('weatherWind').textContent = Math.round(cw.windspeed);
