@@ -683,11 +683,13 @@
     transition: opacity 0.5s ease, filter 0.5s ease;
   }
 
-  /* Freshness ladder. Fresh markers are full color; older positions
-     visually fade so the family doesn't trust frozen coordinates as live. */
-  .person-marker.stale-recent { opacity: 0.85; }
-  .person-marker.stale-warm   { opacity: 0.6; filter: saturate(0.55); border-style: dashed; }
-  .person-marker.stale-cold   { opacity: 0.32; filter: grayscale(0.9); border-style: dashed; }
+  /* Freshness ladder. Fresh markers are full color; older positions fade
+     a touch (and pick up a dashed border) so the family doesn't trust
+     frozen coordinates as live — but faces remain recognizable. Color is
+     preserved at every tier. */
+  .person-marker.stale-recent { opacity: 0.92; }
+  .person-marker.stale-warm   { opacity: 0.8; border-style: dashed; }
+  .person-marker.stale-cold   { opacity: 0.65; border-style: dashed; }
 
   .person-marker img {
     width: 100%;
@@ -696,11 +698,12 @@
     display: block;
   }
 
-  /* Small "orbit" face used when a person is at home */
+  /* Smaller "orbit" face used when a person is at home — bumped from 20→28
+     so faces are still recognizable around the house badge. */
   .person-marker.small {
-    width: 20px !important;
-    height: 20px !important;
-    line-height: 18px;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 26px;
     font-size: var(--fs-micro);
     border-width: 1.5px;
   }
@@ -2815,8 +2818,8 @@ function renderLocations(locations) {
 
   // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
   // from home). Smaller icon so they look like satellites orbiting the home badge.
-  const HOME_FACE_SIZE = 20;
-  const HOME_ORBIT_RADIUS = 18; // px from home center to face center
+  const HOME_FACE_SIZE = 28;
+  const HOME_ORBIT_RADIUS = 22; // px from home center to face center
   const homeIconConfig = {};
   atHome.forEach(function (l, idx) {
     const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
