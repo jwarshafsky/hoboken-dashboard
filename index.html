@@ -1154,7 +1154,7 @@
   <!-- Hop right panel mirrors Lincoln Tunnel structure: label / big number / status -->
   <div class="tunnel-traffic" id="hopTraffic">
     <div class="tunnel-label">Hop</div>
-    <div><span class="tunnel-time" id="hopTime">--</span><span class="tunnel-min">&nbsp;min</span></div>
+    <div id="hopValueRow"><span class="tunnel-time" id="hopTime">--</span><span class="tunnel-min" id="hopMin">&nbsp;min</span></div>
     <div class="tunnel-status" id="hopStatus">--</div>
   </div>
 </div>
@@ -2072,6 +2072,7 @@ function renderHopEtas(data) {
   // the next 1–2 ETAs or a service note. Keeps bus and ferry cards visually
   // symmetric — both right-side panels read the same way.
   const timeEl = document.getElementById('hopTime');
+  const minEl = document.getElementById('hopMin');
   const statusEl = document.getElementById('hopStatus');
   if (!timeEl || !statusEl) return;
 
@@ -2080,31 +2081,41 @@ function renderHopEtas(data) {
     statusEl.style.color = color || '#9a9aa8';
   };
 
+  // When the Hop isn't running, replace the "X min" line with a single
+  // "No service" message (hide the trailing "min" suffix entirely).
+  const showNoService = () => {
+    timeEl.textContent = 'No service';
+    timeEl.style.fontSize = '0.9rem';  // shrink so the words fit the chip
+    if (minEl) minEl.style.display = 'none';
+    setStatus('', '#666');
+  };
+  const showServiceMins = (n) => {
+    timeEl.textContent = String(n);
+    timeEl.style.fontSize = '';  // reset to the panel's default big number size
+    if (minEl) minEl.style.display = '';
+  };
+
   if (!data || data.error) {
-    timeEl.textContent = '--';
-    setStatus(data && data.error ? 'Error' : 'No data', '#666');
+    showNoService();
+    setStatus(data && data.error ? 'Error' : '', '#666');
     return;
   }
   if (data.status === 'no vehicles' || !Array.isArray(data) || data.length === 0) {
-    timeEl.textContent = '--';
-    setStatus('No service', '#666');
+    showNoService();
     return;
   }
 
-  // Extract minute values from eta strings ("5 min" → 5). Adjust +1 to
-  // match the previous renderer's rounding behavior.
   const mins = data.map(e => {
     const m = (e.eta || '').match(/^(\d+)/);
     return m ? parseInt(m[1], 10) + 1 : null;
   }).filter(n => n !== null);
 
   if (mins.length === 0) {
-    timeEl.textContent = '--';
-    setStatus('No service', '#666');
+    showNoService();
     return;
   }
 
-  timeEl.textContent = String(mins[0]);
+  showServiceMins(mins[0]);
   if (mins.length > 1) {
     setStatus('next ' + mins.slice(1, 3).join(', ') + ' min', '#6bffb8');
   } else {
