@@ -3019,6 +3019,10 @@ function renderCalEvents(events) {
     byDate[ev.anchorDate].push(ev);
   }
 
+  // Always render the TODAY header (with the live clock + commute line),
+  // even if there are no events today.
+  if (!byDate[todayStr]) byDate[todayStr] = [];
+
   const dateKeys = Object.keys(byDate).sort();
   let html = '';
   for (const dateKey of dateKeys) {
