@@ -1117,6 +1117,7 @@
   <div class="weather-details">
     <div class="wd-stat"><div class="wd-label">Wind</div><div class="wd-value"><span id="weatherWind">--</span><span class="wd-unit">mph</span></div></div>
     <div class="wd-stat"><div class="wd-label">Humidity</div><div class="wd-value"><span id="weatherHumidity">--</span><span class="wd-unit">%</span></div></div>
+    <div class="wd-stat"><div class="wd-label">UV</div><div class="wd-value" id="weatherUV">--</div></div>
     <div class="wd-stat"><div class="wd-label">Pollen</div><div class="wd-value" id="weatherPollen">--</div></div>
   </div>
 </div>
@@ -1417,10 +1418,89 @@ const SVG_ICONS = {
     '<path class="lightning" d="M11 17l-3 5h3l-1 4 4-6h-3l1-3z" fill="#f9c948"/>',
 };
 
-function wIcon(key, size) {
+// Moon phase 0-7: 0=new, 1=waxing crescent, 2=first quarter, 3=waxing gibbous,
+// 4=full, 5=waning gibbous, 6=last quarter, 7=waning crescent.
+// Uses a known new moon as reference (Jan 6 2000 18:14 UTC).
+function moonPhase() {
+  const REF_NEW_MOON_MS = Date.UTC(2000, 0, 6, 18, 14, 0);
+  const SYNODIC_DAYS = 29.5305882;
+  const days = (Date.now() - REF_NEW_MOON_MS) / 86400000;
+  let phase = (days / SYNODIC_DAYS) % 1;
+  if (phase < 0) phase += 1;
+  return Math.floor(phase * 8) % 8;
+}
+
+// Moon disc SVG content for each phase 0-7. Sized within the 24×24 viewBox.
+const MOON_SVGS = [
+  // 0 new — dark disc with subtle outline
+  '<circle cx="12" cy="12" r="5" fill="#1a1a2e" stroke="#666" stroke-width="0.4"/>',
+  // 1 waxing crescent — thin right sliver lit
+  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
+    '<path d="M12 7 a5 5 0 0 1 0 10 a3 5 0 0 0 0 -10 z" fill="#dfdfa6"/>',
+  // 2 first quarter — right half lit
+  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
+    '<path d="M12 7 a5 5 0 0 1 0 10 z" fill="#dfdfa6"/>',
+  // 3 waxing gibbous — mostly lit, dark left sliver
+  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>' +
+    '<path d="M12 7 a5 5 0 0 0 0 10 a3 5 0 0 1 0 -10 z" fill="#1a1a2e"/>',
+  // 4 full — bright disc
+  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>',
+  // 5 waning gibbous — mostly lit, dark right sliver
+  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>' +
+    '<path d="M12 7 a5 5 0 0 1 0 10 a3 5 0 0 0 0 -10 z" fill="#1a1a2e"/>',
+  // 6 last quarter — left half lit
+  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
+    '<path d="M12 7 a5 5 0 0 0 0 10 z" fill="#dfdfa6"/>',
+  // 7 waning crescent — thin left sliver lit
+  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
+    '<path d="M12 7 a5 5 0 0 0 0 10 a3 5 0 0 1 0 -10 z" fill="#dfdfa6"/>',
+];
+
+// Same dimensions/position as the small partly_cloudy sun, but a moon.
+function moonForPartlyCloudy() {
+  const p = moonPhase();
+  // Use radius 2.5 to match sun-circle in partly_cloudy
+  const fill = (p === 4 || p === 3 || p === 5) ? '#dfdfa6' : '#1a1a2e';
+  const lit = '#dfdfa6';
+  const dark = '#1a1a2e';
+  if (p === 0) return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + dark + '" stroke="#666" stroke-width="0.3"/>';
+  if (p === 4) return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + lit + '"/>';
+  // Crescents & quarters
+  const lightSide = (p === 1 || p === 2 || p === 3) ? 1 : 0; // waxing → right lit
+  const shaper = (p === 1 || p === 7) ? 1.5 : (p === 3 || p === 5) ? 1.5 : 2.5;
+  // Simple approximation: half circle of light + offset dark cover
+  const lightHalf = '<path d="M6.5 4 a2.5 2.5 0 0 ' + lightSide + ' 0 5 z" fill="' + lit + '"/>';
+  if (p === 2 || p === 6) {
+    // half lit
+    const base = '<circle cx="6.5" cy="6.5" r="2.5" fill="' + dark + '"/>';
+    return base + lightHalf;
+  }
+  // crescent / gibbous — base + ellipse overlay
+  const base = (p === 1 || p === 2 || p === 3) ? dark : lit;
+  const overlay = (p === 1 || p === 7) ? lit : dark;
+  return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + base + '"/>' +
+    '<ellipse cx="6.5" cy="6.5" rx="' + (p === 1 || p === 3 ? '1.4' : '1.4') + '" ry="2.5" fill="' + overlay + '"/>';
+}
+
+function wIcon(key, size, isNight) {
   const s = size || 24;
-  const cls = 'wi wi-' + (SVG_ICONS[key] ? key : 'cloud');
-  return `<svg class="${cls}" viewBox="0 0 24 24" width="${s}" height="${s}" style="display:inline-block;vertical-align:middle;overflow:visible;">${SVG_ICONS[key] || SVG_ICONS.cloud}</svg>`;
+  let svgKey = key;
+  // At night, swap sun-related icons for moon variants
+  if (isNight) {
+    if (key === 'sun') svgKey = 'moon';
+    else if (key === 'partly_cloudy') svgKey = 'partly_cloudy_night';
+  }
+  const cls = 'wi wi-' + (SVG_ICONS[svgKey] ? svgKey : 'cloud');
+  let body = SVG_ICONS[svgKey];
+  // Dynamic moon body based on current phase
+  if (svgKey === 'moon') {
+    body = '<g transform="translate(0,0) scale(2.0) translate(-6,-6)">' + MOON_SVGS[moonPhase()] + '</g>';
+  } else if (svgKey === 'partly_cloudy_night') {
+    body = moonForPartlyCloudy() +
+      '<path d="M9 17h7c2.21 0 4-1.79 4-4 0-2.05-1.53-3.74-3.5-3.97-.07-2.79-2.34-5.03-5.14-5.03-2.4 0-4.41 1.65-4.97 3.88-.04 0-.07 0-.11 0-2.21 0-4 1.79-4 4 0 1.95 1.4 3.57 3.24 3.92" fill="#9aa5b8"/>';
+  }
+  if (!body) body = SVG_ICONS.cloud;
+  return `<svg class="${cls}" viewBox="0 0 24 24" width="${s}" height="${s}" style="display:inline-block;vertical-align:middle;overflow:visible;">${body}</svg>`;
 }
 
 const WMO_CODES = {
@@ -1556,8 +1636,8 @@ async function updateWeather() {
   let apiSucceeded = false;
   try {
     const url = 'https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032'
-      + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max'
-      + '&hourly=relativehumidity_2m,temperature_2m,weathercode,precipitation_probability'
+      + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max'
+      + '&hourly=relativehumidity_2m,temperature_2m,weathercode,precipitation_probability,is_day,uv_index'
       + '&temperature_unit=fahrenheit&timezone=America/New_York';
     const res = await fetchT(url);
     const data = await res.json();
@@ -1566,11 +1646,44 @@ async function updateWeather() {
     const cw = data.current_weather;
     const code = WMO_CODES[cw.weathercode] || ["Unknown", "?"];
 
+    // Is it night right now? Use the per-hour is_day flag from the API.
+    const nowHourForNight = new Date().getHours();
+    const isNightNow = !(data.hourly && data.hourly.is_day && data.hourly.is_day[nowHourForNight]);
+
     const tempF = Math.round(cw.temperature);
     document.getElementById('weatherTemp').innerHTML = `${tempF}&deg;F`;
     document.getElementById('weatherDesc').textContent = code[0];
-    document.getElementById('weatherIcon').innerHTML = wIcon(code[1], 44);
+    document.getElementById('weatherIcon').innerHTML = wIcon(code[1], 44, isNightNow);
     document.getElementById('weatherWind').textContent = Math.round(cw.windspeed);
+
+    // UV — prefer current hour's value, fall back to today's daily max
+    try {
+      let uvNow = null;
+      const hourlyUV = data.hourly && data.hourly.uv_index;
+      if (Array.isArray(hourlyUV) && hourlyUV[nowHourForNight] != null) {
+        uvNow = hourlyUV[nowHourForNight];
+      } else if (data.daily && Array.isArray(data.daily.uv_index_max)) {
+        uvNow = data.daily.uv_index_max[0];
+      }
+      const uvEl = document.getElementById('weatherUV');
+      if (uvEl) {
+        if (uvNow == null) {
+          uvEl.textContent = '--';
+        } else {
+          const uvR = Math.round(uvNow);
+          uvEl.textContent = uvR;
+          // Color matches the standard EPA UV index scale
+          let uvColor = '#9aa5b8';
+          if (uvR >= 11) uvColor = '#c970c9';      // extreme — violet
+          else if (uvR >= 8) uvColor = '#ff5050';  // very high — red
+          else if (uvR >= 6) uvColor = '#ff9b40';  // high — orange
+          else if (uvR >= 3) uvColor = '#e0c040';  // moderate — yellow
+          else if (uvR >= 1) uvColor = '#8acc70';  // low — green-ish
+          uvEl.style.color = uvColor;
+        }
+      }
+    } catch (e) { console.error('UV display error:', e); }
+
     document.getElementById('weatherHi').textContent = Math.round(data.daily.temperature_2m_max[0]);
     document.getElementById('weatherLo').textContent = Math.round(data.daily.temperature_2m_min[0]);
 
@@ -1621,6 +1734,7 @@ async function updateWeather() {
     // Hourly forecast
     const hourlyTemps = data.hourly.temperature_2m;
     const hourlyCodes = data.hourly.weathercode;
+    const hourlyIsDay = data.hourly.is_day || [];
     if (hourlyTemps && hourlyCodes) {
       let fhtml = '';
       let count = 0;
@@ -1631,7 +1745,8 @@ async function updateWeather() {
         const displayH = h % 24;
         const ampm = displayH >= 12 ? 'PM' : 'AM';
         const h12 = displayH % 12 || 12;
-        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${wIcon(ic[1], 14)}</span><span class="wh-temp">${t}&deg;</span></div>`;
+        const hourIsNight = !hourlyIsDay[h];
+        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${wIcon(ic[1], 14, hourIsNight)}</span><span class="wh-temp">${t}&deg;</span></div>`;
         h += 2;
         count++;
       }
