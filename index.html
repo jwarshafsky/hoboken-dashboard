@@ -478,6 +478,26 @@
   }
   .cal-day-header.is-future { color: #9a9aa8; }
 
+  /* Morning commute estimate — first line of the calendar Mon-Fri 7-10:30 AM.
+     Reads as a prominent action item; the minute count picks up red when
+     it's tight (>= 35 min) so Jeff can glance and judge urgency. */
+  #commuteEstimate {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #6bffb8;
+    padding: 8px 0 10px;
+    margin-bottom: 6px;
+    border-bottom: 0.5px solid #1a1a28;
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  #commuteEstimate #commuteMin {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  #commuteEstimate.tight #commuteMin { color: #ff9b40; }
+
   .cal-event {
     padding: 2px 0;
     font-size: var(--fs-label);
@@ -1062,6 +1082,12 @@
 
 <!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
 <div class="card" id="calCard">
+  <!-- Morning commute estimate (Mon-Fri 7:00-10:30 AM). Lives above the
+       scrollable .cal-content so it survives calendar re-renders. Hidden
+       outside the commute window. -->
+  <div id="commuteEstimate" style="display:none;">
+    Commute to office: <span id="commuteMin">--</span> min
+  </div>
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
     <div id="calEvents"></div>
@@ -1439,6 +1465,87 @@ function updateClock() {
   const timeStr = `${h12}:${m} ${ampm}`;
   const el = document.querySelector('.cal-header-time');
   if (el) el.textContent = timeStr;
+
+  // Refresh the commute estimate every clock tick so the wait countdown
+  // tracks elapsed time between proxy polls (proxy fetches are typically
+  // every 30-60s; we want minute-accurate display).
+  updateCommuteEstimate();
+}
+
+// ============================================================
+// COMMUTE ESTIMATE — Mon-Fri 7:00-10:30 AM
+// Total minutes from leaving home now to being at 11 Times Square:
+//   wait_for_next_bus + 13 (ride to PABT) + max(0, tunnel - 8) + 5
+// where the 5 covers home→stop walk (2) + PABT→office walk (3).
+// ============================================================
+function updateCommuteEstimate() {
+  const el = document.getElementById('commuteEstimate');
+  if (!el) return;
+  const now = new Date();
+  const day = now.getDay();
+  const time = now.getHours() * 60 + now.getMinutes();
+  // Mon-Fri only, 7:00 AM to 10:30 AM inclusive
+  if (day === 0 || day === 6 || time < 7 * 60 || time > 10 * 60 + 30) {
+    el.style.display = 'none';
+    return;
+  }
+
+  const data = window._lastProxyData;
+  const fetchedAtSec = window._transitFetchedAt || Math.floor(Date.now() / 1000);
+
+  // Collect next-bus minutes from both stops, reconciled against now.
+  let waitMin = null;
+  if (data && data.stops) {
+    const allPreds = [];
+    for (const sid of ['20490', '20523']) {
+      const s = data.stops[sid];
+      if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
+    }
+    for (const p of allPreds) {
+      const reported = parseInt(p.countdown, 10);
+      if (!isFinite(reported)) continue;
+      const arrivalMs = fetchedAtSec * 1000 + reported * 60000;
+      const mins = Math.max(0, Math.round((arrivalMs - Date.now()) / 60000));
+      if (mins < 60 && (waitMin === null || mins < waitMin)) waitMin = mins;
+    }
+  }
+  // Fallback to static schedule if no live/inferred data
+  if (waitMin === null) waitMin = _nextBusFromSchedule();
+  if (waitMin === null) { el.style.display = 'none'; return; }
+
+  // Tunnel delay: schedule already bakes in ~8 min for the tunnel; only
+  // count excess as extra delay.
+  let tunnelExtra = 0;
+  if (data && data.tunnel && data.tunnel.travelTime) {
+    const t = parseInt(data.tunnel.travelTime, 10);
+    if (isFinite(t) && t > 8) tunnelExtra = t - 8;
+  }
+
+  const total = waitMin + 13 + tunnelExtra + 5;
+  document.getElementById('commuteMin').textContent = total;
+  el.style.display = '';
+  el.classList.toggle('tight', total >= 35);
+}
+
+function _nextBusFromSchedule() {
+  // Minutes until the next scheduled 126 or 119, whichever is sooner.
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const sched126 = isSunday() ? BUS_126_SCHEDULE.sunday
+                  : isWeekend() ? BUS_126_SCHEDULE.saturday
+                  : BUS_126_SCHEDULE.weekday;
+  const sched119 = isWeekend() ? BUS_119_SCHEDULE.saturday : BUS_119_SCHEDULE.weekday;
+  let earliest = null;
+  for (const arr of [sched126, sched119]) {
+    if (!arr) continue;
+    for (const t of arr) {
+      const [h, m] = t.split(':').map(n => parseInt(n, 10));
+      const depMin = h * 60 + m;
+      const delta = depMin - nowMin;
+      if (delta >= 0 && (earliest === null || delta < earliest)) earliest = delta;
+    }
+  }
+  return earliest;
 }
 
 // ============================================================
@@ -1727,6 +1834,9 @@ async function fetchProxy() {
 
     // Stash fetched_at so renderLivePredictions can reconcile against current time
     window._transitFetchedAt = data.fetched_at || Math.floor(Date.now() / 1000);
+    // Stash the whole response so updateCommuteEstimate() can derive the
+    // morning commute number even on its own clock-driven timer ticks.
+    window._lastProxyData = data;
 
     if (data.tunnel && !data.tunnel.error) {
       const t = data.tunnel;
@@ -1792,6 +1902,9 @@ async function fetchProxy() {
         hl2.setAttribute('class', 'bus-headlight ' + mode);
       }
     }
+
+    // Recompute the morning commute estimate with this fresh data.
+    updateCommuteEstimate();
   } catch (e) {
     console.error('Proxy fetch error:', e);
     markFail('transit');
