@@ -440,6 +440,12 @@
   }
   .ms-name { color: #fff; font-weight: 600; }
   .ms-status { color: #ddd; margin-left: 5px; }
+  /* Freshness-pill tinting matches map-marker decay. */
+  .ms-pill--warm .ms-status { color: #f0c040; }
+  .ms-pill--warm .ms-ago    { color: #f0c040; }
+  .ms-pill--cold            { opacity: 0.6; }
+  .ms-pill--cold .ms-status { color: #a0a0b0; font-style: italic; }
+  .ms-pill--cold .ms-ago    { color: #a0a0b0; }
   .ms-ago { color: #777; margin-left: 5px; font-size: var(--fs-micro); }
 
   /* Calendar events (rendered from Google Calendar API) */
@@ -662,19 +668,26 @@
 
   /* Custom location markers */
   .person-marker {
-    width: 36px !important;
-    height: 36px !important;
+    width: 44px !important;
+    height: 44px !important;
     border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.45);
-    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    border: 1.5px solid rgba(255,255,255,0.55);
+    box-shadow: 0 0 6px rgba(0,0,0,0.65);
     overflow: hidden;
     background: #3a3a48;
     color: #000;
     font-weight: 700;
     font-size: var(--fs-label);
-    line-height: 36px;
+    line-height: 44px;
     text-align: center;
+    transition: opacity 0.5s ease, filter 0.5s ease;
   }
+
+  /* Freshness ladder. Fresh markers are full color; older positions
+     visually fade so the family doesn't trust frozen coordinates as live. */
+  .person-marker.stale-recent { opacity: 0.85; }
+  .person-marker.stale-warm   { opacity: 0.6; filter: saturate(0.55); border-style: dashed; }
+  .person-marker.stale-cold   { opacity: 0.32; filter: grayscale(0.9); border-style: dashed; }
 
   .person-marker img {
     width: 100%;
@@ -693,16 +706,17 @@
   }
 
   .home-marker {
-    width: 30px !important;
-    height: 30px !important;
-    background: #3a7bd5;
+    width: 24px !important;
+    height: 24px !important;
+    background: rgba(58, 123, 213, 0.85);
     border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.45);
-    box-shadow: 0 0 4px rgba(0,0,0,0.6);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    box-shadow: 0 0 4px rgba(0,0,0,0.5);
     display: flex !important;
     align-items: center;
     justify-content: center;
   }
+  .home-marker svg { width: 16px; height: 16px; }
 
   .bus-marker {
     background: none !important;
@@ -1016,8 +1030,20 @@
 
   .no-service {
     font-size: var(--fs-label);
-    color: #444;
+    color: #6a6a78;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
+  .no-service svg { width: 11px; height: 11px; flex-shrink: 0; opacity: 0.8; }
+  /* Three flavors of "nothing to show right now": */
+  /* 1) Intentional emptiness — service is asleep / not running today */
+  .no-service.is-asleep   { color: #6a6a78; }
+  /* 2) Schedule fallback — proxy didn't return live predictions but we know
+        when the next scheduled departure is */
+  .no-service.is-fallback { color: #9a9aa8; }
+  /* 3) Honest error — needs to read amber, not the same as quiet emptiness */
+  .no-service.is-error    { color: #f0c040; }
 
   /* Bus headlights — green when API live, orange when inferred from
      vehicle positions, red when falling back to static schedule. */
@@ -1867,11 +1893,13 @@ function getNextDepartures(times, count) {
 
 function renderDepartures(times, label) {
   const next = getNextDepartures(times, 3);
+  // SVG glyphs for the intentional/fallback/error empty states.
+  const MOON_GLYPH = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>';
   if (times.length === 0) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">No service today</div></div>`;
+    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-asleep">${MOON_GLYPH}No service today</div></div>`;
   }
   if (next.length === 0) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">Done for today</div></div>`;
+    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-asleep">${MOON_GLYPH}Done for today</div></div>`;
   }
   let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
   for (const t of next) {
@@ -1943,7 +1971,7 @@ function loadDot(passload) {
 
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">Error</div></div>`;
+    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>Reconnecting</div></div>`;
   }
   if (Array.isArray(predictions) && predictions.length > 0) {
     let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
@@ -1984,7 +2012,7 @@ function renderLivePredictions(predictions, label) {
     html += '</div></div>';
     return html;
   }
-  return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service">No predictions</div></div>`;
+  return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zM12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>Schedule only</div></div>`;
 }
 
 async function fetchProxy() {
@@ -2438,6 +2466,13 @@ function isOverWater(lat, lon) {
 const _statusPersistence = {};  // tid → { candidate, since, confirmed }
 
 function personStatus(loc) {
+  // Cold-stale (≥3h since last fix): coordinates are very likely lying.
+  // Don't claim "at home" or "2.3 mi away" — say "last seen X" so the
+  // family treats the dot as a memory, not a fact.
+  if (loc.received_at) {
+    const ageSec = Date.now() / 1000 - loc.received_at;
+    if (ageSec >= 10800) return 'last seen ' + agoText(loc.received_at * 1000);
+  }
   const dHome = distMi(HOME, loc);
   if (dHome < HOME_RADIUS_MI) return 'at home';
 
@@ -2522,18 +2557,20 @@ function initHobokenMap() {
     attribution: '',
   }).addTo(_hobokenMap);
 
-  // Home marker — blue house icon (always shown)
+  // Home marker — small blue house. Reduced from 30→24px so the family
+  // bubbles (the actual answer to "where is everyone?") become the loudest
+  // thing on the map. When people are at home they orbit this badge in a ring.
   const homeIcon = L.divIcon({
     className: 'home-marker',
     html:
-      '<svg viewBox="0 0 24 24" width="22" height="22" fill="#fff">' +
+      '<svg viewBox="0 0 24 24" fill="#fff">' +
       '<path d="M12 3 3 11h2v8h5v-5h4v5h5v-8h2z"/></svg>',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
   });
   _homeMarker = L.marker([HOME.lat, HOME.lon], {
     icon: homeIcon,
-    zIndexOffset: 1000,  // keep home on top of person markers
+    zIndexOffset: -500,  // home sits BEHIND people now (they're the answer)
   }).addTo(_hobokenMap);
 
   // Initial view: tight on home (will re-fit once locations arrive)
@@ -2831,19 +2868,28 @@ function renderLocations(locations) {
       ? '<img src="' + faceUrl + '" alt="' + displayName(loc) + '"/>'
       : (displayName(loc) || '?').substring(0, 2).toUpperCase();
 
+    // Freshness ladder (drives marker visual decay + pill copy below).
+    // fresh < 3m, recent < 30m, stale < 3h, cold ≥ 3h.
+    const ageSec = loc.received_at ? (Date.now() / 1000 - loc.received_at) : 0;
+    let staleClass = '';
+    if (!loc.received_at || ageSec >= 10800)      staleClass = ' stale-cold';
+    else if (ageSec >= 1800)                       staleClass = ' stale-warm';
+    else if (ageSec >= 180)                        staleClass = ' stale-recent';
+
     let latlng, iconSize, iconAnchor, className;
     if (homeIconConfig[loc.tid]) {
       const cfg = homeIconConfig[loc.tid];
       latlng = cfg.latlng;
       iconSize = cfg.iconSize;
       iconAnchor = cfg.iconAnchor;
-      className = cfg.className;
+      className = cfg.className + staleClass;
     } else {
       const pos = positions[loc.tid] || { lat: loc.lat, lon: loc.lon };
       latlng = [pos.lat, pos.lon];
-      iconSize = [36, 36];
-      iconAnchor = [18, 18];
-      className = 'person-marker';
+      // Enlarged from 36→44 so faces dominate the map hierarchy.
+      iconSize = [44, 44];
+      iconAnchor = [22, 22];
+      className = 'person-marker' + staleClass;
     }
 
     const icon = L.divIcon({
@@ -2875,7 +2921,11 @@ function renderLocations(locations) {
       overlay.innerHTML = locations.map(function (l) {
         const status = personStatus(l);
         const ago = agoText(l.received_at * 1000);
-        return '<span class="ms-pill"><span class="ms-name">' + displayName(l) +
+        const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
+        let cls = '';
+        if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
+        else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
+        return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
           '</span><span class="ms-status">' + status +
           '</span><span class="ms-ago">' + ago + '</span></span>';
       }).join('');
@@ -2897,12 +2947,18 @@ function renderLocations(locations) {
     _smoothZoomTo([HOME.lat, HOME.lon], 15);
   } else if (anyApproaching) {
     var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
-    var lats = [HOME.lat].concat(approaching.map(function (l) { return l.lat; }));
-    var lngs = [HOME.lon].concat(approaching.map(function (l) { return l.lon; }));
+    // Also include any approaching NY-bound bus that's within ~3 mi of home
+    // so the map auto-frames "Jeff + the bus he's about to catch" together.
+    var nearbyBuses = (_lastBuses || []).filter(function (b) {
+      return b && b.lat && b.lon && distMi(HOME, b) <= NEAR_HOME_RADIUS_MI;
+    });
+    var pts = approaching.concat(nearbyBuses);
+    var lats = [HOME.lat].concat(pts.map(function (p) { return p.lat; }));
+    var lngs = [HOME.lon].concat(pts.map(function (p) { return p.lon; }));
     _smoothZoomBounds(
       [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
        [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
-      { padding: [30, 30], maxZoom: 18 }
+      { padding: [30, 30], maxZoom: 16 }
     );
   } else {
     var lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
