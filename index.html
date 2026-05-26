@@ -2282,10 +2282,17 @@ let _hobokenMap = null;
 let _personMarkers = {};
 let _busMarkers = {};
 
-// Animation state for smooth bus/hop marker movement between polls
-const MARKER_ANIM_MS = 14000;
+// Animation state for smooth bus/hop marker movement between polls.
+// Duration slightly exceeds the 15s poll cadence so the marker never visibly
+// "stops" between polls; cubic ease-in-out softens both ends of the slide.
+const MARKER_ANIM_MS = 15500;
 let _markerAnims = {};
 let _markerAnimFrame = null;
+
+// Cubic ease-in-out: gentle start and finish, near-linear in the middle.
+function _easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
 
 function _animateMarkers() {
   const now = performance.now();
@@ -2293,12 +2300,13 @@ function _animateMarkers() {
   for (const id of Object.keys(_markerAnims)) {
     const a = _markerAnims[id];
     if (!a.marker) { delete _markerAnims[id]; continue; }
-    const t = Math.min((now - a.t0) / MARKER_ANIM_MS, 1);
+    const tRaw = Math.min((now - a.t0) / MARKER_ANIM_MS, 1);
+    const t = _easeInOutCubic(tRaw);
     a.marker.setLatLng([
       a.lat0 + (a.lat1 - a.lat0) * t,
       a.lon0 + (a.lon1 - a.lon0) * t,
     ]);
-    if (t < 1) active = true;
+    if (tRaw < 1) active = true;
     else delete _markerAnims[id];
   }
   _markerAnimFrame = active ? requestAnimationFrame(_animateMarkers) : null;
@@ -2307,7 +2315,15 @@ function _animateMarkers() {
 function _slideTo(id, marker, lat, lon) {
   const cur = marker.getLatLng();
   if (Math.abs(cur.lat - lat) < 0.00001 && Math.abs(cur.lng - lon) < 0.00001) return;
-  _markerAnims[id] = { marker, lat0: cur.lat, lon0: cur.lng, lat1: lat, lon1: lon, t0: performance.now() };
+  // Pick up from the marker's current visible position (which may itself
+  // be mid-animation) so consecutive polls produce one continuous glide
+  // rather than a jump-reset.
+  _markerAnims[id] = {
+    marker,
+    lat0: cur.lat, lon0: cur.lng,
+    lat1: lat,     lon1: lon,
+    t0: performance.now(),
+  };
   if (!_markerAnimFrame) _markerAnimFrame = requestAnimationFrame(_animateMarkers);
 }
 
