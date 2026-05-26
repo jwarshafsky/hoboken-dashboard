@@ -2514,8 +2514,8 @@ function initHobokenMap() {
   const ZOOM_OUT_CODES = new Set([428, 34]);   // 428 = VK_CHANNEL_DOWN, 34 = PageDown
   // Select / OK button in the center of the D-pad: typically Enter (13),
   // sometimes 'Select' or the legacy 'Spacebar'. Cycles map view mode.
-  const SELECT_KEYS  = new Set(['Enter', 'Select', ' ', 'Spacebar']);
-  const SELECT_CODES = new Set([13, 32]);
+  const SELECT_KEYS  = new Set(['Enter', 'Select', ' ', 'Spacebar', 'OK']);
+  const SELECT_CODES = new Set([13, 32, 23]);   // 23 = Android KEYCODE_DPAD_CENTER
 
   // View-mode state machine (0..3):
   //   0 = default                  (street-grid bearing, no labels)
@@ -2550,7 +2550,21 @@ function initHobokenMap() {
     }
   }
   applyViewMode();
+  // On-screen key debug — shows the last key event so we can identify what
+  // the remote actually emits. Toggle by appending ?keydebug to the URL.
+  let _keyDebugEl = null;
+  if (location.search.includes('keydebug')) {
+    _keyDebugEl = document.createElement('div');
+    _keyDebugEl.style.cssText =
+      'position:fixed;bottom:8px;right:8px;z-index:9999;background:#000;color:#0f0;' +
+      'font:13px monospace;padding:6px 10px;border:1px solid #0f0;border-radius:4px;';
+    _keyDebugEl.textContent = 'keydebug ready';
+    document.body.appendChild(_keyDebugEl);
+  }
   window.addEventListener('keydown', function (e) {
+    if (_keyDebugEl) {
+      _keyDebugEl.textContent = 'key=' + e.key + ' code=' + e.code + ' kc=' + e.keyCode;
+    }
     if (!_hobokenMap) return;
     const k = e.key || '';
     if (ZOOM_IN_KEYS.has(k) || ZOOM_IN_CODES.has(e.keyCode)) {
