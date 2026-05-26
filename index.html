@@ -876,6 +876,10 @@
     overflow: hidden;
   }
 
+  /* Stale-panel dimmer: applied when a source has been offline >5 min, so
+     frozen countdowns don't masquerade as live data. */
+  .panel-stale { opacity: 0.4; filter: grayscale(0.5); transition: opacity 0.4s, filter 0.4s; }
+
   .route-group {
     display: flex;
     align-items: center;
@@ -1302,6 +1306,23 @@ function updateStatusBar() {
     errEl.className = 'status-ok';
     errEl.textContent = '';
   }
+
+  // When transit or hop has been offline >5 min, dim the corresponding
+  // panel so the family doesn't trust frozen countdowns as live.
+  const FIVE_MIN = 5 * 60 * 1000;
+  const now = Date.now();
+  function staleClass(panelId, key) {
+    const s = apiStatus[key];
+    if (!s) return;
+    const offline = s.ok === false;
+    const ageMs = s.lastUpdate ? (now - s.lastUpdate) : Infinity;
+    const stale = offline && ageMs > FIVE_MIN;
+    const el = document.getElementById(panelId);
+    if (el) el.classList.toggle('panel-stale', stale);
+  }
+  staleClass('busContent', 'transit');
+  staleClass('ferryContent', 'transit');
+  staleClass('hopTraffic', 'hop');
 }
 
 // ============================================================
@@ -2537,8 +2558,16 @@ function initHobokenMap() {
   //   2 = default + bus labels     (true north, permanent #s)
   //   3 = street grid + bus labels (streets up, permanent #s)
   const STREET_GRID_BEARING = -29;
-  window._viewMode = 0;
+  // Restore the last view mode from prior session if available so a nightly
+  // reload (or Onn restart) lands the family back where they left off.
+  let _persistedMode = 0;
+  try {
+    const v = parseInt(localStorage.getItem('viewMode'), 10);
+    if (!isNaN(v) && v >= 0 && v <= 3) _persistedMode = v;
+  } catch (e) {}
+  window._viewMode = _persistedMode;
   window._showBusLabels = false;
+  let _lastSelectTs = 0;
   function applyViewMode() {
     const m = window._viewMode | 0;
     const wantStreetGrid = (m === 1 || m === 3);
@@ -2577,6 +2606,9 @@ function initHobokenMap() {
     if (_keyDebugEl) {
       _keyDebugEl.textContent = 'key=' + e.key + ' code=' + e.code + ' kc=' + e.keyCode;
     }
+    // Silently ignore the remote when the screen is asleep — otherwise the
+    // family wakes up to a randomly-cycled view mode.
+    if (typeof isSleeping === 'function' && isSleeping()) return;
     if (!_hobokenMap) return;
     const k = e.key || '';
     if (ZOOM_IN_KEYS.has(k) || ZOOM_IN_CODES.has(e.keyCode)) {
@@ -2586,7 +2618,15 @@ function initHobokenMap() {
       _hobokenMap.zoomOut(1);
       e.preventDefault(); e.stopPropagation();
     } else if (SELECT_KEYS.has(k) || SELECT_CODES.has(e.keyCode)) {
+      // Debounce — Onn remote auto-repeats; 150ms keeps the cycle predictable.
+      const now = performance.now();
+      if (now - _lastSelectTs < 150) {
+        e.preventDefault(); e.stopPropagation();
+        return;
+      }
+      _lastSelectTs = now;
       window._viewMode = ((window._viewMode | 0) + 1) % 4;
+      try { localStorage.setItem('viewMode', String(window._viewMode)); } catch (_) {}
       applyViewMode();
       e.preventDefault(); e.stopPropagation();
     }
@@ -2707,6 +2747,7 @@ function renderBuses(buses) {
       _hobokenMap.removeLayer(_busMarkers[key]);
       delete _busMarkers[key];
       delete _markerAnims[key];
+      delete _busHeadings[key];   // avoid long-uptime memory leak
     }
   }
 }
@@ -3240,11 +3281,29 @@ function isSleeping() {
   return h >= 1 && h < 7;
 }
 
+let _wasSleeping = false;
 function checkSleepMode() {
   const sleeping = isSleeping();
   document.body.style.visibility = sleeping ? 'hidden' : 'visible';
   document.body.style.background = sleeping ? '#000' : '#0a0a0f';
   document.body.classList.toggle('sleeping', sleeping);
+  // Sleep → wake transition: force a one-shot refresh of every feed so the
+  // family doesn't see stale "last night" data for up to 15s after 7 AM.
+  // Fade-in via opacity so the screen doesn't pop on.
+  if (_wasSleeping && !sleeping) {
+    try { updateTransit && updateTransit(); } catch (e) {}
+    try { updateWeather && updateWeather(); } catch (e) {}
+    try { fetchAlerts && fetchAlerts(); } catch (e) {}
+    try { fetchLocations && fetchLocations(); } catch (e) {}
+    try { fetchFerries && fetchFerries(); } catch (e) {}
+    try { fetchHop && fetchHop(); } catch (e) {}
+    document.body.style.opacity = '0';
+    requestAnimationFrame(function () {
+      document.body.style.transition = 'opacity 600ms ease';
+      document.body.style.opacity = '1';
+    });
+  }
+  _wasSleeping = sleeping;
 }
 
 // LATE MODE — hide bus + ferry, expand map to full height.
