@@ -416,25 +416,21 @@
   }
   .cal-day-header.is-future { color: #9a9aa8; }
 
-  /* Morning commute estimate — first line of the calendar Mon-Fri 7-10:30 AM.
-     Reads as a prominent action item; the minute count picks up red when
-     it's tight (>= 35 min) so Jeff can glance and judge urgency. */
-  #commuteEstimate {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #6bffb8;
-    padding: 8px 0 10px;
-    margin-bottom: 6px;
-    border-bottom: 0.5px solid #1a1a28;
-    white-space: nowrap;
-    letter-spacing: 0.01em;
+  /* Morning commute estimate — sits as a child line under the TODAY day
+     header (Mon-Fri 7:00-10:30 AM). Same font size as a cal-event so it
+     reads as a calendar-style "first item of the day", not a banner. The
+     minute count picks up amber when it's tight (>= 35 min). */
+  .cal-commute {
+    font-size: var(--fs-label);
+    color: #cfcfd6;
+    padding: 2px 0;
+    line-height: 1.25;
   }
-  #commuteEstimate #commuteMin {
-    font-size: 1.15rem;
-    font-weight: 700;
+  .cal-commute #commuteMin {
+    font-weight: 600;
     color: #fff;
   }
-  #commuteEstimate.tight #commuteMin { color: #ff9b40; }
+  .cal-commute.tight #commuteMin { color: #ff9b40; }
 
   .cal-event {
     padding: 2px 0;
@@ -1058,12 +1054,6 @@
 
 <!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
 <div class="card" id="calCard">
-  <!-- Morning commute estimate (Mon-Fri 7:00-10:30 AM). Lives above the
-       scrollable .cal-content so it survives calendar re-renders. Hidden
-       outside the commute window. -->
-  <div id="commuteEstimate" style="display:none;">
-    Commute to office: <span id="commuteMin">--</span> min
-  </div>
   <div class="cal-content" id="calContent">
     <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
     <div id="calEvents"></div>
@@ -3060,6 +3050,14 @@ function renderCalEvents(events) {
     }
     html += '<div class="cal-day-header ' + cls + '">' + dayLabel + timeHtml + '</div>';
 
+    // Morning commute estimate sits as a child line under the TODAY header.
+    // updateCommuteEstimate() toggles display + fills in the minute count;
+    // outside the Mon-Fri 7:00-10:30 AM window, display stays "none".
+    if (isToday) {
+      html += '<div class="cal-commute" id="commuteEstimate" style="display:none;">' +
+              'Commute to office: <span id="commuteMin">--</span> min</div>';
+    }
+
     for (const ev of byDate[dateKey]) {
       let timeLabel = '';
       let evCls = 'cal-event';
@@ -3106,6 +3104,9 @@ function renderCalEvents(events) {
     }
   }
   container.innerHTML = html;
+  // The commute line is rendered hidden inline; reveal/update immediately so
+  // there's no 1s flicker waiting for the next clock tick.
+  if (typeof updateCommuteEstimate === 'function') updateCommuteEstimate();
   // After paint, trim trailing items / orphan day headers until everything fits cleanly.
   // Use double-rAF + setTimeout to make sure layout has settled before measuring.
   requestAnimationFrame(function () {
