@@ -165,8 +165,12 @@
 
   .weather-icon {
     flex-shrink: 0;
-    width: 54px;
-    height: 54px;
+    /* Sized to visually match the .weather-temp glyphs to the right.
+       amcharts SVGs have ~15% padding inside the 64-unit viewBox, so the
+       rendered art is roughly 85% of the container — at 76px box the
+       visible icon is ~64px, matching the temp font height. */
+    width: 76px;
+    height: 76px;
     display: flex;
     align-items: center;
     justify-content: center;
