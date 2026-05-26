@@ -142,7 +142,7 @@
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 10px;
+    gap: 6px;
   }
 
   .weather-main { display: contents; }  /* transparent wrapper */
@@ -156,13 +156,13 @@
     flex-direction: row;
     align-items: center;
     justify-content: space-evenly;
-    padding: 4px 2px 0;
+    padding: 2px 2px 0;
   }
 
   .weather-icon {
     flex-shrink: 0;
-    width: 64px;
-    height: 64px;
+    width: 54px;
+    height: 54px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -262,7 +262,7 @@
   }
 
   .weather-temp {
-    font-size: var(--fs-hero);
+    font-size: 2rem;
     font-weight: 200;
     color: #fff;
     line-height: 1;
@@ -281,7 +281,7 @@
     justify-content: center;
     flex-wrap: wrap;
     gap: 6px 10px;
-    margin-top: 4px;
+    margin-top: 2px;
     font-size: var(--fs-micro);
     color: var(--c-mute);
     white-space: nowrap;
@@ -313,14 +313,14 @@
     align-items: center;
     border-top: 0.5px solid #1e1e2e;
     border-bottom: 0.5px solid #1e1e2e;
-    padding: 8px 2px;
+    padding: 5px 2px;
   }
 
   .weather-hour {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
+    gap: 2px;
     flex: 1;
     min-width: 0;
   }
@@ -350,7 +350,7 @@
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 4px;
-    padding: 2px 2px 0;
+    padding: 0 2px;
   }
 
   .weather-details .wd-stat {
@@ -786,14 +786,15 @@
 
   /* Transit cards - full width.
      min-height keeps bus and ferry visually equal even when the ferry has
-     only one route to display (bus shows 126 + 119, naturally taller). */
+     only one route to display (bus shows 126 + 119, naturally taller).
+     Compact padding lets map + calendar (row 1) take more vertical space. */
   .transit-card {
     grid-column: 1 / 3;
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    padding: 10px 14px;
-    min-height: 110px;
+    padding: 7px 12px;
+    min-height: 92px;
   }
 
   .transit-icon {
@@ -822,13 +823,13 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: #9a9aa8;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
   }
 
   .transit-routes {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 3px;
     align-items: flex-start;
     overflow: hidden;
   }
@@ -862,7 +863,7 @@
     align-items: center;
     gap: 0;
     background: #1a1a2a;
-    padding: 4px 6px;
+    padding: 3px 6px;
     border-radius: 6px;
     width: 60px;
     text-align: center;
