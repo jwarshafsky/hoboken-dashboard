@@ -2491,6 +2491,22 @@ function initHobokenMap() {
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
 
+  // Remote-control zoom: intercept ArrowUp / ArrowDown before Leaflet's
+  // keyboard pan handler sees them, and route to zoomIn / zoomOut.
+  // Left / right keep panning as Leaflet's default.
+  window.addEventListener('keydown', function (e) {
+    if (!_hobokenMap) return;
+    if (e.key === 'ArrowUp') {
+      _hobokenMap.zoomIn(1);
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (e.key === 'ArrowDown') {
+      _hobokenMap.zoomOut(1);
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);  // capture phase: beat Leaflet's own listener
+
   // Seed home stubs so face bubbles appear before first network fetch
   renderLocations(HOME_STUBS);
 }
