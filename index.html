@@ -2491,21 +2491,25 @@ function initHobokenMap() {
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
 
-  // Remote-control zoom: intercept ArrowUp / ArrowDown before Leaflet's
-  // keyboard pan handler sees them, and route to zoomIn / zoomOut.
-  // Left / right keep panning as Leaflet's default.
+  // Remote-control zoom: channel-up / channel-down buttons zoom the map.
+  // Different TV platforms emit different key identifiers for these buttons,
+  // so we match all the common ones. D-pad arrows are left alone so they keep
+  // panning via Leaflet's default keyboard handler.
+  const ZOOM_IN_KEYS  = new Set(['ChannelUp',   'PageUp',   'MediaTrackNext']);
+  const ZOOM_OUT_KEYS = new Set(['ChannelDown', 'PageDown', 'MediaTrackPrevious']);
+  const ZOOM_IN_CODES  = new Set([427, 33]);   // 427 = VK_CHANNEL_UP, 33 = PageUp
+  const ZOOM_OUT_CODES = new Set([428, 34]);   // 428 = VK_CHANNEL_DOWN, 34 = PageDown
   window.addEventListener('keydown', function (e) {
     if (!_hobokenMap) return;
-    if (e.key === 'ArrowUp') {
+    const k = e.key || '';
+    if (ZOOM_IN_KEYS.has(k) || ZOOM_IN_CODES.has(e.keyCode)) {
       _hobokenMap.zoomIn(1);
-      e.preventDefault();
-      e.stopPropagation();
-    } else if (e.key === 'ArrowDown') {
+      e.preventDefault(); e.stopPropagation();
+    } else if (ZOOM_OUT_KEYS.has(k) || ZOOM_OUT_CODES.has(e.keyCode)) {
       _hobokenMap.zoomOut(1);
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
     }
-  }, true);  // capture phase: beat Leaflet's own listener
+  }, true);
 
   // Seed home stubs so face bubbles appear before first network fetch
   renderLocations(HOME_STUBS);
