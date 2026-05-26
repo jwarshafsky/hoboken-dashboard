@@ -397,6 +397,12 @@
     overflow: hidden;
   }
 
+  /* Late mode (weekday after 5pm, weekend after 9pm):
+     hide bus + ferry, let map take the full left height. */
+  body.late-mode #busCard,
+  body.late-mode #ferryCard { display: none; }
+  body.late-mode #mapCard   { grid-row: 1 / 4; }
+
   /* Weather card — bottom right, spans bus + ferry rows */
   #weatherCard {
     grid-row: 2 / 4;
@@ -3116,11 +3122,27 @@ function checkSleepMode() {
   document.body.classList.toggle('sleeping', sleeping);
 }
 
+// LATE MODE — hide bus + ferry, expand map to full height.
+// Weekdays after 5pm, weekends after 9pm.
+function isLateMode() {
+  const now = new Date();
+  const day = now.getDay();   // 0=Sun, 6=Sat
+  const hour = now.getHours();
+  if (day >= 1 && day <= 5) return hour >= 17;
+  return hour >= 21;
+}
+function applyLateMode() {
+  document.body.classList.toggle('late-mode', isLateMode());
+  if (_hobokenMap) _hobokenMap.invalidateSize();
+}
+
 updateClock();
 updateTransit();
 updateWeather();
 fetchAlerts();
 checkSleepMode();
+applyLateMode();
+setInterval(applyLateMode, 60000);
 initCalAuth();
 setInterval(fetchCalEvents, 5 * 60 * 1000); // refresh calendar every 5 min
 setInterval(updateClock, 1000);
