@@ -1955,10 +1955,25 @@ async function fetchProxy() {
 
     if (data.tunnel && !data.tunnel.error) {
       const t = data.tunnel;
-      document.getElementById('tunnelTime').textContent = t.travelTime || '--';
+      const tt = parseInt(t.travelTime, 10);
+      const timeEl = document.getElementById('tunnelTime');
+      timeEl.textContent = isFinite(tt) ? tt : '--';
+      // Color tiers (research-confirmed thresholds; free-flow is 6-8 min):
+      //   < 10 min → Light    (green)
+      //   10-19 min → Moderate (yellow)
+      //   20-34 min → Heavy    (orange)
+      //   35+ min → Very Heavy (red)
+      let color = '#6bffb8';
+      if (isFinite(tt)) {
+        if      (tt >= 35) color = '#ff5050';
+        else if (tt >= 20) color = '#ff9b40';
+        else if (tt >= 10) color = '#e0c040';
+      }
+      timeEl.style.color = color;
+      // PA's infomationalText ("USUAL TRAFFIC" etc.) is uninformative —
+      // hide the status row entirely; color of the number says it all.
       const statusEl = document.getElementById('tunnelStatus');
-      statusEl.textContent = t.status || '';
-      statusEl.style.color = t.travelTime && parseInt(t.travelTime) > 15 ? '#ff6b6b' : '#6bffb8';
+      statusEl.style.display = 'none';
     }
 
     if (data.stops) {
