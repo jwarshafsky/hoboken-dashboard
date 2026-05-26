@@ -1135,7 +1135,7 @@
   </div>
   <div class="tunnel-traffic" id="tunnelTraffic">
     <div class="tunnel-label">Lincoln Tunnel</div>
-    <div><span class="tunnel-time" id="tunnelTime">--</span><span class="tunnel-min">&nbsp;min</span></div>
+    <div><span class="tunnel-time" id="tunnelTime">--</span><span class="tunnel-min" id="tunnelMin">&nbsp;min</span></div>
     <div class="tunnel-status" id="tunnelStatus">--</div>
   </div>
 </div>
@@ -1970,6 +1970,8 @@ async function fetchProxy() {
         else if (tt >= 10) color = '#e0c040';
       }
       timeEl.style.color = color;
+      const minEl = document.getElementById('tunnelMin');
+      if (minEl) minEl.style.color = color;
       // PA's infomationalText ("USUAL TRAFFIC" etc.) is uninformative —
       // hide the status row entirely; color of the number says it all.
       const statusEl = document.getElementById('tunnelStatus');
