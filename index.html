@@ -1460,29 +1460,27 @@ function moonPhase() {
 // (pure black gets crushed/inverted on some displays).
 const MOON_DARK = 'transparent';
 const MOON_LIT  = '#e8e8b8';
+// Each non-new/full phase: closed path made of an outer half-circle (the
+// moon's lit edge) and an inner elliptical arc (the terminator). The
+// terminator's `rx` and sweep direction together control whether the lit
+// region is a thin crescent or a fat gibbous.
 const MOON_SVGS = [
-  // 0 new — dark disc with subtle outline
+  // 0 new — outline only (transparent fill lets the card show through)
   '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '" stroke="#888" stroke-width="0.4"/>',
-  // 1 waxing crescent — thin right sliver lit (inner curve bulges right)
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
-  // 2 first quarter — right half lit (very slight curve to terminator)
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 1 12 17 A0.8 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
-  // 3 waxing gibbous — mostly lit, dark sliver on left (inner curve bulges left)
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
+  // 1 waxing crescent — thin sliver on the right
+  '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
+  // 2 first quarter — right half lit, straight terminator
+  '<path d="M12 7 A5 5 0 0 1 12 17 Z" fill="' + MOON_LIT + '"/>',
+  // 3 waxing gibbous — mostly lit, thin dark sliver on the left
+  '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
   // 4 full — bright disc
   '<circle cx="12" cy="12" r="5" fill="' + MOON_LIT + '"/>',
   // 5 waning gibbous — mostly lit (left), thin dark sliver on right
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
-  // 6 last quarter — left half lit
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 0 12 17 A0.8 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
-  // 7 waning crescent — thin left sliver lit
-  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
-    '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
+  '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
+  // 6 last quarter — left half lit, straight terminator
+  '<path d="M12 7 A5 5 0 0 0 12 17 Z" fill="' + MOON_LIT + '"/>',
+  // 7 waning crescent — thin sliver on the left
+  '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
 ];
 
 // Same dimensions/position as the small partly_cloudy sun, but a moon.
