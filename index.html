@@ -705,6 +705,17 @@
     box-shadow: none !important;
     filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
   }
+  .leaflet-tooltip.bus-tip {
+    background: rgba(10, 10, 15, 0.92);
+    color: #e8e8ec;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+  }
+  .leaflet-tooltip.bus-tip::before { display: none; }
   /* NJT bus marker — NJTbus.png logo + direction arrow above (NY-bound) or
      below (return). Arrow color is set inline per bus from passload. */
   .bus-marker .nbm-wrap {
@@ -2570,11 +2581,15 @@ function renderBuses(buses) {
       iconSize: [26, 40],
       iconAnchor: [13, 20],
     });
+    const label = (b.route ? b.route : 'Bus') + (b.vehicle_id ? ' · #' + b.vehicle_id : '');
     if (_busMarkers[key]) {
       _busMarkers[key].setIcon(icon);
+      _busMarkers[key].setTooltipContent(label);
       _slideTo(key, _busMarkers[key], b.lat, b.lon);
     } else {
-      _busMarkers[key] = L.marker([b.lat, b.lon], { icon: icon }).addTo(_hobokenMap);
+      _busMarkers[key] = L.marker([b.lat, b.lon], { icon: icon })
+        .bindTooltip(label, { direction: 'top', offset: [0, -18], className: 'bus-tip' })
+        .addTo(_hobokenMap);
     }
   }
   for (const key of Object.keys(_busMarkers)) {
