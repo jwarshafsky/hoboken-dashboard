@@ -764,14 +764,16 @@
   .stock-up { color: #8a9aa0; }
   .stock-down { color: #ff6b6b; }
 
-  /* Transit cards - full width */
+  /* Transit cards - full width.
+     min-height keeps bus and ferry visually equal even when the ferry has
+     only one route to display (bus shows 126 + 119, naturally taller). */
   .transit-card {
     grid-column: 1 / 3;
     flex-direction: row;
     align-items: center;
     gap: 12px;
     padding: 10px 14px;
-    min-height: 0;
+    min-height: 110px;
   }
 
   .transit-icon {
@@ -988,32 +990,6 @@
     }
   }
 
-  /* Hop */
-  .hop-etas {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1px;
-    margin-top: 2px;
-  }
-
-  .hop-eta-item {
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-  }
-
-  .hop-eta-time {
-    font-size: var(--fs-body);
-    font-weight: 300;
-    color: #fff;
-  }
-
-  .hop-no-service {
-    font-size: var(--fs-micro);
-    color: #444;
-  }
-
   .status-bar {
     position: fixed;
     bottom: 1px;
@@ -1103,7 +1079,7 @@
   <div class="transit-icon" id="busIcon">
     <svg viewBox="0 0 24 24" fill="#555" width="32" height="32"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
   </div>
-  <div class="transit-body" style="flex:1;">
+  <div class="transit-body">
     <div class="transit-title">Bus to NY</div>
     <div class="transit-routes" id="busContent">
       <div class="no-service">Loading...</div>
@@ -1127,11 +1103,11 @@
       <div class="no-service">Loading...</div>
     </div>
   </div>
+  <!-- Hop right panel mirrors Lincoln Tunnel structure: label / big number / status -->
   <div class="tunnel-traffic" id="hopTraffic">
     <div class="tunnel-label">Hop</div>
-    <div class="hop-etas" id="hopContent">
-      <div class="hop-no-service">--</div>
-    </div>
+    <div><span class="tunnel-time" id="hopTime">--</span><span class="tunnel-min">&nbsp;min</span></div>
+    <div class="tunnel-status" id="hopStatus">--</div>
   </div>
 </div>
 
@@ -1825,31 +1801,49 @@ function updateFerries() {
 // HOBOKEN HOP
 // ============================================================
 function renderHopEtas(data) {
-  const container = document.getElementById('hopContent');
-  if (!data) { container.innerHTML = '<div class="hop-no-service">No data</div>'; return; }
-  if (data.status === 'no vehicles') {
-    container.innerHTML = '<div class="hop-no-service">No vehicles running</div>';
+  // Hop right panel mirrors the Lincoln Tunnel layout: big primary value +
+  // "min" suffix on top, smaller status text below. The status line shows
+  // the next 1–2 ETAs or a service note. Keeps bus and ferry cards visually
+  // symmetric — both right-side panels read the same way.
+  const timeEl = document.getElementById('hopTime');
+  const statusEl = document.getElementById('hopStatus');
+  if (!timeEl || !statusEl) return;
+
+  const setStatus = (text, color) => {
+    statusEl.textContent = text;
+    statusEl.style.color = color || '#9a9aa8';
+  };
+
+  if (!data || data.error) {
+    timeEl.textContent = '--';
+    setStatus(data && data.error ? 'Error' : 'No data', '#666');
     return;
   }
-  if (data.error) {
-    container.innerHTML = '<div class="hop-no-service">Error</div>';
+  if (data.status === 'no vehicles' || !Array.isArray(data) || data.length === 0) {
+    timeEl.textContent = '--';
+    setStatus('No service', '#666');
     return;
   }
-  if (Array.isArray(data) && data.length > 0) {
-    let html = '';
-    for (const e of data.slice(0, 3)) {
-      let eta = e.eta || '';
-      const minsMatch = eta.match(/^(\d+)\s*min/i);
-      if (minsMatch) {
-        const adjusted = parseInt(minsMatch[1], 10) + 1;
-        eta = `${adjusted} min`;
-      }
-      html += `<div class="hop-eta-item"><span class="hop-eta-time">${eta}</span></div>`;
-    }
-    container.innerHTML = html;
+
+  // Extract minute values from eta strings ("5 min" → 5). Adjust +1 to
+  // match the previous renderer's rounding behavior.
+  const mins = data.map(e => {
+    const m = (e.eta || '').match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) + 1 : null;
+  }).filter(n => n !== null);
+
+  if (mins.length === 0) {
+    timeEl.textContent = '--';
+    setStatus('No service', '#666');
     return;
   }
-  container.innerHTML = '<div class="hop-no-service">No vehicles running</div>';
+
+  timeEl.textContent = String(mins[0]);
+  if (mins.length > 1) {
+    setStatus('next ' + mins.slice(1, 3).join(', ') + ' min', '#6bffb8');
+  } else {
+    setStatus('Running', '#6bffb8');
+  }
 }
 
 async function fetchHop() {
