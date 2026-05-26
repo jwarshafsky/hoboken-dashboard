@@ -2526,14 +2526,47 @@ function initHobokenMap() {
   const ZOOM_IN_CODES  = new Set([427, 33]);   // 427 = VK_CHANNEL_UP, 33 = PageUp
   const ZOOM_OUT_CODES = new Set([428, 34]);   // 428 = VK_CHANNEL_DOWN, 34 = PageDown
   // Select / OK button in the center of the D-pad: typically Enter (13),
-  // sometimes 'Select' or the legacy 'Spacebar'. Toggles the compass.
+  // sometimes 'Select' or the legacy 'Spacebar'. Cycles map view mode.
   const SELECT_KEYS  = new Set(['Enter', 'Select', ' ', 'Spacebar']);
   const SELECT_CODES = new Set([13, 32]);
+
+  // View-mode state machine (0..3):
+  //   0 = default                  (street-grid bearing, no labels)
+  //   1 = rotated north-up         (bearing 0, no labels)
+  //   2 = default + bus labels     (street-grid bearing, permanent #s)
+  //   3 = north-up + bus labels    (bearing 0, permanent #s)
+  // Compass is always visible (replaces the old on/off toggle so it can't
+  // "disappear"); the needle counter-rotates to always point true north.
+  const DEFAULT_BEARING = -29;
+  window._viewMode = 0;
+  window._showBusLabels = false;
+  function applyViewMode() {
+    const m = window._viewMode | 0;
+    const wantRotated = (m === 0 || m === 2);   // street-grid bearing
+    const wantLabels  = (m === 2 || m === 3);
+    if (_hobokenMap && typeof _hobokenMap.setBearing === 'function') {
+      _hobokenMap.setBearing(wantRotated ? DEFAULT_BEARING : 0);
+    }
+    window._showBusLabels = wantLabels;
+    // Re-bind tooltips on existing bus markers so permanent flag matches.
+    for (const key of Object.keys(_busMarkers || {})) {
+      const mk = _busMarkers[key];
+      if (!mk) continue;
+      const content = mk.getTooltip() ? mk.getTooltip().getContent() : '';
+      mk.unbindTooltip();
+      mk.bindTooltip(content, {
+        direction: 'top',
+        offset: [0, -18],
+        className: 'bus-tip',
+        permanent: wantLabels,
+      });
+    }
+    document.body.classList.toggle('compass-on', true);
+    updateCompassRotation();
+  }
   function updateCompassRotation() {
     const el = document.getElementById('mapCompass');
     if (!el || !_hobokenMap) return;
-    // Leaflet-rotate plugin: getBearing() returns map rotation in degrees.
-    // Compass needle should counter-rotate so N always points to true north.
     const bearing = (typeof _hobokenMap.getBearing === 'function')
       ? _hobokenMap.getBearing() : 0;
     el.style.transform = 'rotate(' + (-bearing) + 'deg)';
@@ -2541,7 +2574,7 @@ function initHobokenMap() {
   if (typeof _hobokenMap.on === 'function') {
     _hobokenMap.on('rotate', updateCompassRotation);
   }
-  updateCompassRotation();
+  applyViewMode();
   window.addEventListener('keydown', function (e) {
     if (!_hobokenMap) return;
     const k = e.key || '';
@@ -2552,8 +2585,8 @@ function initHobokenMap() {
       _hobokenMap.zoomOut(1);
       e.preventDefault(); e.stopPropagation();
     } else if (SELECT_KEYS.has(k) || SELECT_CODES.has(e.keyCode)) {
-      document.body.classList.toggle('compass-on');
-      updateCompassRotation();
+      window._viewMode = ((window._viewMode | 0) + 1) % 4;
+      applyViewMode();
       e.preventDefault(); e.stopPropagation();
     }
   }, true);
@@ -2659,7 +2692,12 @@ function renderBuses(buses) {
       _slideTo(key, _busMarkers[key], b.lat, b.lon);
     } else {
       _busMarkers[key] = L.marker([b.lat, b.lon], { icon: icon })
-        .bindTooltip(label, { direction: 'top', offset: [0, -18], className: 'bus-tip' })
+        .bindTooltip(label, {
+          direction: 'top',
+          offset: [0, -18],
+          className: 'bus-tip',
+          permanent: !!window._showBusLabels,
+        })
         .addTo(_hobokenMap);
     }
   }
