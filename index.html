@@ -1453,39 +1453,46 @@ function moonPhase() {
 }
 
 // Moon disc SVG content for each phase 0-7. Sized within the 24×24 viewBox.
+// Each phase draws a dark base disc + a LIT-area path made of two arcs:
+//   outer = half-circle of radius 5 (the moon's outline on the lit side)
+//   inner = elliptical arc forming the terminator (curved, not straight)
+// Shadow color is a mid-gray that survives aggressive TV color processing
+// (pure black gets crushed/inverted on some displays).
+const MOON_DARK = '#3d3d50';
+const MOON_LIT  = '#e8e8b8';
 const MOON_SVGS = [
   // 0 new — dark disc with subtle outline
-  '<circle cx="12" cy="12" r="5" fill="#1a1a2e" stroke="#666" stroke-width="0.4"/>',
-  // 1 waxing crescent — thin right sliver lit
-  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
-    '<path d="M12 7 a5 5 0 0 1 0 10 a3 5 0 0 0 0 -10 z" fill="#dfdfa6"/>',
-  // 2 first quarter — right half lit
-  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
-    '<path d="M12 7 a5 5 0 0 1 0 10 z" fill="#dfdfa6"/>',
-  // 3 waxing gibbous — mostly lit, dark left sliver
-  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>' +
-    '<path d="M12 7 a5 5 0 0 0 0 10 a3 5 0 0 1 0 -10 z" fill="#1a1a2e"/>',
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '" stroke="#888" stroke-width="0.4"/>',
+  // 1 waxing crescent — thin right sliver lit (inner curve bulges right)
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
+  // 2 first quarter — right half lit (very slight curve to terminator)
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 1 12 17 A0.8 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
+  // 3 waxing gibbous — mostly lit, dark sliver on left (inner curve bulges left)
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 1 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
   // 4 full — bright disc
-  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>',
-  // 5 waning gibbous — mostly lit, dark right sliver
-  '<circle cx="12" cy="12" r="5" fill="#dfdfa6"/>' +
-    '<path d="M12 7 a5 5 0 0 1 0 10 a3 5 0 0 0 0 -10 z" fill="#1a1a2e"/>',
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_LIT + '"/>',
+  // 5 waning gibbous — mostly lit (left), thin dark sliver on right
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
   // 6 last quarter — left half lit
-  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
-    '<path d="M12 7 a5 5 0 0 0 0 10 z" fill="#dfdfa6"/>',
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 0 12 17 A0.8 5 0 0 1 12 7 Z" fill="' + MOON_LIT + '"/>',
   // 7 waning crescent — thin left sliver lit
-  '<circle cx="12" cy="12" r="5" fill="#1a1a2e"/>' +
-    '<path d="M12 7 a5 5 0 0 0 0 10 a3 5 0 0 1 0 -10 z" fill="#dfdfa6"/>',
+  '<circle cx="12" cy="12" r="5" fill="' + MOON_DARK + '"/>' +
+    '<path d="M12 7 A5 5 0 0 0 12 17 A2.5 5 0 0 0 12 7 Z" fill="' + MOON_LIT + '"/>',
 ];
 
 // Same dimensions/position as the small partly_cloudy sun, but a moon.
 function moonForPartlyCloudy() {
   const p = moonPhase();
   // Use radius 2.5 to match sun-circle in partly_cloudy
-  const fill = (p === 4 || p === 3 || p === 5) ? '#dfdfa6' : '#1a1a2e';
-  const lit = '#dfdfa6';
-  const dark = '#1a1a2e';
-  if (p === 0) return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + dark + '" stroke="#666" stroke-width="0.3"/>';
+  const lit = MOON_LIT;
+  const dark = MOON_DARK;
+  const fill = (p === 4 || p === 3 || p === 5) ? lit : dark;
+  if (p === 0) return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + dark + '" stroke="#888" stroke-width="0.3"/>';
   if (p === 4) return '<circle cx="6.5" cy="6.5" r="2.5" fill="' + lit + '"/>';
   // Crescents & quarters
   const lightSide = (p === 1 || p === 2 || p === 3) ? 1 : 0; // waxing → right lit
@@ -2464,7 +2471,12 @@ function initHobokenMap() {
     attributionControl: false,
     dragging: true,
     scrollWheelZoom: false,
-  }, hasRotate ? { rotate: true, bearing: -29, touchRotate: false } : {}));
+  }, hasRotate ? {
+    rotate: true,
+    bearing: -29,
+    touchRotate: false,
+    rotateControl: { closeOnZeroBearing: false },
+  } : {}));
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
