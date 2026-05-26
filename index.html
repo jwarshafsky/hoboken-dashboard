@@ -2473,7 +2473,7 @@ function initHobokenMap() {
     scrollWheelZoom: false,
   }, hasRotate ? {
     rotate: true,
-    bearing: -29,
+    bearing: 0,
     touchRotate: false,
     rotateControl: { closeOnZeroBearing: false },
   } : {}));
@@ -2518,21 +2518,19 @@ function initHobokenMap() {
   const SELECT_CODES = new Set([13, 32, 23]);   // 23 = Android KEYCODE_DPAD_CENTER
 
   // View-mode state machine (0..3):
-  //   0 = default                  (street-grid bearing, no labels)
-  //   1 = rotated north-up         (bearing 0, no labels)
-  //   2 = default + bus labels     (street-grid bearing, permanent #s)
-  //   3 = north-up + bus labels    (bearing 0, permanent #s)
-  // Compass is always visible (replaces the old on/off toggle so it can't
-  // "disappear"); the needle counter-rotates to always point true north.
-  const DEFAULT_BEARING = -29;
+  //   0 = default                  (true north, no labels)
+  //   1 = rotated to street grid   (Hoboken streets point straight up)
+  //   2 = default + bus labels     (true north, permanent #s)
+  //   3 = street grid + bus labels (streets up, permanent #s)
+  const STREET_GRID_BEARING = -29;
   window._viewMode = 0;
   window._showBusLabels = false;
   function applyViewMode() {
     const m = window._viewMode | 0;
-    const wantRotated = (m === 0 || m === 2);   // street-grid bearing
-    const wantLabels  = (m === 2 || m === 3);
+    const wantStreetGrid = (m === 1 || m === 3);
+    const wantLabels     = (m === 2 || m === 3);
     if (_hobokenMap && typeof _hobokenMap.setBearing === 'function') {
-      _hobokenMap.setBearing(wantRotated ? DEFAULT_BEARING : 0);
+      _hobokenMap.setBearing(wantStreetGrid ? STREET_GRID_BEARING : 0);
     }
     window._showBusLabels = wantLabels;
     // Re-bind tooltips on existing bus markers so permanent flag matches.
