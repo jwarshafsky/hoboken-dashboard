@@ -433,21 +433,21 @@
   }
   .cal-day-header.is-future { color: #9a9aa8; }
 
-  /* Morning commute estimate — sits as a child line under the TODAY day
-     header (Mon-Fri 7:00-10:30 AM). Same font size as a cal-event so it
-     reads as a calendar-style "first item of the day", not a banner. The
-     minute count picks up amber when it's tight (>= 35 min). */
+  /* Morning commute estimate — one line per family commuter under the
+     TODAY day header (Mon-Fri 7:00-10:30 AM). Same font size as a
+     cal-event so each line reads as a calendar-style item, not a banner.
+     The minute count picks up amber when that person's commute is tight. */
   .cal-commute {
     font-size: var(--fs-label);
     color: #cfcfd6;
     padding: 2px 0;
     line-height: 1.25;
   }
-  .cal-commute #commuteMin {
+  .cal-commute .commute-min {
     font-weight: 600;
     color: #fff;
   }
-  .cal-commute.tight #commuteMin { color: #ff9b40; }
+  .cal-commute.tight .commute-min { color: #ff9b40; }
 
   .cal-event {
     padding: 2px 0;
@@ -1474,58 +1474,105 @@ function updateClock() {
 }
 
 // ============================================================
-// COMMUTE ESTIMATE — Mon-Fri 7:00-10:30 AM
-// Total minutes from leaving home now to being at 11 Times Square:
-//   wait_for_next_bus + 13 (ride to PABT) + max(0, tunnel - 8) + 5
-// where the 5 covers home→stop walk (2) + PABT→office walk (3).
+// COMMUTE ESTIMATES — Mon-Fri 7:00-10:30 AM
+// One line per commuter under the TODAY header. Each entry below has a
+// calculator that returns total minutes from leaving home NOW to being
+// at the destination, or null if data is unavailable.
+//
+//   Jeff  → 11 Times Square via 126/119 + Lincoln Tunnel
+//           wait_for_next_bus + 13 (ride to PABT) + tunnel_extra + 5
+//           (2 walk to stop + 3 walk to office)
+//
+//   Jenny → 37 Old Slip via Hoboken 14th St ferry to Pier 11
+//           wait_for_next_ferry + 7 (walk to terminal) + 14 (ride)
+//           + 4 (Pier 11 to office)
 // ============================================================
+const COMMUTES = [
+  {
+    name: 'Jeff',
+    destination: '11 Times Sq',
+    tightThreshold: 35,
+    calc: function () {
+      const data = window._lastProxyData;
+      const fetchedAtSec = window._transitFetchedAt || Math.floor(Date.now() / 1000);
+      // Collect next-bus minutes from both stops, reconciled against now.
+      let waitMin = null;
+      if (data && data.stops) {
+        const allPreds = [];
+        for (const sid of ['20490', '20523']) {
+          const s = data.stops[sid];
+          if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
+        }
+        for (const p of allPreds) {
+          const reported = parseInt(p.countdown, 10);
+          if (!isFinite(reported)) continue;
+          const arrivalMs = fetchedAtSec * 1000 + reported * 60000;
+          const mins = Math.max(0, Math.round((arrivalMs - Date.now()) / 60000));
+          if (mins < 60 && (waitMin === null || mins < waitMin)) waitMin = mins;
+        }
+      }
+      if (waitMin === null) waitMin = _nextBusFromSchedule();
+      if (waitMin === null) return null;
+      // Tunnel schedule bakes in ~8 min — count excess as delay.
+      let tunnelExtra = 0;
+      if (data && data.tunnel && data.tunnel.travelTime) {
+        const t = parseInt(data.tunnel.travelTime, 10);
+        if (isFinite(t) && t > 8) tunnelExtra = t - 8;
+      }
+      return waitMin + 13 + tunnelExtra + 5;
+    },
+  },
+  {
+    name: 'Jenny',
+    destination: '37 Old Slip',
+    tightThreshold: 50,
+    calc: function () {
+      const waitMin = _nextWallStFerry();
+      if (waitMin === null) return null;
+      // 7 walk-to-terminal + 14 ride + 4 walk-to-office
+      return waitMin + 25;
+    },
+  },
+];
+
 function updateCommuteEstimate() {
-  const el = document.getElementById('commuteEstimate');
-  if (!el) return;
+  const container = document.getElementById('commuteContainer');
+  if (!container) return;
   const now = new Date();
   const day = now.getDay();
   const time = now.getHours() * 60 + now.getMinutes();
   // Mon-Fri only, 7:00 AM to 10:30 AM inclusive
   if (day === 0 || day === 6 || time < 7 * 60 || time > 10 * 60 + 30) {
-    el.style.display = 'none';
+    container.innerHTML = '';
     return;
   }
 
-  const data = window._lastProxyData;
-  const fetchedAtSec = window._transitFetchedAt || Math.floor(Date.now() / 1000);
-
-  // Collect next-bus minutes from both stops, reconciled against now.
-  let waitMin = null;
-  if (data && data.stops) {
-    const allPreds = [];
-    for (const sid of ['20490', '20523']) {
-      const s = data.stops[sid];
-      if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
-    }
-    for (const p of allPreds) {
-      const reported = parseInt(p.countdown, 10);
-      if (!isFinite(reported)) continue;
-      const arrivalMs = fetchedAtSec * 1000 + reported * 60000;
-      const mins = Math.max(0, Math.round((arrivalMs - Date.now()) / 60000));
-      if (mins < 60 && (waitMin === null || mins < waitMin)) waitMin = mins;
-    }
+  let html = '';
+  for (const c of COMMUTES) {
+    const total = c.calc();
+    if (total === null) continue;
+    const tightCls = total >= c.tightThreshold ? ' tight' : '';
+    html += '<div class="cal-commute' + tightCls + '">' +
+      c.name + ' → ' + c.destination + ': ' +
+      '<span class="commute-min">' + total + '</span> min</div>';
   }
-  // Fallback to static schedule if no live/inferred data
-  if (waitMin === null) waitMin = _nextBusFromSchedule();
-  if (waitMin === null) { el.style.display = 'none'; return; }
+  container.innerHTML = html;
+}
 
-  // Tunnel delay: schedule already bakes in ~8 min for the tunnel; only
-  // count excess as extra delay.
-  let tunnelExtra = 0;
-  if (data && data.tunnel && data.tunnel.travelTime) {
-    const t = parseInt(data.tunnel.travelTime, 10);
-    if (isFinite(t) && t > 8) tunnelExtra = t - 8;
+function _nextWallStFerry() {
+  // Minutes until the next scheduled Hoboken 14th St → Pier 11 / Wall St
+  // ferry. Weekday only (FERRY_SCHEDULES['Wall St'].weekend is empty).
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const sched = (FERRY_SCHEDULES['Wall St'] || {}).weekday || [];
+  let earliest = null;
+  for (const t of sched) {
+    const [h, m] = t.split(':').map(n => parseInt(n, 10));
+    const depMin = h * 60 + m;
+    const delta = depMin - nowMin;
+    if (delta >= 0 && (earliest === null || delta < earliest)) earliest = delta;
   }
-
-  const total = waitMin + 13 + tunnelExtra + 5;
-  document.getElementById('commuteMin').textContent = total;
-  el.style.display = '';
-  el.classList.toggle('tight', total >= 35);
+  return earliest;
 }
 
 function _nextBusFromSchedule() {
@@ -3102,12 +3149,12 @@ function renderCalEvents(events) {
     }
     html += '<div class="cal-day-header ' + cls + '">' + dayLabel + timeHtml + '</div>';
 
-    // Morning commute estimate sits as a child line under the TODAY header.
-    // updateCommuteEstimate() toggles display + fills in the minute count;
-    // outside the Mon-Fri 7:00-10:30 AM window, display stays "none".
+    // Morning commute estimates sit as child lines under the TODAY header
+    // (one per family commuter). updateCommuteEstimate() populates this
+    // container with one .cal-commute div per person each tick. Outside
+    // the Mon-Fri 7:00-10:30 AM window, container stays empty.
     if (isToday) {
-      html += '<div class="cal-commute" id="commuteEstimate" style="display:none;">' +
-              'Commute to office: <span id="commuteMin">--</span> min</div>';
+      html += '<div id="commuteContainer"></div>';
     }
 
     for (const ev of byDate[dateKey]) {
