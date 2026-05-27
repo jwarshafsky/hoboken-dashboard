@@ -1413,10 +1413,15 @@ const ICON_FILES = {
 };
 
 function wIcon(key, size, isNight) {
+  // Small icons (<30px — the hourly forecast strip) use the static amcharts
+  // SVGs with no animations. Only the big hero icon renders the animated
+  // version. Otherwise the dashboard becomes a wall of motion that competes
+  // with itself; animation belongs on the focal element only.
   const s = size || 24;
   const pair = ICON_FILES[key] || ICON_FILES.overcast;
   const file = isNight ? pair[1] : pair[0];
-  return `<img class="wi" src="icons/${file}.svg" width="${s}" height="${s}" alt="" style="display:inline-block;vertical-align:middle;">`;
+  const folder = s < 30 ? 'icons/static' : 'icons';
+  return `<img class="wi" src="${folder}/${file}.svg" width="${s}" height="${s}" alt="" style="display:inline-block;vertical-align:middle;">`;
 }
 
 const WMO_CODES = {
