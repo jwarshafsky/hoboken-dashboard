@@ -2592,6 +2592,36 @@ function initHobokenMap() {
   renderLocations(HOME_STUBS);
 }
 
+// Approach-mode: when anyone is inside Hoboken AND moving toward home, we
+// want fresher data — bump the location poll cadence so the family knows
+// who's almost-arrived. Tracks per-TID last-known distance to home so we
+// can detect "decreasing distance" between polls.
+const HOBOKEN_BBOX = { latMin: 40.733, latMax: 40.768, lonMin: -74.040, lonMax: -74.018 };
+const APPROACH_POLL_MS = 7000;   // when someone's approaching, poll every 7s
+const DEFAULT_POLL_MS = 15000;   // otherwise the normal 15s
+let _prevDistToHome = {};        // tid → last-known distance (miles)
+
+function _inHoboken(loc) {
+  return loc.lat >= HOBOKEN_BBOX.latMin && loc.lat <= HOBOKEN_BBOX.latMax &&
+         loc.lon >= HOBOKEN_BBOX.lonMin && loc.lon <= HOBOKEN_BBOX.lonMax;
+}
+
+function _someoneApproachingHome(locs) {
+  // True if at least one person is inside Hoboken bbox, outside the at-home
+  // radius (so they're meaningfully en route), and closer to home than the
+  // previous reading by at least 0.01 mi (~50 ft, filters GPS jitter).
+  for (const l of locs) {
+    if (!l.received_at || !l.lat || !l.lon) continue;
+    if (!_inHoboken(l)) continue;
+    const d = distMi(HOME, l);
+    if (d < HOME_RADIUS_MI) continue;        // already home
+    if (d > 1.5) continue;                   // too far to care yet
+    const prev = _prevDistToHome[l.tid];
+    if (prev != null && (prev - d) >= 0.01) return true;
+  }
+  return false;
+}
+
 async function fetchLocations() {
   if (!PROXY_URL) return;
   if (document.hidden || isSleeping()) return;
@@ -2607,9 +2637,25 @@ async function fetchLocations() {
     const stubs = HOME_STUBS.filter(s => !liveTids.has(s.tid));
     renderLocations([...stubs, ...liveLocs]);
     renderTiles(data.tiles || []);
+
+    // Approach detection: compare each person's current distance-to-home
+    // against last poll's. If anyone's actively closing the gap inside
+    // Hoboken, schedule the next poll on the fast cadence.
+    const approaching = _someoneApproachingHome(liveLocs);
+    for (const l of liveLocs) {
+      if (l.lat != null && l.lon != null) _prevDistToHome[l.tid] = distMi(HOME, l);
+    }
+    _scheduleLocationsPoll(approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS);
   } catch (e) {
     console.error('Locations fetch error:', e);
+    _scheduleLocationsPoll(DEFAULT_POLL_MS);
   }
+}
+
+let _locationsPollTimer = null;
+function _scheduleLocationsPoll(ms) {
+  if (_locationsPollTimer) clearTimeout(_locationsPollTimer);
+  _locationsPollTimer = setTimeout(fetchLocations, ms);
 }
 
 function renderTiles(tiles) {
@@ -3330,8 +3376,9 @@ updateStatusBar();
 setInterval(updateTransit, 15000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
-setInterval(fetchLocations, 15000);
-// Kick off initial location fetch (no-op if not map mode yet)
+// fetchLocations reschedules itself dynamically (7s when someone is
+// approaching home inside Hoboken, otherwise 15s). Just kick off the
+// first fetch — the loop runs from there.
 setTimeout(function () { initHobokenMap(); fetchLocations(); }, 1500);
 </script>
 </body>
