@@ -872,6 +872,32 @@
     background: #1a2a1a;
   }
 
+  /* FULL / OVERLOADED bus — red tint + strikethrough on the times so the
+     chip reads as "this one may pass you by, don't count on it". */
+  .dep-chip.is-full {
+    background: #3a1a1a;
+  }
+  .dep-chip.is-full .t,
+  .dep-chip.is-full .cd {
+    text-decoration: line-through;
+    text-decoration-color: rgba(255, 80, 80, 0.7);
+  }
+
+  /* Load bars inside the chip — tiny staircase below time/countdown. */
+  .dep-chip .load-bars {
+    margin-left: 0;
+    margin-top: 1px;
+    order: 3;
+    height: 6px;
+  }
+  .dep-chip .load-bar {
+    width: 2px;
+  }
+  .dep-chip .load-bar:nth-child(1) { height: 2px; }
+  .dep-chip .load-bar:nth-child(2) { height: 3px; }
+  .dep-chip .load-bar:nth-child(3) { height: 4.5px; }
+  .dep-chip .load-bar:nth-child(4) { height: 6px; }
+
   .dep-chip .cd-unit {
     font-size: 0.65em;
     font-weight: 400;
@@ -1852,7 +1878,15 @@ function renderLivePredictions(predictions, label) {
         const h12 = hh % 12 || 12;
         displayTime = `${h12}:${mm} ${ampm}`;
       }
-      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
+      // Passload indicator on the chip itself — empty/light/medium/heavy
+      // bars so a FULL bus reads as "skip this one" at a glance. loadDot()
+      // returns a small staircase of colored bars; renders empty for no data.
+      const loadHtml = loadDot(p.passload);
+      // FULL / OVERLOADED chips get a red tint + strikethrough — the bus
+      // may pass without stopping.
+      const pload = (p.passload || '').toUpperCase();
+      const chipCls = (pload === 'FULL' || pload === 'OVERLOADED') ? ' is-full' : '';
+      html += `<div class="dep-chip${chipCls}"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span>${loadHtml}</div>`;
     }
     html += '</div></div>';
     return html;
@@ -1866,7 +1900,26 @@ async function fetchProxy() {
   try {
     const res = await fetchT(PROXY_URL);
     const data = await res.json();
-    markOk('transit');
+
+    // Detect structured errors that mean the data is stale/wrong even
+    // though the proxy returned 200. NJT auth-failed and per-stop "auth
+    // failed" both look like normal {error: ...} objects — the dashboard
+    // used to silently fall through to BUS_*_SCHEDULE static fallback
+    // without firing markFail, so the panel-stale dimmer never engaged.
+    const transitDegraded = (
+      (data.stops && Object.values(data.stops).some(s =>
+        s && s.predictions && s.predictions.error === 'NJT auth failed')) ||
+      (data.tunnel && data.tunnel.error && /auth/i.test(data.tunnel.error || ''))
+    );
+    if (transitDegraded) markFail('transit'); else markOk('transit');
+
+    // Life360 token death surfaces in /locations response as life360_error.
+    // We log it here so a quick console glance catches the months-out token
+    // expiry; in /locations response handling (fetchLocations) we also flag
+    // statusErrors so the bottom status bar shows the issue.
+    if (data.life360_error) {
+      window._life360Error = data.life360_error;
+    }
 
     // Stash fetched_at so renderLivePredictions can reconcile against current time
     window._transitFetchedAt = data.fetched_at || Math.floor(Date.now() / 1000);
@@ -1897,6 +1950,14 @@ async function fetchProxy() {
       // hide the status row entirely; color of the number says it all.
       const statusEl = document.getElementById('tunnelStatus');
       statusEl.style.display = 'none';
+    } else if (data.tunnel && data.tunnel.error) {
+      // PA API errored — clear the stale time so a 4-min cached value
+      // doesn't persist through what's actually a 35-min jam. Grey out.
+      const timeEl = document.getElementById('tunnelTime');
+      timeEl.textContent = '--';
+      timeEl.style.color = '#666';
+      const minEl = document.getElementById('tunnelMin');
+      if (minEl) minEl.style.color = '#666';
     }
 
     if (data.stops) {
@@ -2311,13 +2372,14 @@ function isOverWater(lat, lon) {
 const _statusPersistence = {};  // tid → { candidate, since, confirmed }
 
 function personStatus(loc) {
+  // HOME_STUB entries (received_at:0) are placeholders for family members
+  // who don't have trackers yet. Don't pretend we know where they are.
+  if (!loc.received_at) return 'no tracker yet';
   // Cold-stale (≥3h since last fix): coordinates are very likely lying.
   // Don't claim "at home" or "2.3 mi away" — say "last seen X" so the
   // family treats the dot as a memory, not a fact.
-  if (loc.received_at) {
-    const ageSec = Date.now() / 1000 - loc.received_at;
-    if (ageSec >= 10800) return 'last seen ' + agoText(loc.received_at * 1000);
-  }
+  const ageSec = Date.now() / 1000 - loc.received_at;
+  if (ageSec >= 10800) return 'last seen ' + agoText(loc.received_at * 1000);
   const dHome = distMi(HOME, loc);
   if (dHome < HOME_RADIUS_MI) return 'at home';
 
@@ -2708,6 +2770,12 @@ function renderLocations(locations) {
   const seen = new Set();
   for (const loc of locations) {
     seen.add(loc.tid);
+    // HOME_STUBS use received_at:0 — they're placeholders for family
+    // members who don't have trackers yet (Sydney, Elizabeth, Juno). Skip
+    // their map pin entirely so the map doesn't lie that they're at home
+    // when they may not be. They still show in the bottom overlay pill
+    // list (renderStatusOverlay reads HOME_STUBS separately).
+    if (!loc.received_at) continue;
     const faceUrl = FACE_IMAGES[loc.tid];
     const html = faceUrl
       ? '<img src="' + faceUrl + '" alt="' + displayName(loc) + '"/>'
@@ -2765,14 +2833,16 @@ function renderLocations(locations) {
     } else {
       overlay.innerHTML = locations.map(function (l) {
         const status = personStatus(l);
-        const ago = agoText(l.received_at * 1000);
+        // For HOME_STUB entries (no received_at) we drop the "X mins ago"
+        // suffix — there's no real timestamp, just the placeholder.
+        const ago = l.received_at ? agoText(l.received_at * 1000) : '';
         const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
         let cls = '';
         if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
         else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
         return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
           '</span><span class="ms-status">' + status +
-          '</span><span class="ms-ago">' + ago + '</span></span>';
+          '</span>' + (ago ? '<span class="ms-ago">' + ago + '</span>' : '') + '</span>';
       }).join('');
     }
   }
