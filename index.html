@@ -2622,13 +2622,19 @@ function _someoneApproachingHome(locs) {
   return false;
 }
 
+// Remembers whether the *previous* poll detected someone approaching, so
+// we send fast=1 on the NEXT proxy request. The flag mirrors the cadence
+// state — if we're polling at 7s, we ask the proxy to tighten its Life360
+// cache to 15s too.
+let _approachMode = false;
+
 async function fetchLocations() {
   if (!PROXY_URL) return;
   if (document.hidden || isSleeping()) return;
   const token = localStorage.getItem('calToken') || '';
   try {
-    const res = await fetchT(PROXY_URL + '?mode=locations',
-      { headers: { 'X-Cal-Token': token } });
+    const url = PROXY_URL + '?mode=locations' + (_approachMode ? '&fast=1' : '');
+    const res = await fetchT(url, { headers: { 'X-Cal-Token': token } });
     if (!res.ok) return;
     const data = await res.json();
     renderBuses(data.buses || []);     // first so _lastBuses is populated
@@ -2640,11 +2646,13 @@ async function fetchLocations() {
 
     // Approach detection: compare each person's current distance-to-home
     // against last poll's. If anyone's actively closing the gap inside
-    // Hoboken, schedule the next poll on the fast cadence.
+    // Hoboken, schedule the next poll on the fast cadence + signal the
+    // proxy to tighten its Life360 cache.
     const approaching = _someoneApproachingHome(liveLocs);
     for (const l of liveLocs) {
       if (l.lat != null && l.lon != null) _prevDistToHome[l.tid] = distMi(HOME, l);
     }
+    _approachMode = approaching;
     _scheduleLocationsPoll(approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS);
   } catch (e) {
     console.error('Locations fetch error:', e);
