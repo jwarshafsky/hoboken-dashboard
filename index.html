@@ -405,7 +405,11 @@
     font-weight: 700;
     font-size: 1.15rem;
     color: #fff;
-    letter-spacing: 0;
+    /* Slight negative tracking + stretch keeps the glyphs narrower so the
+       date label on the left and the clock on the right don't crowd each
+       other on the TV's narrow calendar column. */
+    letter-spacing: -0.03em;
+    font-stretch: 85%;
     text-transform: none;
     white-space: nowrap;
   }
@@ -417,6 +421,8 @@
     font-size: 1.15rem;
     margin-bottom: 8px;
     white-space: nowrap;
+    letter-spacing: -0.03em;
+    font-stretch: 85%;
   }
   .cal-day-header.is-future { color: #9a9aa8; }
 
