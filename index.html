@@ -141,8 +141,9 @@
   .weather-card {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 14px 12px;
   }
 
   .weather-main { display: contents; }  /* transparent wrapper */
@@ -203,9 +204,10 @@
   }
 
   .weather-desc {
-    font-size: var(--fs-body);
-    color: #cfcfd6;
-    line-height: 1.15;
+    font-size: 1.05rem;
+    color: #e0e0e6;
+    line-height: 1.2;
+    font-weight: 400;
     /* description can wrap if it's long (e.g. "Thunderstorm + heavy hail") */
     white-space: nowrap;
     overflow: hidden;
@@ -217,8 +219,9 @@
     align-items: center;
     justify-content: center;
     flex-wrap: wrap;
-    gap: 4px 8px;
-    font-size: var(--fs-micro);
+    gap: 4px 10px;
+    margin-top: 3px;
+    font-size: var(--fs-label);
     color: var(--c-mute);
     white-space: nowrap;
   }
@@ -249,14 +252,14 @@
     align-items: center;
     border-top: 0.5px solid #1e1e2e;
     border-bottom: 0.5px solid #1e1e2e;
-    padding: 3px 2px;
+    padding: 7px 2px;
   }
 
   .weather-hour {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     flex: 1;
     min-width: 0;
   }
@@ -281,12 +284,17 @@
     line-height: 1;
   }
 
-  /* STATS ROW (wind / humidity / pollen) -------------------------- */
+  /* STATS ROW (wind / humidity / pollen / UV) ---------------------- */
   .weather-details {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
-    padding: 0 2px;
+    gap: 8px;
+    padding: 2px 2px 0;
+  }
+
+  .weather-details .wd-stat + .wd-stat {
+    border-left: 0.5px solid #1e1e2e;
+    padding-left: 8px;
   }
 
   .weather-details .wd-stat {
@@ -3182,8 +3190,10 @@ function renderCalEvents(events) {
     let dayLabel;
     let cls = 'is-future';
     if (isToday) {
+      // Short forms so the longest weekday+month ("WEDNESDAY, DECEMBER 31")
+      // can't crowd the clock or wrap. "WED, DEC 31 6:28 PM" always fits.
       dayLabel = date.toLocaleDateString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric'
+        weekday: 'short', month: 'short', day: 'numeric'
       }).toUpperCase();
       cls = 'is-today';
     }
