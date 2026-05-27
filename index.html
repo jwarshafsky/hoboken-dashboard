@@ -3190,10 +3190,13 @@ function renderCalEvents(events) {
     let dayLabel;
     let cls = 'is-future';
     if (isToday) {
-      // Short forms so the longest weekday+month ("WEDNESDAY, DECEMBER 31")
-      // can't crowd the clock or wrap. "WED, DEC 31 6:28 PM" always fits.
+      // Start with the long form. _autoFitTodayHeader() runs after paint
+      // and progressively shrinks (long → short weekday → short month) if
+      // the label overflows the clock. So most days you see the big
+      // "WEDNESDAY, MAY 27" — only the longest cases (e.g.
+      // "WEDNESDAY, DECEMBER 31") fall back to short forms.
       dayLabel = date.toLocaleDateString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric'
+        weekday: 'long', month: 'long', day: 'numeric'
       }).toUpperCase();
       cls = 'is-today';
     }
@@ -3274,9 +3277,35 @@ function renderCalEvents(events) {
   // Use double-rAF + setTimeout to make sure layout has settled before measuring.
   requestAnimationFrame(function () {
     requestAnimationFrame(function () {
+      _autoFitTodayHeader();
       setTimeout(trimCalendarOverflow, 30);
     });
   });
+}
+
+// Today's day-header tries long forms first (WEDNESDAY, DECEMBER 31). If
+// the label + clock overflow the calendar's width, shrink in steps:
+// long-weekday→short-weekday→short-month. Keeps the big text when it fits,
+// gracefully degrades when it doesn't.
+function _autoFitTodayHeader() {
+  const header = document.querySelector('#calContent .cal-day-header.is-today');
+  if (!header) return;
+  const timeSpan = header.querySelector('.cal-header-time');
+  const timeHtml = timeSpan ? timeSpan.outerHTML : '';
+  const today = new Date();
+  const FORMATS = [
+    { weekday: 'long',  month: 'long',  day: 'numeric' }, // WEDNESDAY, DECEMBER 31
+    { weekday: 'short', month: 'long',  day: 'numeric' }, // WED, DECEMBER 31
+    { weekday: 'short', month: 'short', day: 'numeric' }, // WED, DEC 31
+  ];
+  for (const fmt of FORMATS) {
+    const label = today.toLocaleDateString('en-US', fmt).toUpperCase();
+    header.innerHTML = label + timeHtml;
+    // 1px slack for sub-pixel rounding. scrollWidth > clientWidth means
+    // content overflowed the header's content box even with nowrap.
+    if (header.scrollWidth <= header.clientWidth + 1) return;
+  }
+  // All formats overflow (unlikely) — last one (shortest) stays applied.
 }
 
 function trimCalendarOverflow() {
