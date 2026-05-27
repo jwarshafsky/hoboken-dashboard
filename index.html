@@ -1588,13 +1588,11 @@ async function updateWeather() {
         } else {
           const uvR = Math.round(uvNow);
           uvEl.textContent = uvR;
-          // Color matches the standard EPA UV index scale
-          let uvColor = '#9aa5b8';
-          if (uvR >= 11) uvColor = '#c970c9';      // extreme — violet
-          else if (uvR >= 8) uvColor = '#ff5050';  // very high — red
+          // Only call out elevated UV. Low / moderate stay neutral white
+          // (matches the rest of the stats — pollen has the same rule).
+          let uvColor = '#fff';
+          if (uvR >= 8) uvColor = '#ff5050';       // very high / extreme — red
           else if (uvR >= 6) uvColor = '#ff9b40';  // high — orange
-          else if (uvR >= 3) uvColor = '#e0c040';  // moderate — yellow
-          else if (uvR >= 1) uvColor = '#8acc70';  // low — green-ish
           uvEl.style.color = uvColor;
         }
       }
