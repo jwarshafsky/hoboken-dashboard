@@ -149,14 +149,17 @@
   .weather-main { display: contents; }  /* transparent wrapper */
 
   /* HERO ROW ------------------------------------------------------- */
-  /* Three elements (icon | summary | temp) centered in the row with equal
-     space on either side of each. space-evenly puts the same gap between
-     the left edge, between each pair of items, and the right edge. */
+  /* Three elements (icon | summary | temp) spread across the row. space-around
+     gives each item equal space on both sides, so the inter-item gaps (icon↔
+     summary, summary↔temp) are ~2× the outer-edge gaps. That keeps the big
+     temperature glyph from crowding the forecast text in the middle while the
+     card's own padding handles the outer breathing room. (space-evenly tied the
+     edge gap to the inter-item gap and read as cramped around the temp.) */
   .weather-top {
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-evenly;
+    justify-content: space-around;
     gap: 0;
     padding: 2px;
   }
