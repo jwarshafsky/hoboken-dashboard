@@ -2392,10 +2392,21 @@ function isOverWater(lat, lon) {
          lon >= -74.020 && lon <= -74.011;
 }
 
-// Persistence tracker: only claim "on bus/Hop" if the person has been near
-// the SAME vehicle for at least 60 seconds (avoids false positives from
-// momentarily passing a stopped bus or standing at a stop).
-const _statusPersistence = {};  // tid → { candidate, since, confirmed }
+// "On a bus/Hop" inference. Three guards stop a parked or stale dot from being
+// mislabeled as riding a vehicle that merely drove past it — the exact bug that
+// pinned someone "on 126" because their frozen marker sat near the route while
+// successive 126 buses streamed by:
+//   1. FRESH FIX  — a stale fix (>2 min) can't be trusted against live bus
+//      positions; a frozen dot "matches" every bus that passes it.
+//   2. RECENT MOTION — you must have moved at vehicular pace (>6 mph) within the
+//      last 2 min; rules out standing at a stop or sitting at home by the route.
+//   3. SAME VEHICLE — must stay alongside the SAME vehicle (route + vehicle id),
+//      not just the same route, for 60s — co-travel, not a flyby or bus parade.
+const _statusPersistence = {};  // tid → { candidate(key), since, lastLat, lastLon, lastFixT, lastMovedAt }
+const RIDE_NEAR_MI      = 0.05;    // person↔vehicle proximity to count as "on" it
+const RIDE_MIN_MPH      = 6;       // vehicular pace (incl. city stops) vs walking (~3)
+const RIDE_FIX_MAX_AGE  = 120;     // s — older fix is too stale to trust vs live buses
+const RIDE_MOVE_GRACE   = 120000;  // ms — keep "moving" through brief bus stops/lights
 
 function personStatus(loc) {
   // Cold-stale (≥3h since last fix): coordinates are very likely lying.
@@ -2412,39 +2423,51 @@ function personStatus(loc) {
   const tid = loc.tid || 'XX';
   const p = _statusPersistence[tid] || (_statusPersistence[tid] = {});
 
-  // Detect near a vehicle (NJT bus or Hop). Pick whichever is closer.
-  let candidate = null;
-  for (const b of _lastBuses) {
-    if (b.lat == null || b.lon == null) continue;
-    if (distMi(loc, { lat: b.lat, lon: b.lon }) < 0.12) {
-      candidate = 'on ' + b.route;
-      break;
-    }
+  // --- Movement tracking: speed between successive GPS fixes. ----------------
+  // Only advance state on a genuinely newer fix (received_at moved forward) so a
+  // re-render of the same fix doesn't read as zero-speed and clear motion.
+  const fixT = loc.received_at ? loc.received_at * 1000 : now;
+  if (p.lastFixT != null && fixT > p.lastFixT && p.lastLat != null) {
+    const moved = distMi({ lat: p.lastLat, lon: p.lastLon }, loc);
+    const hrs = (fixT - p.lastFixT) / 3600000;
+    if (hrs > 0 && moved / hrs >= RIDE_MIN_MPH) p.lastMovedAt = now;
   }
-  if (!candidate) {
-    for (const b of _lastHopBuses) {
-      if (distMi(loc, { lat: b.lat, lon: b.lon }) < 0.08) {
-        const probe = (b.route || '').toLowerCase();
-        candidate = probe.includes('red')   ? 'on Red Hop' :
-                    probe.includes('green') ? 'on Green Hop' :
-                    'on Hop';
+  if (fixT !== p.lastFixT) { p.lastLat = loc.lat; p.lastLon = loc.lon; p.lastFixT = fixT; }
+  const recentlyMoving = p.lastMovedAt != null && (now - p.lastMovedAt) < RIDE_MOVE_GRACE;
+  const fixFresh = (loc.received_at ? (now / 1000 - loc.received_at) : Infinity) <= RIDE_FIX_MAX_AGE;
+
+  // --- Match the nearest vehicle, but only when riding-eligible. -------------
+  let candidate = null, candidateKey = null;
+  if (recentlyMoving && fixFresh) {
+    for (const b of _lastBuses) {
+      if (b.lat == null || b.lon == null) continue;
+      if (distMi(loc, { lat: b.lat, lon: b.lon }) < RIDE_NEAR_MI) {
+        candidate = 'on ' + b.route;
+        candidateKey = b.route + '#' + (b.vehicle_id || '?');
         break;
+      }
+    }
+    if (!candidate) {
+      for (const b of _lastHopBuses) {
+        if (b.lat == null || b.lon == null) continue;
+        if (distMi(loc, { lat: b.lat, lon: b.lon }) < RIDE_NEAR_MI) {
+          const probe = (b.route || '').toLowerCase();
+          candidate = probe.includes('red')   ? 'on Red Hop' :
+                      probe.includes('green') ? 'on Green Hop' :
+                      'on Hop';
+          candidateKey = 'hop#' + (b.vehicle_id || b.route || '?');
+          break;
+        }
       }
     }
   }
 
-  // Update persistence tracking
-  if (candidate) {
-    if (p.candidate !== candidate) {
-      p.candidate = candidate;
-      p.since = now;
-    }
-    if (now - p.since >= 60000) {
-      return candidate;  // confirmed — been alongside the vehicle 60+ sec
-    }
+  // Persistence: confirm only after 60s alongside the SAME vehicle.
+  if (candidateKey) {
+    if (p.candidate !== candidateKey) { p.candidate = candidateKey; p.since = now; }
+    if (now - p.since >= 60000) return candidate;  // confirmed co-travel
   } else {
-    p.candidate = null;
-    p.since = null;
+    p.candidate = null; p.since = null;
   }
 
   // Over water → on ferry (no persistence check needed; physically impossible
