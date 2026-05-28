@@ -681,25 +681,34 @@
   }
   .leaflet-tooltip.bus-tip::before { display: none; }
   /* NJT bus marker — NJTbus.png logo + direction arrow above (NY-bound) or
-     below (return). Arrow color is set inline per bus from passload. */
+     below (return). Inner elements size off the parent so changing
+     iconSize on the marker resizes everything. Body is always a square
+     at the marker's width; arrow takes whatever vertical space remains
+     (the marker height stays ~26/14 = 1.86× the width). */
   .bus-marker .nbm-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 26px;
-    height: 40px;
+    width: 100%;
+    height: 100%;
     gap: 0;
   }
   .bus-marker .nbm-body {
-    width: 26px;
-    height: 26px;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
     display: block;
     /* NJTbus.png has a white square background — clip to circle to match
        the round logo and avoid white corners against the dark map. */
     border-radius: 50%;
     clip-path: circle(50%);
   }
-  .bus-marker .nbm-arrow { display: block; }
+  .bus-marker .nbm-arrow {
+    display: block;
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 0;
+  }
 
   /* Hoboken Hop shuttle marker — bus icon, color is set inline per bus
      (red for Red Hop, green for Green Hop) */
@@ -2504,6 +2513,14 @@ function initHobokenMap() {
     zIndexOffset: -500,  // home sits BEHIND people now (they're the answer)
   }).addTo(_hobokenMap);
 
+  // Re-render bus markers when zoom changes so their size adjusts to the
+  // new view. At wide zooms (Hoboken + Manhattan visible) markers shrink so
+  // 40+ buses don't pile into a cluttered mess. _busIconScale() picks the
+  // factor; _lastBuses holds the last batch so we don't need a new fetch.
+  _hobokenMap.on('zoomend', function () {
+    if (typeof renderBuses === 'function' && _lastBuses) renderBuses(_lastBuses);
+  });
+
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
 
@@ -2733,9 +2750,27 @@ function _busSvg(arrowColor, toNYC) {
   return '<div class="nbm-wrap">' + (toNYC ? arrow + img : img + arrow) + '</div>';
 }
 
+// Bus icon size scales with map zoom — at the close-in Hoboken view (zoom
+// 15+) the 26×40 marker is right-sized, but zoomed out to show Lower
+// Manhattan (zoom 12-13) those same markers crowd into a cluttered mess of
+// 40+ overlapping buses. Drop to ~50% size at zoom 12 so they still convey
+// "bus density" without obscuring the map underneath.
+function _busIconScale() {
+  if (!_hobokenMap) return 1;
+  const z = _hobokenMap.getZoom();
+  if (z >= 15) return 1.0;
+  if (z >= 14) return 0.85;
+  if (z >= 13) return 0.65;
+  if (z >= 12) return 0.5;
+  return 0.4;
+}
+
 function renderBuses(buses) {
   _lastBuses = buses || [];
   if (!_hobokenMap) return;
+  const scale = _busIconScale();
+  const W = Math.round(26 * scale);
+  const H = Math.round(40 * scale);
   const seen = new Set();
   for (const b of buses) {
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
@@ -2745,8 +2780,8 @@ function renderBuses(buses) {
     const icon = L.divIcon({
       className: 'bus-marker',
       html: _busSvg(arrowColor, toNYC),
-      iconSize: [26, 40],
-      iconAnchor: [13, 20],
+      iconSize: [W, H],
+      iconAnchor: [Math.round(W / 2), Math.round(H / 2)],
     });
     const label = (b.route ? b.route : 'Bus') + (b.vehicle_id ? ' · #' + b.vehicle_id : '');
     if (_busMarkers[key]) {
