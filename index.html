@@ -3368,6 +3368,49 @@ function isSleeping() {
   return h >= 1 && h < 7;
 }
 
+// When the TV turns off, the streaming stick suspends the browser tab; when
+// it turns back on, JS resumes but the next scheduled poll could be up to
+// 15s away (or longer for transit/weather). Without this handler the family
+// stares at the last-rendered frame from before the suspension — Jenny at
+// home even though she's actually at work.
+//
+// Force a one-shot refresh of every data source the moment the tab regains
+// visibility. Throttled to once per 3s so multiple visibility events in
+// quick succession (TV flicker, dev tools docking, etc.) don't hammer the
+// proxy.
+let _lastVisibilityRefresh = 0;
+function _forceFullRefresh() {
+  const now = Date.now();
+  if (now - _lastVisibilityRefresh < 3000) return;
+  _lastVisibilityRefresh = now;
+  try { updateTransit    && updateTransit();    } catch (e) {}
+  try { updateWeather    && updateWeather();    } catch (e) {}
+  try { fetchAlerts      && fetchAlerts();      } catch (e) {}
+  try { fetchLocations   && fetchLocations();   } catch (e) {}
+  try { fetchFerries     && fetchFerries();     } catch (e) {}
+  try { fetchHop         && fetchHop();         } catch (e) {}
+  try { fetchCalEvents   && fetchCalEvents();   } catch (e) {}
+}
+
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible' && !isSleeping()) {
+    _forceFullRefresh();
+  }
+});
+
+// pageshow with persisted=true fires when the page is restored from the
+// back-forward cache (bfcache) — common on Android TV / Onn / Fire TV when
+// the streaming stick resumes a suspended browser session.
+window.addEventListener('pageshow', function (e) {
+  if (e.persisted && !isSleeping()) _forceFullRefresh();
+});
+
+// window focus is a backstop for the rare case where visibilitychange
+// doesn't fire (some embedded browsers).
+window.addEventListener('focus', function () {
+  if (!document.hidden && !isSleeping()) _forceFullRefresh();
+});
+
 let _wasSleeping = false;
 function checkSleepMode() {
   const sleeping = isSleeping();
