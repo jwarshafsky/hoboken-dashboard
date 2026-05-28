@@ -2704,7 +2704,7 @@ function renderTiles(tiles) {
       _tileMarkers[key].setLatLng(latlng);
       _tileMarkers[key].setIcon(icon);
     } else {
-      _tileMarkers[key] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+      _tileMarkers[key] = L.marker(latlng, { icon: icon, zIndexOffset: 9000 }).addTo(_hobokenMap);
     }
   }
   for (const key of Object.keys(_tileMarkers)) {
@@ -2919,7 +2919,7 @@ function renderLocations(locations) {
       _personMarkers[loc.tid].setLatLng(latlng);
       _personMarkers[loc.tid].setIcon(icon);
     } else {
-      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon }).addTo(_hobokenMap);
+      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon, zIndexOffset: 10000 }).addTo(_hobokenMap);
     }
   }
   // Remove markers for people no longer in the list
