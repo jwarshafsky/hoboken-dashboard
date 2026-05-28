@@ -681,34 +681,23 @@
   }
   .leaflet-tooltip.bus-tip::before { display: none; }
   /* NJT bus marker — NJTbus.png logo + direction arrow above (NY-bound) or
-     below (return). Inner elements size off the parent so changing
-     iconSize on the marker resizes everything. Body is always a square
-     at the marker's width; arrow takes whatever vertical space remains
-     (the marker height stays ~26/14 = 1.86× the width). */
+     below (return). Sizes are written inline by _busSvg() based on the
+     map-zoom-derived scale, so we just provide the layout primitives here
+     (column flex, centered, body clipped to a circle). */
   .bus-marker .nbm-wrap {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 100%;
-    height: 100%;
     gap: 0;
   }
   .bus-marker .nbm-body {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    flex-shrink: 0;
     display: block;
     /* NJTbus.png has a white square background — clip to circle to match
        the round logo and avoid white corners against the dark map. */
     border-radius: 50%;
     clip-path: circle(50%);
   }
-  .bus-marker .nbm-arrow {
-    display: block;
-    width: 100%;
-    flex: 1 1 0;
-    min-height: 0;
-  }
+  .bus-marker .nbm-arrow { display: block; }
 
   /* Hoboken Hop shuttle marker — bus icon, color is set inline per bus
      (red for Red Hop, green for Green Hop) */
@@ -2736,18 +2725,25 @@ function busLoadColor(passload) {
   return '#7090a0';
 }
 
-function _busSvg(arrowColor, toNYC) {
+function _busSvg(arrowColor, toNYC, scale) {
   // NJT bus marker: NJTbus.png logo as the body, with a colored direction
   // arrow stacked above (NY-bound) or below (return). Arrow color encodes
-  // passenger load (see busLoadColor).
+  // passenger load (see busLoadColor). All sizes are written inline so the
+  // marker scales with map zoom — _busIconScale() returns the factor (1.0
+  // at zoom 15+, dropping to 0.4 at zoom <= 11).
+  scale = scale || 1;
+  const W  = Math.round(26 * scale);   // marker width & body height (body is square)
+  const AH = Math.round(14 * scale);   // arrow height
   const pts = toNYC ? '13,1 1,13 25,13' : '13,13 1,1 25,1';
   const arrow =
-    '<svg class="nbm-arrow" width="26" height="14" viewBox="0 0 26 14">' +
+    '<svg class="nbm-arrow" width="' + W + '" height="' + AH + '" viewBox="0 0 26 14">' +
       '<polygon points="' + pts + '" fill="' + arrowColor + '"' +
         ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>' +
     '</svg>';
-  const img = '<img src="NJTbus.png" class="nbm-body" alt="">';
-  return '<div class="nbm-wrap">' + (toNYC ? arrow + img : img + arrow) + '</div>';
+  const img = '<img src="NJTbus.png" class="nbm-body" alt=""' +
+              ' style="width:' + W + 'px;height:' + W + 'px;">';
+  return '<div class="nbm-wrap" style="width:' + W + 'px;height:' + (W + AH) + 'px;">' +
+         (toNYC ? arrow + img : img + arrow) + '</div>';
 }
 
 // Bus icon size scales with map zoom — at the close-in Hoboken view (zoom
@@ -2770,7 +2766,8 @@ function renderBuses(buses) {
   if (!_hobokenMap) return;
   const scale = _busIconScale();
   const W = Math.round(26 * scale);
-  const H = Math.round(40 * scale);
+  const AH = Math.round(14 * scale);
+  const H = W + AH;  // body W + arrow AH — match what _busSvg builds
   const seen = new Set();
   for (const b of buses) {
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
@@ -2779,7 +2776,7 @@ function renderBuses(buses) {
     const arrowColor = busLoadColor(b.passload);
     const icon = L.divIcon({
       className: 'bus-marker',
-      html: _busSvg(arrowColor, toNYC),
+      html: _busSvg(arrowColor, toNYC, scale),
       iconSize: [W, H],
       iconAnchor: [Math.round(W / 2), Math.round(H / 2)],
     });
