@@ -1552,8 +1552,8 @@ function updateCommuteEstimate() {
   const now = new Date();
   const day = now.getDay();
   const time = now.getHours() * 60 + now.getMinutes();
-  // Mon-Fri only, 7:00 AM to 10:30 AM inclusive
-  if (day === 0 || day === 6 || time < 7 * 60 || time > 10 * 60 + 30) {
+  // Mon-Fri only (excl. holidays), 7:00 AM to 10:30 AM inclusive
+  if (day === 0 || day === 6 || isHolidayService() || time < 7 * 60 || time > 10 * 60 + 30) {
     container.innerHTML = '';
     return;
   }
@@ -1779,13 +1779,32 @@ function countdownText(mins) {
   return m > 0 ? `${h}${u('h')}${m}${u('m')}` : `${h}${u('h')}`;
 }
 
+// Dates NJ Transit runs Sunday-level (holiday) service. Folded into the day-type
+// helpers below so the hardcoded schedule FALLBACK shows Sunday timetables — not
+// phantom full-weekday departures — on holidays. (When live NJT data is present
+// the dashboard trusts it regardless; this only governs the offline fallback.)
+// Refresh this list each year.
+const HOLIDAY_SERVICE = new Set([
+  '2026-01-01', '2026-05-25', '2026-07-04', '2026-09-07', '2026-11-26', '2026-12-25',
+  '2027-01-01', '2027-05-31', '2027-07-04', '2027-09-06', '2027-11-25', '2027-12-25',
+]);
+function isHolidayService() {
+  const d = new Date();
+  const key = d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+  return HOLIDAY_SERVICE.has(key);
+}
+
+// NOTE: these fold holidays into weekend / Sunday SERVICE — they are used only to
+// pick which printed timetable to fall back to, so a holiday gets Sunday service.
 function isWeekend() {
   const day = new Date().getDay();
-  return day === 0 || day === 6;
+  return day === 0 || day === 6 || isHolidayService();
 }
 
 function isSunday() {
-  return new Date().getDay() === 0;
+  return new Date().getDay() === 0 || isHolidayService();
 }
 
 function getNextDepartures(times, count) {
@@ -1807,13 +1826,8 @@ function renderDepartures(times, label) {
   let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
   for (const t of next) {
     const mins = minutesUntil(t);
-    // Urgency uses red-vs-WHITE (not red-vs-green): red/green is invisible to the
-    // ~8% of men with red-green color blindness, and green is reserved for the
-    // live-state dots elsewhere. Bold reinforces "run" in monochrome / at distance.
-    const urgent = mins <= 5;
-    const cdColor = urgent ? '#ff6b6b' : '#e8e8ec';
-    const cdWeight = urgent ? 800 : 600;
-    html += `<div class="dep-chip"><span class="t">${formatTime12(t)}</span><span class="cd" style="color:${cdColor};font-weight:${cdWeight}">${countdownText(mins)}</span></div>`;
+    const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
+    html += `<div class="dep-chip"><span class="t">${formatTime12(t)}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
   }
   html += '</div></div>';
   return html;
@@ -1903,10 +1917,7 @@ function renderLivePredictions(predictions, label) {
       // visible until it's actually departed.
       const isDue = msUntil < 60000;
       const mins = isDue ? 0 : Math.floor(msUntil / 60000);
-      // Red-vs-WHITE urgency (CVD-safe; see static path) + bold for ≤5 min.
-      const urgent = mins <= 5;
-      const cdColor = urgent ? '#ff6b6b' : '#e8e8ec';
-      const cdWeight = urgent ? 800 : 600;
+      const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
       let displayTime;
       if (isDue) {
         displayTime = 'Due';
@@ -1924,7 +1935,7 @@ function renderLivePredictions(predictions, label) {
       const est = !!p.is_inferred;
       const cdText = (est ? '<span class="cd-unit">~</span>' : '') + countdownText(mins);
       const subLine = est ? 'est' : displayTime;
-      html += `<div class="dep-chip"><span class="t">${subLine}</span><span class="cd" style="color:${cdColor};font-weight:${cdWeight}">${cdText}</span></div>`;
+      html += `<div class="dep-chip"><span class="t">${subLine}</span><span class="cd" style="color:${cdColor}">${cdText}</span></div>`;
     }
     html += '</div></div>';
     return html;
@@ -2502,9 +2513,10 @@ function personStatus(loc) {
     p.candidate = null; p.since = null; p.busStartLat = null; p.busStartLon = null;
   }
 
-  // Over water → on ferry (no persistence check needed; physically impossible
-  // to be over the Hudson without being on a boat)
-  if (isOverWater(loc.lat, loc.lon)) return 'on ferry';
+  // Over water → on ferry, but only on a FRESH fix. You can't be mid-Hudson
+  // except on a boat — but a STALE dot that happens to sit in the river bbox
+  // (or a waterfront walk at the box edge) shouldn't be asserted as "on ferry".
+  if (fixFresh && isOverWater(loc.lat, loc.lon)) return 'on ferry';
 
   if (dHome < 0.5) return 'near home';
   return dHome.toFixed(1) + ' mi away';
@@ -3348,7 +3360,10 @@ function renderCalEvents(events) {
           // Heuristic mode: city (NYC) → bus; otherwise drive
           const isNYC = /\b(NY|NYC|New York|Manhattan)\b/i.test(ev.location);
           const travelMin = isNYC ? 45 : 20;
-          const mode = isNYC ? '126/119' : 'drive';
+          // "transit" not "126/119": this is a rough fixed-time estimate, not a
+          // checked live departure — don't name a route that may not be running
+          // (e.g. a weekend/holiday/late-night event).
+          const mode = isNYC ? 'transit' : 'drive';
           const leaveMs = eventMs - travelMin * 60000;
           const leaveDate = new Date(leaveMs);
           const lh = leaveDate.getHours();
@@ -3356,7 +3371,7 @@ function renderCalEvents(events) {
           const lampm = lh >= 12 ? 'PM' : 'AM';
           const lh12 = lh % 12 || 12;
           const leaveStr = lh12 + ':' + lm + ' ' + lampm;
-          leaveHtml = '<div class="cal-leave-by">Leave ' + leaveStr +
+          leaveHtml = '<div class="cal-leave-by">Leave ~' + leaveStr +
             ' <span class="cal-leave-mode">(' + mode + ')</span></div>';
         }
       }
