@@ -166,12 +166,12 @@
 
   .weather-icon {
     flex-shrink: 0;
-    /* Sized to visually match the .weather-temp glyphs to the right.
-       amcharts SVGs have ~15% padding inside the 64-unit viewBox, so the
-       rendered art is roughly 85% of the container — at 76px box the
-       visible icon is ~64px, matching the temp font height. */
-    width: 76px;
-    height: 76px;
+    /* Intentionally a touch larger than the temperature glyph and nudged toward
+       the left edge of the hero row. amcharts SVGs have ~15% padding inside the
+       64-unit viewBox, so the visible art is ~85% of the box. */
+    width: 86px;
+    height: 86px;
+    transform: translateX(-8px);   /* slight nudge toward the left edge */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -199,7 +199,7 @@
 
   .weather-temp {
     flex-shrink: 0;
-    font-size: 2.2rem;
+    font-size: 1.9rem;   /* a touch smaller so it stops crowding the forecast text */
     font-weight: 200;
     color: #fff;
     line-height: 1;
