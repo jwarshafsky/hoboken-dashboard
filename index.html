@@ -871,7 +871,7 @@
     background: #1a1a2a;
     padding: 3px 6px;
     border-radius: 6px;
-    width: 60px;
+    width: 64px;   /* +4px headroom for the larger --fs-sub countdown */
     text-align: center;
     box-sizing: border-box;
     flex-shrink: 0;
@@ -899,7 +899,9 @@
   }
 
   .dep-chip .cd {
-    font-size: var(--fs-body);
+    font-size: var(--fs-sub);   /* match tunnel/hop big-number size — the catchable
+                                   bus countdown is the most decision-relevant number
+                                   on the wall and shouldn't be out-sized by traffic. */
     font-weight: 600;
     color: #fff;
     order: 1;
@@ -1805,8 +1807,13 @@ function renderDepartures(times, label) {
   let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
   for (const t of next) {
     const mins = minutesUntil(t);
-    const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-    html += `<div class="dep-chip"><span class="t">${formatTime12(t)}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
+    // Urgency uses red-vs-WHITE (not red-vs-green): red/green is invisible to the
+    // ~8% of men with red-green color blindness, and green is reserved for the
+    // live-state dots elsewhere. Bold reinforces "run" in monochrome / at distance.
+    const urgent = mins <= 5;
+    const cdColor = urgent ? '#ff6b6b' : '#e8e8ec';
+    const cdWeight = urgent ? 800 : 600;
+    html += `<div class="dep-chip"><span class="t">${formatTime12(t)}</span><span class="cd" style="color:${cdColor};font-weight:${cdWeight}">${countdownText(mins)}</span></div>`;
   }
   html += '</div></div>';
   return html;
@@ -1896,7 +1903,10 @@ function renderLivePredictions(predictions, label) {
       // visible until it's actually departed.
       const isDue = msUntil < 60000;
       const mins = isDue ? 0 : Math.floor(msUntil / 60000);
-      const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
+      // Red-vs-WHITE urgency (CVD-safe; see static path) + bold for ≤5 min.
+      const urgent = mins <= 5;
+      const cdColor = urgent ? '#ff6b6b' : '#e8e8ec';
+      const cdWeight = urgent ? 800 : 600;
       let displayTime;
       if (isDue) {
         displayTime = 'Due';
@@ -1908,7 +1918,13 @@ function renderLivePredictions(predictions, label) {
         const h12 = hh % 12 || 12;
         displayTime = `${h12}:${mm} ${ampm}`;
       }
-      html += `<div class="dep-chip"><span class="t">${displayTime}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
+      // Inferred (GPS-pace) ETAs are estimates, not live predictions. The proxy
+      // flags them is_inferred; mark the chip so a guessed time never looks like
+      // a real one — "~" on the countdown and "est" instead of a false-precise clock.
+      const est = !!p.is_inferred;
+      const cdText = (est ? '<span class="cd-unit">~</span>' : '') + countdownText(mins);
+      const subLine = est ? 'est' : displayTime;
+      html += `<div class="dep-chip"><span class="t">${subLine}</span><span class="cd" style="color:${cdColor};font-weight:${cdWeight}">${cdText}</span></div>`;
     }
     html += '</div></div>';
     return html;
