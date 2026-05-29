@@ -2392,21 +2392,26 @@ function isOverWater(lat, lon) {
          lon >= -74.020 && lon <= -74.011;
 }
 
-// "On a bus/Hop" inference. Three guards stop a parked or stale dot from being
-// mislabeled as riding a vehicle that merely drove past it — the exact bug that
-// pinned someone "on 126" because their frozen marker sat near the route while
-// successive 126 buses streamed by:
+// "On a bus/Hop" inference. You're only "on" a vehicle if you're MOVING WITH
+// it. Four guards stop a parked/stale/passing dot from being mislabeled — the
+// exact bug that pinned someone "on 126" because their frozen marker sat near
+// the route while successive 126 buses streamed by:
 //   1. FRESH FIX  — a stale fix (>2 min) can't be trusted against live bus
 //      positions; a frozen dot "matches" every bus that passes it.
 //   2. RECENT MOTION — you must have moved at vehicular pace (>6 mph) within the
 //      last 2 min; rules out standing at a stop or sitting at home by the route.
 //   3. SAME VEHICLE — must stay alongside the SAME vehicle (route + vehicle id),
-//      not just the same route, for 60s — co-travel, not a flyby or bus parade.
-const _statusPersistence = {};  // tid → { candidate(key), since, lastLat, lastLon, lastFixT, lastMovedAt }
+//      not just the same route, for 60s — not a flyby or a parade of buses.
+//   4. CO-TRAVEL — that vehicle must itself travel a real distance during the
+//      60s lock while you stay attached. That's the actual "moving with it"
+//      test: a bus idling at a light (with you parked beside it) never confirms.
+const _statusPersistence = {};  // tid → { candidate(key), since, busStartLat, busStartLon, lastLat, lastLon, lastFixT, lastMovedAt }
 const RIDE_NEAR_MI      = 0.05;    // person↔vehicle proximity to count as "on" it
 const RIDE_MIN_MPH      = 6;       // vehicular pace (incl. city stops) vs walking (~3)
 const RIDE_FIX_MAX_AGE  = 120;     // s — older fix is too stale to trust vs live buses
 const RIDE_MOVE_GRACE   = 120000;  // ms — keep "moving" through brief bus stops/lights
+const CO_TRAVEL_MIN     = 0.08;    // mi the matched vehicle must travel during the
+                                   // 60s lock (~5 mph avg) — proves co-movement
 
 function personStatus(loc) {
   // Cold-stale (≥3h since last fix): coordinates are very likely lying.
@@ -2437,13 +2442,14 @@ function personStatus(loc) {
   const fixFresh = (loc.received_at ? (now / 1000 - loc.received_at) : Infinity) <= RIDE_FIX_MAX_AGE;
 
   // --- Match the nearest vehicle, but only when riding-eligible. -------------
-  let candidate = null, candidateKey = null;
+  let candidate = null, candidateKey = null, matchedVeh = null;
   if (recentlyMoving && fixFresh) {
     for (const b of _lastBuses) {
       if (b.lat == null || b.lon == null) continue;
       if (distMi(loc, { lat: b.lat, lon: b.lon }) < RIDE_NEAR_MI) {
         candidate = 'on ' + b.route;
         candidateKey = b.route + '#' + (b.vehicle_id || '?');
+        matchedVeh = b;
         break;
       }
     }
@@ -2456,18 +2462,28 @@ function personStatus(loc) {
                       probe.includes('green') ? 'on Green Hop' :
                       'on Hop';
           candidateKey = 'hop#' + (b.vehicle_id || b.route || '?');
+          matchedVeh = b;
           break;
         }
       }
     }
   }
 
-  // Persistence: confirm only after 60s alongside the SAME vehicle.
-  if (candidateKey) {
-    if (p.candidate !== candidateKey) { p.candidate = candidateKey; p.since = now; }
-    if (now - p.since >= 60000) return candidate;  // confirmed co-travel
+  // Persistence: confirm only after 60s alongside the SAME vehicle AND only if
+  // that vehicle actually moved (co-travel). Anchoring busStart* to the vehicle
+  // position when the lock begins lets us measure how far it travelled during
+  // the lock — an idling bus next to a parked person never clears CO_TRAVEL_MIN.
+  if (candidateKey && matchedVeh) {
+    if (p.candidate !== candidateKey) {
+      p.candidate = candidateKey; p.since = now;
+      p.busStartLat = matchedVeh.lat; p.busStartLon = matchedVeh.lon;
+    }
+    const busTravelled = (p.busStartLat != null)
+      ? distMi({ lat: p.busStartLat, lon: p.busStartLon }, { lat: matchedVeh.lat, lon: matchedVeh.lon })
+      : 0;
+    if (now - p.since >= 60000 && busTravelled >= CO_TRAVEL_MIN) return candidate;
   } else {
-    p.candidate = null; p.since = null;
+    p.candidate = null; p.since = null; p.busStartLat = null; p.busStartLon = null;
   }
 
   // Over water → on ferry (no persistence check needed; physically impossible
