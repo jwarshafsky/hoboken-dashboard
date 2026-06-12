@@ -2402,11 +2402,10 @@ const PERSON_NAMES = {
 
 // Static home stubs — shown at home until real Tile data arrives.
 // When a Tile with matching TID comes online, the live position takes over.
-const HOME_STUBS = [
-  { tid: 'SY', name: 'Sydney',    lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-  { tid: 'EL', name: 'Elizabeth', lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-  { tid: 'JU', name: 'Juno',      lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-];
+// Sydney / Elizabeth / Juno stubs removed — no working API path to their
+// Tile trackers (Life360 + Tile consolidation broke the only public route).
+// Re-add entries here if/when a working location source comes online.
+const HOME_STUBS = [];
 
 function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
