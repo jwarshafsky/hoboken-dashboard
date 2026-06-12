@@ -2257,6 +2257,16 @@ function personStatus(loc) {
   const recentlyMoving = p.lastMovedAt != null && (now - p.lastMovedAt) < RIDE_MOVE_GRACE;
   const fixFresh = (loc.received_at ? (now / 1000 - loc.received_at) : Infinity) <= RIDE_FIX_MAX_AGE;
 
+  // Distance-to-home history (8-min rolling window) for the "heading home"
+  // status. Appended only on genuinely newer fixes so re-renders don't dilute.
+  if (!p.distSamples) p.distSamples = [];
+  if (!p.distSamples.length || fixT > p.distSamples[p.distSamples.length - 1].t) {
+    p.distSamples.push({ t: fixT, d: dHome });
+    while (p.distSamples.length && fixT - p.distSamples[0].t > 8 * 60000) {
+      p.distSamples.shift();
+    }
+  }
+
   // --- Match the nearest vehicle, but only when riding-eligible. -------------
   let candidate = null, candidateKey = null, matchedVeh = null;
   if (recentlyMoving && fixFresh) {
@@ -2306,6 +2316,27 @@ function personStatus(loc) {
   // except on a boat — but a STALE dot that happens to sit in the river bbox
   // (or a waterfront walk at the box edge) shouldn't be asserted as "on ferry".
   if (fixFresh && isOverWater(loc.lat, loc.lon)) return 'on ferry';
+
+  // Heading home: outside the neighborhood, fresh fix, and distance-to-home
+  // has fallen steadily for 2+ minutes → show an ETA. Covers the stretch the
+  // vehicle matcher can't (Lincoln Tunnel, Manhattan, driving) — the exact
+  // window when "is Jeff on his way?" gets asked.
+  if (fixFresh && dHome >= 0.5 && p.distSamples.length >= 2) {
+    const first = p.distSamples[0];
+    const last = p.distSamples[p.distSamples.length - 1];
+    const spanMin = (last.t - first.t) / 60000;
+    const closedMi = first.d - last.d;
+    if (spanMin >= 2 && closedMi >= 0.25) {
+      const rate = closedMi / spanMin;   // miles per minute toward home
+      if (rate >= 0.08) {                // sustained ≥ ~5 mph closing speed
+        let eta = Math.round(dHome / rate);
+        if (eta <= 90) {
+          if (eta > 10) eta = Math.round(eta / 5) * 5;  // coarse past 10 min
+          return 'heading home · ~' + Math.max(eta, 1) + ' min';
+        }
+      }
+    }
+  }
 
   if (dHome < 0.5) return 'near home';
   return dHome.toFixed(1) + ' mi away';
