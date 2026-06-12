@@ -67,7 +67,8 @@
     padding: 12px;
   }
 
-  /* TV simulation mode — body becomes a fixed 1920x1080 surface that's scaled
+  /* TV simulation mode — body becomes a fixed 930x539 surface (the Onn's
+     effective CSS viewport) that's scaled
      to fit the browser window. Activate by adding ?tv to the URL. */
   html.tv-sim {
     background: #000;
@@ -110,27 +111,6 @@
     width: 14px;
     height: 14px;
     flex-shrink: 0;
-  }
-
-  /* Clock card — hidden (map takes full left) */
-  .clock-card {
-    display: none;
-  }
-
-  .time {
-    font-size: var(--fs-hero);
-    font-weight: 200;
-    letter-spacing: 0.02em;
-    line-height: 1;
-    color: #fff;
-    white-space: nowrap;
-  }
-
-  .date-line {
-    font-size: var(--fs-label);
-    font-weight: 300;
-    color: #888;
-    margin-top: 4px;
   }
 
   /* Weather card — bottom-right. Three vertical zones:
@@ -374,9 +354,11 @@
   }
   .ms-pill {
     background: rgba(0, 0, 0, 0.55);
-    padding: 3px 8px;
+    padding: 3px 9px;
     border-radius: 12px;
-    font-size: var(--fs-micro);
+    /* fs-label, not micro — this pill is the most charter-critical text on
+       screen ("Jeff · on 126 · 30s ago") and must read from 10 feet. */
+    font-size: var(--fs-label);
     color: #ddd;
     line-height: 1.3;
     white-space: nowrap;
@@ -525,13 +507,6 @@
     margin: 8px -12px 6px -12px;
   }
 
-  .alerts-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    overflow: hidden;
-  }
-
   .alerts-list {
     flex-shrink: 0;
     overflow: hidden;
@@ -581,28 +556,6 @@
   .alert-badge.news {
     background: #2a2a3a;
     color: #888;
-  }
-
-  /* Map panel (replaces news in alerts card during specific hours) */
-  .map-container {
-    flex: 2;
-    min-height: 220px;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #0a0a0f;
-    margin-top: 8px;
-    border-top: 0.5px solid #2a2a35;
-  }
-
-  .map-container .leaflet-container {
-    width: 100%;
-    height: 100%;
-    background: #0a0a0f;
-  }
-
-  /* Subtle tone adjustment on map tiles */
-  .map-container .leaflet-tile-pane {
-    filter: brightness(0.95);
   }
 
   /* Hide Leaflet controls — we want a clean ambient view */
@@ -727,65 +680,6 @@
     text-align: center;
   }
 
-  .person-list {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    font-size: var(--fs-label);
-    padding-top: 4px;
-    color: #aaa;
-  }
-
-  .person-list .person-dot {
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #6bffb8;
-    margin-right: 4px;
-    vertical-align: middle;
-  }
-
-  .stock-ticker-bar {
-    flex-shrink: 0;
-    border-top: 0.5px solid #1e1e2e;
-    padding-top: 6px;
-    margin: 8px -12px 0 -12px;
-    padding-left: 0;
-    padding-right: 0;
-    overflow: hidden;
-    position: relative;
-  }
-
-  .stock-ticker-track {
-    display: flex;
-    gap: 18px;
-    animation: ticker-scroll 25s linear infinite;
-    width: max-content;
-  }
-
-  @keyframes ticker-scroll {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-
-  .stock-item {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    white-space: nowrap;
-    font-size: var(--fs-micro);
-  }
-
-  .stock-symbol {
-    font-weight: 600;
-    color: #999;
-  }
-
-  .stock-pct { font-weight: 500; }
-  .stock-up { color: #8a9aa0; }
-  .stock-down { color: #ff6b6b; }
-
   /* Transit cards - full width.
      min-height keeps bus and ferry visually equal even when the ferry has
      only one route to display (bus shows 126 + 119, naturally taller).
@@ -847,7 +741,9 @@
   }
 
   .route-label {
-    font-size: var(--fs-micro);
+    /* fs-label, not micro — at 10 feet the countdown numbers were readable
+       but the route they belonged to wasn't. */
+    font-size: var(--fs-label);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -907,32 +803,6 @@
     order: 1;
     line-height: 1.1;
   }
-
-  .load-bars {
-    display: inline-flex;
-    gap: 1.5px;
-    margin-left: 5px;
-    vertical-align: middle;
-    align-items: flex-end;
-    height: 10px;
-  }
-
-  .load-bar {
-    width: 2.5px;
-    background: #2a2a3a;
-    border-radius: 1px;
-    transition: background 0.3s;
-  }
-
-  .load-bar:nth-child(1) { height: 3px; }
-  .load-bar:nth-child(2) { height: 5px; }
-  .load-bar:nth-child(3) { height: 7px; }
-  .load-bar:nth-child(4) { height: 10px; }
-
-  .load-bar.lvl-1 { background: #8a9aa0; }
-  .load-bar.lvl-2 { background: #a0e060; }
-  .load-bar.lvl-3 { background: #e0c040; }
-  .load-bar.lvl-4 { background: #ff9b40; }
 
   .tunnel-traffic {
     flex-shrink: 0;
@@ -1018,14 +888,12 @@
      Note: weather-icon animations live inside each <img>-loaded SVG and
      can't be reached from this stylesheet (SVG runs sandboxed). They keep
      animating during sleep — typically not visible since sleep hides body. */
-  body.sleeping .stock-ticker-track,
   body.sleeping .ferry-wave {
     animation-play-state: paused;
   }
 
   /* Respect user/system reduced-motion preference */
   @media (prefers-reduced-motion: reduce) {
-    .stock-ticker-track,
     .ferry-wave.active {
       animation: none !important;
     }
@@ -1059,20 +927,12 @@
     }
     #calCard, #alertsCard, #weatherCard { grid-row: auto; grid-column: auto; }
     .transit-card { grid-column: auto; flex-direction: column; align-items: flex-start; }
-    .clock-card { grid-row: auto; grid-column: auto; }
-    .time { font-size: var(--fs-hero); }
     .weather-temp { font-size: var(--fs-hero); }
     .weather-forecast { flex-direction: row; flex-wrap: wrap; }
   }
 </style>
 </head>
 <body>
-
-<!-- Row 1: Clock (top-left) -->
-<div class="card clock-card">
-  <div class="time" id="clock">--:--</div>
-  <div class="date-line" id="dateLine">---</div>
-</div>
 
 <!-- Row 1-2: Map (middle, always visible, fills its panel) -->
 <div class="card" id="mapCard">
@@ -1161,7 +1021,7 @@
 
 <script>
 // ============================================================
-// TV SIMULATION MODE — ?tv in URL renders the dashboard at fixed 1920x1080,
+// TV SIMULATION MODE — ?tv in URL renders the dashboard at fixed 930x539,
 // scaled to fit any browser window while preserving TV proportions.
 // ============================================================
 (function setupTvSimulation() {
@@ -1210,10 +1070,12 @@ function fetchT(url, opts, ms) {
 // API STATUS TRACKING
 // ============================================================
 const apiStatus = {
-  transit: { ok: null, lastUpdate: null },
-  weather: { ok: null, lastUpdate: null },
-  hop:     { ok: null, lastUpdate: null },
-  alerts:  { ok: null, lastUpdate: null },
+  transit:   { ok: null, lastUpdate: null },
+  weather:   { ok: null, lastUpdate: null },
+  hop:       { ok: null, lastUpdate: null },
+  alerts:    { ok: null, lastUpdate: null },
+  locations: { ok: null, lastUpdate: null },
+  calendar:  { ok: null, lastUpdate: null },
 };
 
 function markOk(key) {
@@ -1239,17 +1101,7 @@ function agoText(ts) {
   return `${Math.floor(sec / 3600)}h ago`;
 }
 
-// Show actual viewport dims so we can compare TV vs PC
-function updateViewportDiag() {
-  const el = document.getElementById('statusViewport');
-  if (!el) return;
-  el.textContent = window.innerWidth + 'x' + window.innerHeight +
-    ' @' + (window.devicePixelRatio || 1) + 'x';
-}
-window.addEventListener('resize', updateViewportDiag);
-
 function updateStatusBar() {
-  updateViewportDiag();
   // Freshness: most recent successful update (transit/hop update every 15s)
   let newest = null;
   for (const key of Object.keys(apiStatus)) {
@@ -1292,6 +1144,7 @@ function updateStatusBar() {
   staleClass('busContent', 'transit');
   staleClass('ferryContent', 'transit');
   staleClass('hopTraffic', 'hop');
+  staleClass('mapStatusOverlay', 'locations');
 }
 
 // ============================================================
@@ -1872,25 +1725,6 @@ function updateBusStatic() {
 // ============================================================
 // PROXY FETCH
 // ============================================================
-function loadDot(passload) {
-  const p = (passload || '').toUpperCase();
-  // Map passload to number of filled bars (0-4)
-  let level = 0;
-  if (p === 'EMPTY') level = 1;
-  else if (p === 'LIGHT') level = 2;
-  else if (p === 'MEDIUM') level = 3;
-  else if (p === 'HEAVY' || p === 'FULL' || p === 'OVERLOADED') level = 4;
-  else return '';
-
-  // Render 4 bars, filling based on level, each colored by the level
-  let bars = '';
-  for (let i = 1; i <= 4; i++) {
-    const filled = i <= level ? ` lvl-${level}` : '';
-    bars += `<span class="load-bar${filled}"></span>`;
-  }
-  return `<span class="load-bars" title="${p}">${bars}</span>`;
-}
-
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
     return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>Reconnecting</div></div>`;
@@ -1961,14 +1795,6 @@ async function fetchProxy() {
       (data.tunnel && data.tunnel.error && /auth/i.test(data.tunnel.error || ''))
     );
     if (transitDegraded) markFail('transit'); else markOk('transit');
-
-    // Life360 token death surfaces in /locations response as life360_error.
-    // We log it here so a quick console glance catches the months-out token
-    // expiry; in /locations response handling (fetchLocations) we also flag
-    // statusErrors so the bottom status bar shows the issue.
-    if (data.life360_error) {
-      window._life360Error = data.life360_error;
-    }
 
     // Stash fetched_at so renderLivePredictions can reconcile against current time
     window._transitFetchedAt = data.fetched_at || Math.floor(Date.now() / 1000);
@@ -2264,22 +2090,8 @@ function renderHopBuses(hopBuses) {
       _hobokenMap.removeLayer(_hopMarkers[key]);
       delete _hopMarkers[key];
       delete _markerAnims[key];
-      delete _busHeadings[key];
     }
   }
-}
-
-// ============================================================
-// MAP MODE — show map on weekends all day, weekdays 4-8 PM
-// ============================================================
-function isMapMode() {
-  const now = new Date();
-  const day = now.getDay();
-  const hour = now.getHours();
-  // Weekend (Sat=6, Sun=0): always map mode
-  if (day === 0 || day === 6) return true;
-  // Weekday: 4 PM (16) to 8 PM (20)
-  return hour >= 16 && hour < 20;
 }
 
 let _hobokenMap = null;
@@ -2329,28 +2141,6 @@ function _slideTo(id, marker, lat, lon) {
     t0: performance.now(),
   };
   if (!_markerAnimFrame) _markerAnimFrame = requestAnimationFrame(_animateMarkers);
-}
-
-let _busHeadings = {};
-
-// Snap compass heading to Hoboken's street grid then convert to screen-space rotation.
-// Markers live outside leaflet-rotate-pane (screen space), so subtract map bearing (29°).
-var _GRID_DIRS = [29, 119, 209, 299];
-function _snapToGrid(heading) {
-  var best = _GRID_DIRS[0], bestDiff = 360;
-  for (var i = 0; i < _GRID_DIRS.length; i++) {
-    var diff = Math.abs(((heading - _GRID_DIRS[i] + 540) % 360) - 180);
-    if (diff < bestDiff) { bestDiff = diff; best = _GRID_DIRS[i]; }
-  }
-  return (best - 29 + 360) % 360;
-}
-
-function _computeHeading(lat1, lon1, lat2, lon2) {
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const y = Math.sin(dLon) * Math.cos(lat2 * Math.PI / 180);
-  const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180) -
-            Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLon);
-  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 }
 
 let _tileMarkers = {};
@@ -2722,8 +2512,9 @@ async function fetchLocations() {
   try {
     const url = PROXY_URL + '?mode=locations' + (_approachMode ? '&fast=1' : '');
     const res = await fetchT(url, { headers: { 'X-Cal-Token': token } });
-    if (!res.ok) return;
+    if (!res.ok) { markFail('locations'); return; }
     const data = await res.json();
+    markOk('locations');
     renderBuses(data.buses || []);     // first so _lastBuses is populated
     const liveLocs = data.locations || [];
     const liveTids = new Set(liveLocs.map(l => l.tid));
@@ -2743,6 +2534,7 @@ async function fetchLocations() {
     _scheduleLocationsPoll(approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS);
   } catch (e) {
     console.error('Locations fetch error:', e);
+    markFail('locations');
     _scheduleLocationsPoll(DEFAULT_POLL_MS);
   }
 }
@@ -2870,7 +2662,6 @@ function renderBuses(buses) {
       _hobokenMap.removeLayer(_busMarkers[key]);
       delete _busMarkers[key];
       delete _markerAnims[key];
-      delete _busHeadings[key];   // avoid long-uptime memory leak
     }
   }
 }
@@ -3002,7 +2793,9 @@ function renderLocations(locations) {
   const overlay = document.getElementById('mapStatusOverlay');
   if (overlay) {
     if (locations.length === 0) {
-      overlay.innerHTML = '';
+      // A family display with no family reads as broken — say why instead.
+      overlay.innerHTML =
+        '<span class="ms-pill ms-pill--cold"><span class="ms-status">Location sharing offline</span></span>';
     } else {
       overlay.innerHTML = locations.map(function (l) {
         const status = personStatus(l);
@@ -3060,23 +2853,8 @@ function renderLocations(locations) {
   }
 }
 
-function setAlertsMode(mode) {
-  // mode: 'news' or 'map'
-  const mapEl = document.getElementById('mapContainer');
-  const listEl = document.getElementById('personList');
-  if (mode === 'map') {
-    mapEl.style.display = 'block';
-    listEl.style.display = 'flex';
-    initHobokenMap();
-    if (_hobokenMap) setTimeout(function () { _hobokenMap.invalidateSize(); }, 100);
-  } else {
-    mapEl.style.display = 'none';
-    listEl.style.display = 'none';
-  }
-}
-
 // ============================================================
-// ALERTS & NEWS
+// ALERTS
 // ============================================================
 async function fetchAlerts() {
   if (!PROXY_URL) return;
@@ -3187,13 +2965,16 @@ async function fetchCalEvents() {
     }
     const data = await res.json();
     if (data.events && Array.isArray(data.events)) {
+      markOk('calendar');
       renderCalEvents(data.events);
     } else if (data.events && data.events.error) {
+      markFail('calendar');
       document.getElementById('calEvents').innerHTML =
         '<div class="cal-empty">Calendar error</div>';
       console.error('Calendar error:', data.events.error);
     }
   } catch (e) {
+    markFail('calendar');
     console.error('Calendar fetch error:', e);
   }
 }
@@ -3491,7 +3272,7 @@ function _forceFullRefresh() {
   try { updateWeather    && updateWeather();    } catch (e) {}
   try { fetchAlerts      && fetchAlerts();      } catch (e) {}
   try { fetchLocations   && fetchLocations();   } catch (e) {}
-  try { fetchFerries     && fetchFerries();     } catch (e) {}
+  try { updateFerries    && updateFerries();    } catch (e) {}
   try { fetchHop         && fetchHop();         } catch (e) {}
   try { fetchCalEvents   && fetchCalEvents();   } catch (e) {}
 }
@@ -3529,7 +3310,7 @@ function checkSleepMode() {
     try { updateWeather && updateWeather(); } catch (e) {}
     try { fetchAlerts && fetchAlerts(); } catch (e) {}
     try { fetchLocations && fetchLocations(); } catch (e) {}
-    try { fetchFerries && fetchFerries(); } catch (e) {}
+    try { updateFerries && updateFerries(); } catch (e) {}
     try { fetchHop && fetchHop(); } catch (e) {}
     document.body.style.opacity = '0';
     requestAnimationFrame(function () {
