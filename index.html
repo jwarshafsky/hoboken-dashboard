@@ -339,6 +339,25 @@
   #mapCard { position: relative; }
   #mapCard #hobokenMap { width: 100%; height: 100%; }
 
+  /* View-mode toast — top-right of map, fades in/out on OK-button cycles. */
+  #viewModeToast {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 600;
+    pointer-events: none;
+    background: rgba(10, 10, 15, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: var(--r-pill, 12px);
+    padding: 5px 12px;
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: #e8e8ec;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  #viewModeToast.show { opacity: 1; }
+
 
   /* Overlay showing when each person last updated — one pill per person,
      sitting in the bottom-left corner of the map. */
@@ -2455,6 +2474,33 @@ function initHobokenMap() {
     }
   }
   applyViewMode();
+
+  // View-mode toast — 3s auto-fading label in the map's top-right whenever
+  // the mode CHANGES (not on initial load). The mode persists across reboots
+  // via localStorage, so without this an accidental OK press would leave the
+  // map silently reconfigured forever.
+  const VIEW_MODE_NAMES = [
+    'North up',
+    'Streets up',
+    'North up · bus #s',
+    'Streets up · bus #s',
+  ];
+  let _toastTimer = null;
+  function showViewModeToast() {
+    const mapCard = document.getElementById('mapCard');
+    if (!mapCard) return;
+    let el = document.getElementById('viewModeToast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'viewModeToast';
+      mapCard.appendChild(el);
+    }
+    el.textContent = VIEW_MODE_NAMES[window._viewMode | 0] || '';
+    el.classList.add('show');
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
+  }
+
   // On-screen key debug — shows the last key event so we can identify what
   // the remote actually emits. Toggle by appending ?keydebug to the URL.
   let _keyDebugEl = null;
@@ -2492,6 +2538,7 @@ function initHobokenMap() {
       window._viewMode = ((window._viewMode | 0) + 1) % 4;
       try { localStorage.setItem('viewMode', String(window._viewMode)); } catch (_) {}
       applyViewMode();
+      showViewModeToast();
       e.preventDefault(); e.stopPropagation();
     }
   }, true);
