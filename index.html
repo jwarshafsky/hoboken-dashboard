@@ -129,29 +129,31 @@
   .weather-main { display: contents; }  /* transparent wrapper */
 
   /* HERO ROW ------------------------------------------------------- */
-  /* Three elements (icon | summary | temp) spread across the row. space-around
-     gives each item equal space on both sides, so the inter-item gaps (icon↔
-     summary, summary↔temp) are ~2× the outer-edge gaps. That keeps the big
-     temperature glyph from crowding the forecast text in the middle while the
-     card's own padding handles the outer breathing room. (space-evenly tied the
-     edge gap to the inter-item gap and read as cramped around the temp.) */
+  /* Two elements (summary | temp) spread across the row. The icon used to
+     live here on the left; it now sits centered in its own row below (see
+     .weather-icon-row), between the hero and the forecast strip. */
   .weather-top {
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-around;
+    justify-content: space-between;
     gap: 0;
-    padding: 2px;
+    padding: 2px 6px;
+  }
+
+  /* Icon row — centers the weather glyph between the hero and the forecast. */
+  .weather-icon-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
   }
 
   .weather-icon {
     flex-shrink: 0;
-    /* Intentionally a touch larger than the temperature glyph and nudged toward
-       the left edge of the hero row. amcharts SVGs have ~15% padding inside the
-       64-unit viewBox, so the visible art is ~85% of the box. */
+    /* amcharts SVGs have ~15% padding inside the 64-unit viewBox, so the
+       visible art is ~85% of the box. */
     width: 86px;
     height: 86px;
-    transform: translateX(-8px);   /* slight nudge toward the left edge */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -974,9 +976,8 @@
 <!-- Row 2: Weather (below clock, left) -->
 <div class="card weather-card" id="weatherCard">
   <div class="weather-main">
-    <!-- Hero row: icon (left) | desc + hi/lo + rain (middle) | temp (right) -->
+    <!-- Hero row: desc + hi/lo + rain (left) | temp (right) -->
     <div class="weather-top">
-      <div class="weather-icon" id="weatherIcon">--</div>
       <div class="weather-summary">
         <div class="weather-desc" id="weatherDesc">Loading...</div>
         <div class="weather-meta">
@@ -986,6 +987,10 @@
       </div>
       <div class="weather-temp" id="weatherTemp">--&deg;F</div>
     </div>
+  </div>
+  <!-- Icon sits centered between the hero row and the forecast strip -->
+  <div class="weather-icon-row">
+    <div class="weather-icon" id="weatherIcon">--</div>
   </div>
   <div class="weather-forecast" id="weatherForecast"></div>
   <div class="weather-details">
