@@ -129,9 +129,8 @@
   .weather-main { display: contents; }  /* transparent wrapper */
 
   /* HERO ROW ------------------------------------------------------- */
-  /* Two elements (summary | temp) spread across the row. The icon used to
-     live here on the left; it now sits centered in its own row below (see
-     .weather-icon-row), between the hero and the forecast strip. */
+  /* Three elements: summary (left) | icon (center) | temp (right), all on
+     one line at the same height, sitting just above the forecast strip. */
   .weather-top {
     display: flex;
     flex-direction: row;
@@ -139,13 +138,6 @@
     justify-content: space-between;
     gap: 0;
     padding: 2px 6px;
-  }
-
-  /* Icon row — centers the weather glyph between the hero and the forecast. */
-  .weather-icon-row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
   }
 
   .weather-icon {
@@ -976,7 +968,7 @@
 <!-- Row 2: Weather (below clock, left) -->
 <div class="card weather-card" id="weatherCard">
   <div class="weather-main">
-    <!-- Hero row: desc + hi/lo + rain (left) | temp (right) -->
+    <!-- Hero row: desc + hi/lo + rain (left) | icon (center) | temp (right) -->
     <div class="weather-top">
       <div class="weather-summary">
         <div class="weather-desc" id="weatherDesc">Loading...</div>
@@ -985,12 +977,9 @@
           <div id="weatherRain" style="display:none;"><svg viewBox="0 0 24 24" width="11" height="11" fill="#f0c040"><path d="M17 13.96c0 .61-.49 1.1-1.1 1.1H15v6c0 .55-.45 1-1 1s-1-.45-1-1v-6h-2v6c0 .55-.45 1-1 1s-1-.45-1-1v-6H8.1c-.61 0-1.1-.49-1.1-1.1 0-3.86 2.5-7.05 5-7.45V5c0-.55.45-1 1-1s1 .45 1 1v1.51c2.5.4 5 3.59 5 7.45z"/></svg><span id="weatherRainPct">--</span>% rain</div>
         </div>
       </div>
+      <div class="weather-icon" id="weatherIcon">--</div>
       <div class="weather-temp" id="weatherTemp">--&deg;F</div>
     </div>
-  </div>
-  <!-- Icon sits centered between the hero row and the forecast strip -->
-  <div class="weather-icon-row">
-    <div class="weather-icon" id="weatherIcon">--</div>
   </div>
   <div class="weather-forecast" id="weatherForecast"></div>
   <div class="weather-details">
