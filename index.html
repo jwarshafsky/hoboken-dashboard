@@ -3111,15 +3111,28 @@ function renderCalEvents(events) {
       };
     } else {
       const d = new Date(e.start);
-      anchorDate = d.getFullYear() + '-' +
+      const startDay = d.getFullYear() + '-' +
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
         String(d.getDate()).padStart(2, '0');
+      let lastDay = startDay;
+      if (e.end) {
+        const de = new Date(e.end);
+        lastDay = de.getFullYear() + '-' +
+          String(de.getMonth() + 1).padStart(2, '0') + '-' +
+          String(de.getDate()).padStart(2, '0');
+      }
+      // A timed event that started before today but is still ongoing (the
+      // proxy only sends events overlapping now→+30d) must anchor to today,
+      // or its past start date sorts a day group above the TODAY header.
+      anchorDate = (startDay < todayStr) ? todayStr : startDay;
       return {
         summary: e.summary,
         location: e.location || '',
         start: { dateTime: e.start },
         end: e.end ? { dateTime: e.end } : null,
-        isMultiDay: false,
+        isMultiDay: lastDay > startDay,
+        startDay: startDay,
+        lastDay: lastDay,
         anchorDate: anchorDate,
         _calendarColor: '#6bffb8',
       };
@@ -3192,6 +3205,10 @@ function renderCalEvents(events) {
         if (ev.isMultiDay) {
           timeLabel = fmtMonthDay(ev.start.date) + ' - ' + fmtMonthDay(ev.lastDay);
         }
+      } else if (ev.startDay && ev.startDay < ev.anchorDate) {
+        // Ongoing timed event that started before today — its start time is
+        // stale under the TODAY header, so show the date range instead.
+        timeLabel = fmtMonthDay(ev.startDay) + ' - ' + fmtMonthDay(ev.lastDay);
       } else {
         const startDate = new Date(ev.start.dateTime);
         const h = startDate.getHours();
