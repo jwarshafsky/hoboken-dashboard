@@ -119,6 +119,7 @@
        3) STATS : wind / humidity / pollen as 3 labeled stat blocks
      Sized to fit ~2× transit-card height × column-3 width. */
   .weather-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -943,6 +944,10 @@
     .weather-temp { font-size: var(--fs-hero); }
     .weather-forecast { flex-direction: row; flex-wrap: wrap; }
   }
+    /* camera-feed overlay (Front rapid snapshots / Lower Door frames) */
+    .cam-overlay{position:absolute;inset:0;background:#000;z-index:30;border-radius:inherit;overflow:hidden}
+    .cam-overlay img{width:100%;height:100%;object-fit:cover;display:block}
+    .cam-label{position:absolute;left:8px;bottom:8px;padding:2px 9px;border-radius:7px;background:rgba(0,0,0,.62);color:#fff;font-weight:700;font-size:13px;letter-spacing:.2px}
 </style>
 </head>
 <body>
@@ -967,6 +972,7 @@
 
 <!-- Row 2: Weather (below clock, left) -->
 <div class="card weather-card" id="weatherCard">
+      <div id="camOverlay" class="cam-overlay" style="display:none"><img id="camImg" alt="camera"><div id="camLabel" class="cam-label"></div></div>
   <div class="weather-main">
     <!-- Hero row: desc + hi/lo + rain (left) | icon (center) | temp (right) -->
     <div class="weather-top">
@@ -3444,6 +3450,29 @@ updateStatusBar();
 setInterval(updateTransit, 15000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
+
+// --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
+let camImgTimer = null;
+function startCamImg(){
+  if (camImgTimer) return;
+  const img = document.getElementById('camImg');
+  camImgTimer = setInterval(function(){ img.src = PROXY_URL + '?mode=camera_img&t=' + Date.now(); }, 250);
+}
+function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } }
+async function pollCameraState(){
+  try{
+    const tok = localStorage.getItem('calToken') || '';
+    const r = await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}});
+    const st = await r.json();
+    const ov = document.getElementById('camOverlay');
+    if (st.active){
+      document.getElementById('camLabel').textContent = st.label || 'Camera';
+      ov.style.display = 'block'; startCamImg();
+    } else { ov.style.display = 'none'; stopCamImg(); }
+  }catch(e){}
+}
+setInterval(pollCameraState, 1000);
+pollCameraState();
 // fetchLocations reschedules itself dynamically (7s when someone is
 // approaching home inside Hoboken, otherwise 15s). Just kick off the
 // first fetch — the loop runs from there.
