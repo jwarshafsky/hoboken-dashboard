@@ -3452,13 +3452,22 @@ setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
 
 // --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
-let camImgTimer = null;
+let camImgTimer = null, camObjUrl = null;
 function startCamImg(){
   if (camImgTimer) return;
   const img = document.getElementById('camImg');
-  camImgTimer = setInterval(function(){ img.src = PROXY_URL + '?mode=camera_img&t=' + Date.now(); }, 250);
+  const tok = localStorage.getItem('calToken') || '';
+  camImgTimer = setInterval(async function(){          // fetch WITH auth header, show as blob
+    try{
+      const r = await fetch(PROXY_URL + '?mode=camera_img&t=' + Date.now(), {headers:{'X-Cal-Token':tok}});
+      if (!r.ok) return;
+      const u = URL.createObjectURL(await r.blob());
+      img.onload = function(){ if (camObjUrl) URL.revokeObjectURL(camObjUrl); camObjUrl = u; };
+      img.src = u;
+    }catch(e){}
+  }, 250);
 }
-function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } }
+function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; } }
 async function pollCameraState(){
   try{
     const tok = localStorage.getItem('calToken') || '';
