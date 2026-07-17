@@ -1942,6 +1942,32 @@ function updateFerries() {
 // ============================================================
 // HOBOKEN HOP
 // ============================================================
+// Debounce the primary Hop ETA. PassioGo's schedule-ETA errors server-side
+// (solidETAfailed) and occasionally emits a single-poll plunge (e.g. 27→14 min)
+// that reverts on the next cycle. If the soonest ETA drops >4 min in one 15s
+// poll, hold the previous value for ONE cycle and only accept the low value if
+// the next poll confirms it (within 2 min). Genuine arrivals stay low on the
+// next poll so they still show (just ~15s later). State resets when the tracked
+// bus changes so we never compare ETAs across two different vehicles.
+let _hopEtaState = { shown: null, busKey: null, pendingLow: null };
+function smoothHopPrimary(raw, busKey) {
+  const s = _hopEtaState;
+  if (busKey !== s.busKey || s.shown === null) {   // new/changed bus — trust it
+    s.busKey = busKey; s.shown = raw; s.pendingLow = null;
+    return raw;
+  }
+  if (s.shown - raw > 4) {                          // suspicious single-poll drop
+    if (s.pendingLow !== null && Math.abs(raw - s.pendingLow) <= 2) {
+      s.shown = raw; s.pendingLow = null;           // confirmed on 2nd poll — accept
+      return raw;
+    }
+    s.pendingLow = raw;                             // hold the old value one cycle
+    return s.shown;
+  }
+  s.shown = raw; s.pendingLow = null;               // normal countdown or increase
+  return raw;
+}
+
 function renderHopEtas(data) {
   // Hop right panel mirrors the Lincoln Tunnel layout: big primary value +
   // "min" suffix on top, smaller status text below. The status line shows
@@ -1991,7 +2017,7 @@ function renderHopEtas(data) {
     return;
   }
 
-  showServiceMins(mins[0]);
+  showServiceMins(smoothHopPrimary(mins[0], data[0] && data[0].busId));
   if (mins.length > 1) {
     setStatus('next ' + mins.slice(1, 3).join(', ') + ' min', '#6bffb8');
   } else {
@@ -2014,7 +2040,7 @@ async function fetchHop() {
     for (const [key, entries] of Object.entries(data.ETAs || {})) {
       for (const entry of entries) {
         if (entry.eta && entry.eta !== 'no vehicles') {
-          etas.push({ eta: entry.eta });
+          etas.push({ eta: entry.eta, busId: entry.busId });
         }
       }
     }
