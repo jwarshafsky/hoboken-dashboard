@@ -2024,44 +2024,40 @@ async function fetchHop() {
       renderHopEtas({ status: 'no vehicles' });
     }
 
-    // Build a routeId → route name map (PassioGo returns "routes" alongside "buses")
-    const routeNameById = {};
-    const routesArr = data.routes || [];
-    if (Array.isArray(routesArr)) {
-      for (const r of routesArr) {
-        routeNameById[r.id || r.routeId] = (r.name || r.routeName || '').toString();
-      }
-    } else if (typeof routesArr === 'object') {
-      for (const k of Object.keys(routesArr)) {
-        routeNameById[k] = (routesArr[k].name || routesArr[k].routeName || '').toString();
-      }
-    }
-
-    // Live bus positions
+    // Live bus positions — derive straight from the ETA entries. For this
+    // request PassioGo does NOT return a separate buses[] object (that only
+    // comes back on a getBuses=1 call, which then omits ETAs); instead each
+    // ETA entry carries the vehicle's live position in busLatLng. We query a
+    // Red Hop stop, so these are Red Hop vehicles, and the position matches
+    // the official passiogo.com feed to within a few meters.
     const hopBuses = [];
-    const busesData = data.buses || {};
-    for (const routeId of Object.keys(busesData)) {
-      const arr = busesData[routeId];
-      if (!Array.isArray(arr)) continue;
-      const routeName = routeNameById[routeId] || '';
-      for (const b of arr) {
-        if (b.outOfService === '1' || b.outOfService === 1) continue;
-        const lat = parseFloat(b.latitude);
-        const lon = parseFloat(b.longitude);
+    const seenBus = {};
+    for (const [key, entries] of Object.entries(data.ETAs || {})) {
+      for (const e of entries) {
+        // Skip out-of-service or stale (outdated) fixes so we never plot a
+        // wrong location — an absent marker is better than a stale one.
+        if (e.OOS === 1 || e.OOS === '1') continue;
+        if (e.outdated === 1 || e.outdated === '1') continue;
+        const bl = e.busLatLng;
+        if (!Array.isArray(bl) || bl.length < 2) continue;
+        const lat = parseFloat(bl[0]);
+        const lon = parseFloat(bl[1]);
         if (!isFinite(lat) || !isFinite(lon)) continue;
-        // Determine color by route name (or bus name as fallback)
-        const probe = (routeName + ' ' + (b.busName || b.name || '')).toLowerCase();
+        const busKey = e.busId || e.busName || (lat + ',' + lon);
+        if (seenBus[busKey]) continue;   // same bus can appear across stops
+        seenBus[busKey] = true;
+        const routeName = (e.theStop && e.theStop.routeName) || 'Hop';
+        const probe = (routeName + ' ' + (e.busName || '')).toLowerCase();
         let color = '#b070ff';  // generic purple fallback
         if (probe.includes('red'))   color = '#ff5050';
         if (probe.includes('green')) color = '#6bffb8';
-        const course = parseFloat(b.calculatedCourse || b.course);
         hopBuses.push({
-          busId: b.busId || b.id || b.busName || b.name || '',
-          name: b.busName || b.name || 'Hop',
+          busId: e.busId || e.busName || '',
+          name: e.busName || 'Hop',
           lat: lat,
           lon: lon,
-          heading: isFinite(course) ? course : null,
-          route: routeName || 'Hop',
+          heading: null,   // ETA feed carries no course; Hop markers don't rotate
+          route: routeName,
           color: color,
         });
       }
