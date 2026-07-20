@@ -610,16 +610,6 @@
     display: block;
   }
 
-  /* Smaller "orbit" face used when a person is at home — bumped from 20→28
-     so faces are still recognizable around the house badge. */
-  .person-marker.small {
-    width: 28px !important;
-    height: 28px !important;
-    line-height: 26px;
-    font-size: var(--fs-micro);
-    border-width: 1.5px;
-  }
-
   .home-marker {
     width: 24px !important;
     height: 24px !important;
@@ -2233,10 +2223,15 @@ const PERSON_NAMES = {
 
 // Static home stubs — shown at home until real Tile data arrives.
 // When a Tile with matching TID comes online, the live position takes over.
-// Sydney / Elizabeth / Juno stubs removed — no working API path to their
-// Tile trackers (Life360 + Tile consolidation broke the only public route).
-// Re-add entries here if/when a working location source comes online.
-const HOME_STUBS = [];
+// Sydney / Elizabeth / Juno have no live location source (Life360 + Tile
+// consolidation broke the only public route), so they stay pinned at home
+// as stubs. received_at: 0 → they render with the faded "cold" styling,
+// which honestly signals "assumed home, not a live GPS fix."
+const HOME_STUBS = [
+  { tid: 'SY', name: 'Sydney',    lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+  { tid: 'EL', name: 'Elizabeth', lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+  { tid: 'JU', name: 'Juno',      lat: HOME.lat, lon: HOME.lon, received_at: 0 },
+];
 
 function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
@@ -2791,12 +2786,18 @@ function renderLocations(locations) {
   const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= HOME_RADIUS_MI; });
 
   // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
-  // from home). Smaller icon so they look like satellites orbiting the home badge.
-  const HOME_FACE_SIZE = 28;
-  const HOME_ORBIT_RADIUS = 22; // px from home center to face center
+  // from home) so they orbit the home badge. Full-size faces (same as everyone
+  // else on the map) — the orbit radius grows with the crowd so the faces spread
+  // out around the house instead of piling into an overlapping blob.
+  const HOME_FACE_SIZE = 44; // match the normal away face size
+  const n = atHome.length;
+  // Smallest radius that keeps N faces of this size from overlapping on the ring.
+  const HOME_ORBIT_RADIUS = n <= 1
+    ? 26
+    : Math.max(28, Math.round(HOME_FACE_SIZE / (2 * Math.sin(Math.PI / n))));
   const homeIconConfig = {};
   atHome.forEach(function (l, idx) {
-    const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    const angle = (idx / Math.max(n, 1)) * 2 * Math.PI - Math.PI / 2;
     const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
     const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
     // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
@@ -2806,7 +2807,7 @@ function renderLocations(locations) {
       latlng: [HOME.lat, HOME.lon],
       iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
       iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
-      className: 'person-marker small',
+      className: 'person-marker',
     };
   });
 
