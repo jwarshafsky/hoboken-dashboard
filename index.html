@@ -2194,10 +2194,11 @@ const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
 const AUTO_FIT_RADIUS_MI = 5;
-// Added to every auto-zoom target so the whole map frames ~10% tighter.
-// Leaflet zoom is log2, so +0.15 levels ≈ 2^0.15 ≈ 1.11× closer. Needs the
-// map's zoomSnap set fine enough (0.05) for a fractional level to take.
-const ZOOM_BOOST = 0.15;
+// Added to every auto-zoom target so the whole map frames tighter.
+// Leaflet zoom is log2, so +0.35 levels ≈ 2^0.35 ≈ 1.27× closer than the
+// original framing. Needs the map's zoomSnap set fine enough (0.05) for a
+// fractional level to take.
+const ZOOM_BOOST = 0.35;
 
 // Mapping from Owntracks tracker ID (TID) to face image URL.
 const FACE_IMAGES = {
