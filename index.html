@@ -578,10 +578,10 @@
     display: none !important;
   }
 
-  /* Custom location markers */
+  /* Custom location markers. Box size comes from Leaflet's iconSize (inline
+     width/height) so at-home faces can auto-shrink to fit around the home
+     badge; don't pin a fixed px size here or it overrides that. */
   .person-marker {
-    width: 37px !important;
-    height: 37px !important;
     border-radius: 50%;
     border: 1.5px solid rgba(255,255,255,0.55);
     box-shadow: 0 0 6px rgba(0,0,0,0.65);
@@ -590,8 +590,10 @@
     color: #000;
     font-weight: 700;
     font-size: var(--fs-label);
-    line-height: 37px;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: opacity 0.5s ease, filter 0.5s ease;
   }
 
@@ -2794,16 +2796,22 @@ function renderLocations(locations) {
   const atHome = locations.filter(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; });
   const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= HOME_RADIUS_MI; });
 
-  // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
-  // from home) so they orbit the home badge. Full-size faces (same as everyone
-  // else on the map) — the orbit radius grows with the crowd so the faces spread
-  // out around the house instead of piling into an overlapping blob.
-  const HOME_FACE_SIZE = 37; // match the normal away face size
+  // At-home people orbit the home badge in a ring. Keep the ring hugging the
+  // home icon (fixed radius) and auto-SHRINK the faces so everyone fits around
+  // it — rather than letting the ring balloon outward as the crowd grows.
   const n = atHome.length;
-  // Smallest radius that keeps N faces of this size from overlapping on the ring.
-  const HOME_ORBIT_RADIUS = n <= 1
-    ? 26
-    : Math.max(28, Math.round(HOME_FACE_SIZE / (2 * Math.sin(Math.PI / n))));
+  const MAX_HOME_FACE = 37;      // never bigger than a normal map face
+  const MIN_HOME_FACE = 16;      // still recognizable at a glance
+  const FACE_GAP = 3;            // px of breathing room between adjacent faces
+  const HOME_ORBIT_RADIUS = 32;  // px from home center to each face center
+  // Largest face size whose neighbors don't touch on the ring: the chord
+  // between adjacent face centers is 2*R*sin(pi/n), so face + gap must fit it.
+  let HOME_FACE_SIZE = MAX_HOME_FACE;
+  if (n >= 2) {
+    const chord = 2 * HOME_ORBIT_RADIUS * Math.sin(Math.PI / n);
+    HOME_FACE_SIZE = Math.max(MIN_HOME_FACE,
+      Math.min(MAX_HOME_FACE, Math.floor(chord - FACE_GAP)));
+  }
   const homeIconConfig = {};
   atHome.forEach(function (l, idx) {
     const angle = (idx / Math.max(n, 1)) * 2 * Math.PI - Math.PI / 2;
