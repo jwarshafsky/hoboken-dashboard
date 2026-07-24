@@ -208,22 +208,24 @@ async function refreshOut(){
 // Inbound: to Hoboken. Uses proxy `?mode=commute_home` (Hoboken-bound 126 from PABT).
 // Falls back gracefully until the proxy ships that mode.
 async function refreshIn(){
-  // Tunnel always comes from `/`.
-  let tunnel = null, homeData = null;
-  try { const r = await fetchT(PROXY_URL); const d = await r.json(); tunnel = d.tunnel; } catch(e){}
+  let homeData = null;
   try {
     const r = await fetchT(PROXY_URL + '?mode=commute_home');
     homeData = await r.json();
   } catch(e){ homeData = {error:'unavailable'}; }
 
-  let html = '';
-  const preds = homeData && Array.isArray(homeData.predictions) ? homeData.predictions
-              : (homeData && homeData.stop && homeData.stop.predictions) || null;
+  // Only trust data from the real commute_home mode. Before the proxy ships it,
+  // `?mode=commute_home` falls through to the default (outbound) response, whose
+  // `tunnel` is the ToNY crossing — wrong direction for the ride home. Gate on
+  // the `predictions` key, which only the real inbound response carries.
+  const preds = homeData && Array.isArray(homeData.predictions) ? homeData.predictions : null;
   const supported = Array.isArray(preds);
+  const tunnel = supported ? (homeData.tunnel || null) : null;   // ToNJ / homebound
 
+  let html = '';
   if (!supported){
-    html += `<div class="note">Inbound bus times turn on once the proxy update
-      (Port Authority → Hoboken) is deployed. Tunnel traffic below is live now.</div>`;
+    html += `<div class="note">Inbound bus times and the homebound tunnel turn on
+      once the proxy update (Port Authority → Hoboken) is deployed.</div>`;
   }
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
   html += `<div class="card"><h2>126 home from Port Authority</h2>`;
@@ -245,7 +247,7 @@ async function refreshIn(){
     </div>`;
   }
   document.getElementById('content').innerHTML = html;
-  markHealth(tunnel && !tunnel.error ? {tunnel} : null);
+  markHealth(supported ? homeData : null);
 }
 
 function markHealth(data){
