@@ -254,19 +254,13 @@ async function refreshIn(){
   html += `</div>`;
   html += tunnelCard(tunnel);
 
-  // ETA home: next departure + tunnel-adjusted ride + walk.
+  // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
   let total = null;
   if (supported && preds.length){
     const next = liveMins(preds[0].countdown, lastFetchedAt) || 0;
     const tt = tunnel && !tunnel.error ? parseInt(tunnel.travelTime,10) : NaN;
     const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
     total = next + RIDE_BASE_MIN + delay + WALK_MIN;
-    const arrive = new Date(Date.now() + total*60000);
-    const hhmm = arrive.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
-    html += `<div class="card"><h2>Estimated time home</h2>
-      <div class="eta"><span class="big">${total}</span><span class="lbl">min · home by ${hhmm}</span></div>
-      <div class="foot" style="margin-top:8px">${next} wait · ${RIDE_BASE_MIN+delay} ride · ${WALK_MIN} walk</div>
-    </div>`;
   }
   document.getElementById('content').innerHTML = html;
   setHdrEta(total);
