@@ -18,7 +18,10 @@
     font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     -webkit-font-smoothing:antialiased}
   body{padding:max(14px,env(safe-area-inset-top)) 14px calc(24px+env(safe-area-inset-bottom))}
-  .top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px}
+  .top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; position:relative}
+  .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
+    font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
+  .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
   .dir{font-size:22px; font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
   .dir .sub{font-size:12px; font-weight:500; color:var(--dim); display:block}
   .swap{background:var(--card2); border:1px solid var(--line); color:var(--txt);
@@ -69,6 +72,7 @@
         <span class="sub" id="dirSub">detecting location</span>
       </span>
     </div>
+    <div class="hdr-eta" id="hdrEta"></div>
     <button class="swap" id="swapBtn">⇄ Flip</button>
   </div>
 
@@ -109,10 +113,12 @@ function detectDirection(){
   if (!navigator.geolocation){ setDir('out'); return; }
   navigator.geolocation.getCurrentPosition(
     pos => {
+      // A late fix must never undo a manual flip made while geo was resolving.
+      if (manual) return;
       const me = {lat: pos.coords.latitude, lon: pos.coords.longitude};
       setDir(haversine(me, NYC) < haversine(me, HOME) ? 'in' : 'out', true);
     },
-    () => { if (dir === null) setDir('out'); },   // denied/failed → default outbound
+    () => { if (!manual && dir === null) setDir('out'); },   // denied/failed → default outbound
     {enableHighAccuracy:false, timeout:8000, maximumAge:60000}
   );
 }
@@ -189,21 +195,34 @@ function tunnelCard(tunnel){
       <span class="lbl">min · ${sub}</span></div></div>`;
 }
 
-// Outbound: to NYC. Uses proxy `/` (stops 20490, 20523, 20514 + tunnel).
+// Header ETA — total door-to-door minutes, centered at the top of the page.
+function setHdrEta(mins){
+  document.getElementById('hdrEta').innerHTML =
+    (mins !== null && isFinite(mins)) ? `${mins}<small>min total</small>` : '';
+}
+
+// Outbound: to NYC. Uses proxy `/` (stops 20514, 20523 + tunnel).
 async function refreshOut(){
   const res = await fetchT(PROXY_URL);
   const data = await res.json();
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
-  const s1 = data.stops && data.stops['20490'];
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
   let html = `<div class="card"><h2>126 / 119 to Port Authority</h2>`;
-  html += renderStop('14th & Bloomfield', s1 && s1.predictions, lastFetchedAt);
+  html += renderStop('Washington & 13th', s3 && s3.predictions, lastFetchedAt);
   html += renderStop('15th & Willow', s2 && s2.predictions, lastFetchedAt);
-  if (s3) html += renderStop('Washington & 13th', s3.predictions, lastFetchedAt);
   html += `</div>`;
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
+
+  // Total: soonest bus across both stops + tunnel-adjusted ride to PABT.
+  const waits = [s3, s2]
+    .map(s => s && Array.isArray(s.predictions) && s.predictions.length
+      ? liveMins(s.predictions[0].countdown, lastFetchedAt) : null)
+    .filter(v => v !== null);
+  const tt = data.tunnel && !data.tunnel.error ? parseInt(data.tunnel.travelTime,10) : NaN;
+  const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
+  setHdrEta(waits.length ? Math.min(...waits) + RIDE_BASE_MIN + delay : null);
   markHealth(data);
 }
 
@@ -230,17 +249,18 @@ async function refreshIn(){
       once the proxy update (Port Authority → Hoboken) is deployed.</div>`;
   }
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
-  html += `<div class="card"><h2>126 home from Port Authority</h2>`;
+  html += `<div class="card"><h2>126 / 119 home from Port Authority</h2>`;
   html += renderStop('Port Authority Bus Terminal', preds, lastFetchedAt);
   html += `</div>`;
   html += tunnelCard(tunnel);
 
   // ETA home: next departure + tunnel-adjusted ride + walk.
+  let total = null;
   if (supported && preds.length){
     const next = liveMins(preds[0].countdown, lastFetchedAt) || 0;
     const tt = tunnel && !tunnel.error ? parseInt(tunnel.travelTime,10) : NaN;
     const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
-    const total = next + RIDE_BASE_MIN + delay + WALK_MIN;
+    total = next + RIDE_BASE_MIN + delay + WALK_MIN;
     const arrive = new Date(Date.now() + total*60000);
     const hhmm = arrive.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
     html += `<div class="card"><h2>Estimated time home</h2>
@@ -249,6 +269,7 @@ async function refreshIn(){
     </div>`;
   }
   document.getElementById('content').innerHTML = html;
+  setHdrEta(total);
   markHealth(supported ? homeData : null);
 }
 
@@ -275,6 +296,10 @@ async function refresh(){
 
 document.getElementById('swapBtn').addEventListener('click', ()=>{
   manual = true;
+  // Instant feedback: clear the old direction's data so the flip is visible
+  // immediately instead of after the next fetch completes.
+  setHdrEta(null);
+  document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
   setDir(dir === 'out' ? 'in' : 'out');
 });
 document.getElementById('autoBtn').addEventListener('click', (e)=>{
