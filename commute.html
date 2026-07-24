@@ -189,16 +189,18 @@ function tunnelCard(tunnel){
       <span class="lbl">min · ${sub}</span></div></div>`;
 }
 
-// Outbound: to NYC. Uses proxy `/` (stops 20490, 20523 + tunnel).
+// Outbound: to NYC. Uses proxy `/` (stops 20490, 20523, 20514 + tunnel).
 async function refreshOut(){
   const res = await fetchT(PROXY_URL);
   const data = await res.json();
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s1 = data.stops && data.stops['20490'];
   const s2 = data.stops && data.stops['20523'];
+  const s3 = data.stops && data.stops['20514'];
   let html = `<div class="card"><h2>126 / 119 to Port Authority</h2>`;
   html += renderStop('14th & Bloomfield', s1 && s1.predictions, lastFetchedAt);
   html += renderStop('15th & Willow', s2 && s2.predictions, lastFetchedAt);
+  if (s3) html += renderStop('Washington & 13th', s3.predictions, lastFetchedAt);
   html += `</div>`;
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
