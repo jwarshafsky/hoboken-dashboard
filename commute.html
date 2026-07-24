@@ -22,7 +22,7 @@
   .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
     font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
   .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
-  .dir{font-size:22px; font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
+  .dir{font-size:clamp(17px,5.6vw,22px); font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
   .dir .sub{font-size:12px; font-weight:500; color:var(--dim); display:block}
   .swap{background:var(--card2); border:1px solid var(--line); color:var(--txt);
     border-radius:12px; padding:10px 14px; font-size:14px; font-weight:600; cursor:pointer}
@@ -284,7 +284,7 @@ function markHealth(data){
 function render(){
   const out = dir === 'out';
   document.getElementById('dirIcon').textContent = out ? '🚌' : '🏠';
-  document.getElementById('dirText').textContent = out ? 'To NYC' : 'Home to Hoboken';
+  document.getElementById('dirText').textContent = out ? 'To NYC' : 'To Hoboken';
   if (manual) document.getElementById('dirSub').textContent = 'manual';
 }
 
