@@ -73,6 +73,8 @@
   .eta .big{font-size:34px; font-weight:800; color:var(--live)}
   .eta .lbl{font-size:13px; color:var(--dim)}
   .empty{color:var(--dim); font-size:14px; padding:8px 2px}
+  /* Upstream failure reads amber — distinct from quiet emptiness. */
+  .empty.err{color:var(--warn)}
   .note{background:#1a222e; border:1px dashed var(--line); border-radius:12px;
     padding:12px 14px; color:var(--dim); font-size:13px; margin-bottom:14px}
   .foot{display:flex; justify-content:space-between; align-items:center;
@@ -222,6 +224,16 @@ function renderStop(name, preds, fetchedAt){
     const any = preds.some(p=>p.is_live), inf = preds.some(p=>p.is_inferred);
     mode = inf ? 'inferred' : (any ? 'live' : 'sched');
     rows = preds.slice(0,4).map(p=>predRow(p, fetchedAt)).join('');
+  } else if (preds && preds.error) {
+    // An upstream failure is NOT the same as "no buses are coming", and saying
+    // the latter sent us hunting for a bug in this page when NJT's prediction
+    // API was simply timing out. Say which it is.
+    const auth = /auth/i.test(preds.error);
+    rows = `<div class="empty err">` +
+      (auth ? 'NJT authentication failed.'
+            : 'NJT feed unreachable right now.') +
+      `<br><span style="opacity:.75">Times will return on their own.</span></div>`;
+    mode = 'sched';
   } else {
     rows = `<div class="empty">No upcoming buses in the feed right now.</div>`;
   }
