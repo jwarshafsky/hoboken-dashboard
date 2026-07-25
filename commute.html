@@ -6,6 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0b0f14">
+<meta name="apple-mobile-web-app-title" content="Commute">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/pwa/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/pwa/icon-192.png">
 <title>Commute</title>
 <style>
   :root{
@@ -336,6 +341,12 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 
 detectDirection();
 timer = setInterval(refresh, POLL_MS);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('commute-sw.js').catch(e => console.warn('SW reg failed', e));
+  });
+}
 </script>
 </body>
 </html>
