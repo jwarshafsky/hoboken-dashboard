@@ -268,8 +268,8 @@ async function refreshOut(){
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
 
-  // Total: soonest bus across both stops + tunnel-adjusted ride to PABT.
-  const waits = [s3, s2]
+  // Total: next bus at Washington & 13th only + tunnel-adjusted ride to PABT.
+  const waits = [s3]
     .map(s => s && Array.isArray(s.predictions) && s.predictions.length
       ? liveMins(njtCountdown(s.predictions[0]), lastFetchedAt) : null)
     .filter(v => v !== null);
