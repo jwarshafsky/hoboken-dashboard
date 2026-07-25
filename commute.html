@@ -257,6 +257,10 @@ async function refreshOut(){
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
+  // 15th & Willow is the 119 stop (the 126 is covered at Washington & 13th) —
+  // show only 119s there. Applies to the header ETA below too.
+  if (s2 && Array.isArray(s2.predictions))
+    s2.predictions = s2.predictions.filter(p => p.route === '119');
   let html = `<div class="card"><h2>126 / 119 to Port Authority</h2>`;
   html += renderStop('Washington & 13th', s3 && s3.predictions, lastFetchedAt);
   html += renderStop('15th & Willow', s2 && s2.predictions, lastFetchedAt);
