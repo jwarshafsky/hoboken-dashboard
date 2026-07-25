@@ -46,7 +46,13 @@
   .mins{font-size:28px; font-weight:800; line-height:1; min-width:70px}
   .mins small{font-size:13px; font-weight:600; color:var(--dim); margin-left:3px}
   .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--dim)}
-  .meta .load{color:var(--warn)}
+  .load{display:inline-flex; align-items:flex-end; gap:2px}
+  .load i{display:block; width:5px; border-radius:2px}
+  .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .colhead{font-size:13px; font-weight:800; text-align:center; color:var(--accent);
+    background:#0e1620; border:1px solid var(--line); border-radius:8px;
+    padding:5px 0; margin-bottom:8px}
   .tunnel{display:flex; align-items:baseline; gap:10px}
   .tunnel .big{font-size:40px; font-weight:800; line-height:1}
   .tunnel .lbl{font-size:13px; color:var(--dim)}
@@ -154,15 +160,32 @@ function tunnelColor(tt){
   return 'var(--live)';
 }
 
-function predRow(p, fetchedAt){
+// Bus fullness as 3 ascending bars (cell-signal style) instead of NJT's raw
+// "HALF_EMPTY" text. EMPTY→1 green, HALF_EMPTY→2 yellow, FULL→3 red.
+function loadBars(passload){
+  const key = (passload || '').toUpperCase();
+  if (!key || /no data/i.test(key)) return '';
+  const lvl = key.includes('FULL') && !key.includes('HALF') ? 3
+            : key.includes('HALF') ? 2
+            : key.includes('EMPTY') ? 1 : 0;
+  if (!lvl) return '';
+  const color = ['var(--live)','var(--yellow)','var(--urgent)'][lvl-1];
+  const label = ['seats','filling','full'][lvl-1];
+  let bars = '';
+  for (let i = 1; i <= 3; i++)
+    bars += `<i style="height:${4+i*4}px; background:${i<=lvl?color:'var(--line)'}"></i>`;
+  return `<span class="load">${bars}<span class="loadlbl">${label}</span></span>`;
+}
+
+function predRow(p, fetchedAt, compact){
   const m = liveMins(p.countdown, fetchedAt);
-  const mode = p.is_inferred ? 'inferred' : (p.is_live ? 'live' : 'sched');
   const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
-  const load = (p.passload && !/no data/i.test(p.passload)) ? `<div class="load">${p.passload}</div>` : '';
+  const load = loadBars(p.passload);
   const est = p.is_inferred ? '<div>est</div>' : '';
-  return `<div class="row">
-    <span class="badge">${p.route||'126'}</span>
+  const badge = compact ? '' : `<span class="badge">${p.route||'126'}</span>`;
+  return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
+    ${badge}
     <span class="mins">${label}${unit}</span>
     <span class="meta">${load}${est}</span>
   </div>`;
@@ -250,9 +273,16 @@ async function refreshIn(){
       once the proxy update (Port Authority → Hoboken) is deployed.</div>`;
   }
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
-  html += `<div class="card"><h2>126 / 119 home from Port Authority</h2>`;
-  html += renderStop('Port Authority Bus Terminal', preds, lastFetchedAt);
-  html += `</div>`;
+  // Two columns: 126 departures left, 119 right (both get home; 126 runs up
+  // Washington, 119 up Willow).
+  const p126 = (preds || []).filter(p => p.route === '126').slice(0,4);
+  const p119 = (preds || []).filter(p => p.route === '119').slice(0,4);
+  const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
+    list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
+                : '<div class="empty">none soon</div>'}</div></div>`;
+  const mode = (preds && preds.some(p => p.is_live)) ? 'live' : 'sched';
+  html += `<div class="card"><h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>Home from Port Authority</h2>`;
+  html += `<div class="twocol">${col('126', p126)}${col('119', p119)}</div></div>`;
   html += tunnelCard(tunnel);
 
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
