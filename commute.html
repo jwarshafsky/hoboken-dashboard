@@ -51,6 +51,7 @@
   .mins{font-size:28px; font-weight:800; line-height:1; min-width:70px}
   .mins small{font-size:13px; font-weight:600; color:var(--dim); margin-left:3px}
   .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--dim)}
+  .late{display:block; font-size:11px; font-weight:600; color:var(--warn); white-space:nowrap}
   .load{display:inline-flex; align-items:flex-end; gap:2px}
   .load i{display:block; width:5px; border-radius:2px}
   .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
@@ -182,8 +183,20 @@ function loadBars(passload){
   return `<span class="load">${bars}<span class="loadlbl">${label}</span></span>`;
 }
 
+// The proxy sends NJT's own countdown as `raw_countdown` and a bias-corrected
+// `countdown`. We show NJT's number as the headline (so it matches the NJT app)
+// and surface the correction as a small "runs ~N late" note.
+function njtCountdown(p){
+  return (p.raw_countdown != null && p.raw_countdown !== '') ? p.raw_countdown : p.countdown;
+}
+function lateNote(p){
+  const cd = parseInt(p.countdown, 10), rc = parseInt(p.raw_countdown, 10);
+  return (isFinite(cd) && isFinite(rc) && cd - rc >= 1)
+    ? `<span class="late">runs ~${cd - rc} late</span>` : '';
+}
+
 function predRow(p, fetchedAt, compact){
-  const m = liveMins(p.countdown, fetchedAt);
+  const m = liveMins(njtCountdown(p), fetchedAt);
   const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
@@ -192,7 +205,7 @@ function predRow(p, fetchedAt, compact){
   return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
     ${badge}
     <span class="mins">${label}${unit}</span>
-    <span class="meta">${load}${est}</span>
+    <span class="meta">${lateNote(p)}${load}${est}</span>
   </div>`;
 }
 
@@ -247,7 +260,7 @@ async function refreshOut(){
   // Total: soonest bus across both stops + tunnel-adjusted ride to PABT.
   const waits = [s3, s2]
     .map(s => s && Array.isArray(s.predictions) && s.predictions.length
-      ? liveMins(s.predictions[0].countdown, lastFetchedAt) : null)
+      ? liveMins(njtCountdown(s.predictions[0]), lastFetchedAt) : null)
     .filter(v => v !== null);
   const tt = data.tunnel && !data.tunnel.error ? parseInt(data.tunnel.travelTime,10) : NaN;
   const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
@@ -293,7 +306,7 @@ async function refreshIn(){
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
   let total = null;
   if (supported && preds.length){
-    const next = liveMins(preds[0].countdown, lastFetchedAt) || 0;
+    const next = liveMins(njtCountdown(preds[0]), lastFetchedAt) || 0;
     const tt = tunnel && !tunnel.error ? parseInt(tunnel.travelTime,10) : NaN;
     const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
     total = next + RIDE_BASE_MIN + delay + WALK_MIN;
