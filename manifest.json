@@ -1,9 +1,9 @@
 {
-  "id": "/hoboken-dashboard/commute",
+  "id": "/commute",
   "name": "Hoboken Commute",
   "short_name": "Commute",
   "description": "Live 126/119 bus times and Lincoln Tunnel for the Hoboken ↔ NYC commute.",
-  "start_url": "commute.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
