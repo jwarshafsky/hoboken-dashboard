@@ -230,10 +230,10 @@ function predRow(p, fetchedAt, compact){
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
   const est = p.is_inferred ? '<div>est</div>' : '';
-  // Route lives under the fullness bars now. The old left-hand badge showed the
-  // same number in a whole extra column, which was redundant once every row
-  // carries it here.
-  const rt = `<span class="rt">${p.route || '126'}</span>`;
+  // Fleet number of the actual bus (e.g. 20541), under the fullness bars.
+  // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
+  // so render nothing rather than an empty line in that case.
+  const rt = p.vehicle_id ? `<span class="rt">#${p.vehicle_id}</span>` : '';
   return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
     <span class="mins">${label}${unit}</span>
     <span class="meta">${lateNote(p)}${load}${rt}${est}</span>
