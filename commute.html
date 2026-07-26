@@ -45,7 +45,7 @@
   /* The header ETA is absolutely centered, so the two side elements have to
      leave it room. On narrow phones drop the word "Flip" and keep just the
      glyph — cheap insurance against the second button crowding the centre. */
-  @media (max-width: 390px){
+  @media (max-width: 340px){
     .swap#swapBtn{font-size:0; padding:10px 12px}
     .swap#swapBtn::before{content:'⇄'; font-size:16px; line-height:1}
   }
@@ -66,8 +66,6 @@
   .rows{display:flex; flex-direction:column; gap:8px}
   .row{display:flex; align-items:center; gap:12px; background:var(--card2);
     border-radius:12px; padding:12px 14px}
-  .badge{font-size:12px; font-weight:800; padding:4px 8px; border-radius:8px;
-    background:#0e1620; border:1px solid var(--line); color:var(--accent); flex:none; min-width:42px; text-align:center}
   .mins{font-size:28px; font-weight:800; line-height:1; min-width:70px}
   .mins small{font-size:13px; font-weight:600; color:var(--dim); margin-left:3px}
   .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--dim)}
@@ -75,6 +73,8 @@
   .load{display:inline-flex; align-items:flex-end; gap:2px}
   .load i{display:block; width:5px; border-radius:2px}
   .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
+  /* Route number, tucked under the fullness bars. */
+  .rt{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:3px}
   .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
   .colhead{font-size:13px; font-weight:800; text-align:center; color:var(--accent);
     background:#0e1620; border:1px solid var(--line); border-radius:8px;
@@ -230,11 +230,13 @@ function predRow(p, fetchedAt, compact){
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
   const est = p.is_inferred ? '<div>est</div>' : '';
-  const badge = compact ? '' : `<span class="badge">${p.route||'126'}</span>`;
+  // Route lives under the fullness bars now. The old left-hand badge showed the
+  // same number in a whole extra column, which was redundant once every row
+  // carries it here.
+  const rt = `<span class="rt">${p.route || '126'}</span>`;
   return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
-    ${badge}
     <span class="mins">${label}${unit}</span>
-    <span class="meta">${lateNote(p)}${load}${est}</span>
+    <span class="meta">${lateNote(p)}${load}${rt}${est}</span>
   </div>`;
 }
 
