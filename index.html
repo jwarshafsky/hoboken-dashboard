@@ -1020,7 +1020,7 @@
     <svg viewBox="0 0 24 24" fill="#555" width="32" height="32" overflow="visible"><!-- Boat body (hull + upper structure) --><path d="M3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.14.52-.05.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/><!-- Wave below boat --><g class="ferry-wave active" id="ferryWave"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2z"/></g></svg>
   </div>
   <div class="transit-body">
-    <div class="transit-title">Ferry from Hoboken 14th St</div>
+    <div class="transit-title" id="ferryTitle">Ferry to Wall St</div>
     <div class="transit-routes" id="ferryContent">
       <div class="no-service">Loading...</div>
     </div>
@@ -1176,30 +1176,36 @@ function updateStatusBar() {
 // ============================================================
 // FERRY SCHEDULES
 // ============================================================
-const FERRY_SCHEDULES = {
-  "Wall St": {
-    weekday: [
-      "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
-      "16:10","16:40","17:05","17:30","17:55","18:20","18:50"
+// Weekdays are commute-focused: Wall St (Pier 11) service from both Hoboken
+// terminals — 14th St and Downtown (NJ Transit Terminal). Weekends are
+// leisure-focused: only 14th St → Midtown runs (Wall St routes are Mon-Fri).
+// Row labels name the ORIGIN on weekdays (destination fixed in the card
+// title) and the DESTINATION on weekends (origin fixed in the title).
+const FERRY_VIEWS = {
+  weekday: {
+    title: 'Ferry to Wall St',
+    rows: [
+      { label: '14th St', times: [
+        "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
+        "16:10","16:40","17:05","17:30","17:55","18:20","18:50"
+      ]},
+      { label: 'Downtown', times: [
+        "06:20","06:55","07:30","08:05","08:40","09:15","09:50",
+        "15:25","16:00","16:35","17:10","17:45","18:20","18:55"
+      ]},
     ],
-    weekend: []
   },
-  "Midtown": {
-    weekday: [
-      "06:20","06:40","07:03","07:23","07:43","08:03","08:23","08:43",
-      "09:03","09:23","09:43","10:03","10:23","10:43","11:03","11:23","11:43",
-      "12:03","12:23","12:43","13:03","13:23","13:43","14:03","14:23","14:43",
-      "15:03","15:23","15:38","15:58","16:18","16:38","16:58","17:18","17:38",
-      "17:58","18:18","18:38","18:58","19:18","19:38","19:58","20:18","20:38",
-      "20:58","21:18"
+  weekend: {
+    title: 'Ferry from Hoboken 14th St',
+    rows: [
+      { label: 'Midtown', times: [
+        "10:02","10:22","10:42","11:02","11:22","11:42","12:02","12:22","12:42",
+        "13:02","13:22","13:42","14:02","14:22","14:42","15:02","15:22","15:42",
+        "16:02","16:22","16:42","17:02","17:22","17:42","18:02","18:22","18:42",
+        "19:02","19:22","19:42","20:02","20:22","20:42","21:02","21:22"
+      ]},
     ],
-    weekend: [
-      "10:02","10:22","10:42","11:02","11:22","11:42","12:02","12:22","12:42",
-      "13:02","13:22","13:42","14:02","14:22","14:42","15:02","15:22","15:42",
-      "16:02","16:22","16:42","17:02","17:22","17:42","18:02","18:22","18:42",
-      "19:02","19:22","19:42","20:02","20:22","20:42","21:02","21:22"
-    ]
-  }
+  },
 };
 
 // ============================================================
@@ -1451,10 +1457,12 @@ function updateCommuteEstimate() {
 
 function _nextWallStFerry() {
   // Minutes until the next scheduled Hoboken 14th St → Pier 11 / Wall St
-  // ferry. Weekday only (FERRY_SCHEDULES['Wall St'].weekend is empty).
+  // ferry. Weekday only (Wall St routes don't run weekends), and the commute
+  // estimate itself is weekday-gated, so reading the weekday view is safe.
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const sched = (FERRY_SCHEDULES['Wall St'] || {}).weekday || [];
+  const row14 = FERRY_VIEWS.weekday.rows.find(r => r.label === '14th St');
+  const sched = row14 ? row14.times : [];
   let earliest = null;
   for (const t of sched) {
     const [h, m] = t.split(':').map(n => parseInt(n, 10));
@@ -1951,13 +1959,14 @@ async function fetchProxy() {
 // ============================================================
 function updateFerries() {
   const container = document.getElementById('ferryContent');
-  const we = isWeekend();
+  const view = isWeekend() ? FERRY_VIEWS.weekend : FERRY_VIEWS.weekday;
+  const titleEl = document.getElementById('ferryTitle');
+  if (titleEl) titleEl.textContent = view.title;
   let html = '';
   let hasUpcoming = false;
-  for (const [name, sched] of Object.entries(FERRY_SCHEDULES)) {
-    const times = we ? sched.weekend : sched.weekday;
-    if (getNextDepartures(times, 1).length > 0) hasUpcoming = true;
-    html += renderDepartures(times, name);
+  for (const row of view.rows) {
+    if (getNextDepartures(row.times, 1).length > 0) hasUpcoming = true;
+    html += renderDepartures(row.times, row.label);
   }
   container.innerHTML = html;
 
