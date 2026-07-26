@@ -107,8 +107,12 @@
 <script>
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 const POLL_MS = 15000;
-const TIMEOUT_MS = 20000;  // > proxy's 15s NJT timeout, so a cold (uncached)
-                           // first load shows data instead of aborting early
+const TIMEOUT_MS = 20000;  // comfortably above the proxy's 8s NJT timeout, so a
+                           // cold (uncached) first load shows data rather than
+                           // aborting early
+// Buses shown per stop (and per route on the inbound board). Three is the
+// practical ceiling — by the 4th departure you'd have left already.
+const MAX_PER_STOP = 3;
 
 // Anchors for auto direction detection.
 const HOME = {lat: 40.7495, lon: -74.0300};          // central Hoboken
@@ -223,7 +227,7 @@ function renderStop(name, preds, fetchedAt){
   if (Array.isArray(preds) && preds.length){
     const any = preds.some(p=>p.is_live), inf = preds.some(p=>p.is_inferred);
     mode = inf ? 'inferred' : (any ? 'live' : 'sched');
-    rows = preds.slice(0,4).map(p=>predRow(p, fetchedAt)).join('');
+    rows = preds.slice(0,MAX_PER_STOP).map(p=>predRow(p, fetchedAt)).join('');
   } else if (preds && preds.error) {
     // An upstream failure is NOT the same as "no buses are coming", and saying
     // the latter sent us hunting for a bug in this page when NJT's prediction
@@ -316,8 +320,8 @@ async function refreshIn(){
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
   // Two columns: 126 departures left, 119 right (both get home; 126 runs up
   // Washington, 119 up Willow).
-  const p126 = (preds || []).filter(p => p.route === '126').slice(0,4);
-  const p119 = (preds || []).filter(p => p.route === '119').slice(0,4);
+  const p126 = (preds || []).filter(p => p.route === '126').slice(0,MAX_PER_STOP);
+  const p119 = (preds || []).filter(p => p.route === '119').slice(0,MAX_PER_STOP);
   const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
     list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
                 : '<div class="empty">none soon</div>'}</div></div>`;
