@@ -2937,14 +2937,26 @@ function renderLocations(locations) {
       // A family display with no family reads as broken — say why instead.
       overlay.innerHTML =
         '<span class="ms-pill ms-pill--cold"><span class="ms-status">Location sharing offline</span></span>';
+    } else if (elsewhere.length === 0) {
+      // Everyone home = the boring steady state, and the faces orbiting the
+      // house badge already say it. The strip earns its place only when
+      // someone is out (Jeff, 2026-07-26).
+      overlay.innerHTML = '';
     } else {
+      // Someone is out: away pills carry the full story (where + how fresh);
+      // at-home pills compress to a bare name so all five fit one line on
+      // the 930px wall display.
       overlay.innerHTML = locations.map(function (l) {
-        const status = personStatus(l);
-        const ago = agoText(l.received_at * 1000);
         const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
         let cls = '';
         if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
         else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
+        if (distMi(HOME, l) < HOME_RADIUS_MI) {
+          return '<span class="ms-pill' + cls + '"><span class="ms-name">' +
+            displayName(l) + '</span></span>';
+        }
+        const status = personStatus(l);
+        const ago = agoText(l.received_at * 1000);
         return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
           '</span><span class="ms-status">' + status +
           '</span><span class="ms-ago">' + ago + '</span></span>';
@@ -3010,9 +3022,16 @@ async function fetchAlerts() {
     // Only NJT alerts that mention routes/services the family rides (126, 119, ferry).
     // Nixle and broader NJT system-wide noise are filtered out by default.
     const RELEVANT_KEYWORDS = /\b(126|119|ferry|hoboken|all bus|systemwide)\b/i;
+    // Long-running advisories (months-long detours) sit in the RSS feed
+    // forever — after 2 days they're wallpaper, not news (Jeff, 2026-07-26).
+    // An unparseable/missing pubDate keeps the alert (fail-open: better a
+    // stale alert than a silently dropped fresh one).
+    const MAX_ALERT_AGE_MS = 2 * 24 * 3600 * 1000;
     if (Array.isArray(data.njt_alerts)) {
       for (const a of data.njt_alerts) {
         if (a.error) continue;
+        const posted = Date.parse(a.pubDate || '');
+        if (isFinite(posted) && Date.now() - posted > MAX_ALERT_AGE_MS) continue;
         const text = a.description || a.title || '';
         if (!RELEVANT_KEYWORDS.test(text)) continue;
         items.push({ text: text, badge: 'njt', badgeText: 'NJT', isAlert: true });
