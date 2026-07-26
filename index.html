@@ -578,10 +578,10 @@
     display: none !important;
   }
 
-  /* Custom location markers. Box size comes from Leaflet's iconSize (inline
-     width/height) so at-home faces can auto-shrink to fit around the home
-     badge; don't pin a fixed px size here or it overrides that. */
+  /* Custom location markers */
   .person-marker {
+    width: 44px !important;
+    height: 44px !important;
     border-radius: 50%;
     border: 1.5px solid rgba(255,255,255,0.55);
     box-shadow: 0 0 6px rgba(0,0,0,0.65);
@@ -590,10 +590,8 @@
     color: #000;
     font-weight: 700;
     font-size: var(--fs-label);
+    line-height: 44px;
     text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     transition: opacity 0.5s ease, filter 0.5s ease;
   }
 
@@ -610,6 +608,16 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  /* Smaller "orbit" face used when a person is at home — bumped from 20→28
+     so faces are still recognizable around the house badge. */
+  .person-marker.small {
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 26px;
+    font-size: var(--fs-micro);
+    border-width: 1.5px;
   }
 
   .home-marker {
@@ -1012,7 +1020,7 @@
     <svg viewBox="0 0 24 24" fill="#555" width="32" height="32" overflow="visible"><!-- Boat body (hull + upper structure) --><path d="M3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.14.52-.05.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/><!-- Wave below boat --><g class="ferry-wave active" id="ferryWave"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2z"/></g></svg>
   </div>
   <div class="transit-body">
-    <div class="transit-title">Ferry to Wall St</div>
+    <div class="transit-title">Ferry from Hoboken 14th St</div>
     <div class="transit-routes" id="ferryContent">
       <div class="no-service">Loading...</div>
     </div>
@@ -1162,19 +1170,28 @@ function updateStatusBar() {
 // FERRY SCHEDULES
 // ============================================================
 const FERRY_SCHEDULES = {
-  "14th": {
+  "Wall St": {
     weekday: [
       "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
       "16:10","16:40","17:05","17:30","17:55","18:20","18:50"
     ],
     weekend: []
   },
-  "Downtown": {
+  "Midtown": {
     weekday: [
-      "06:20","06:55","07:30","08:05","08:40","09:15","09:50",
-      "15:25","16:00","16:35","17:10","17:45","18:20","18:55"
+      "06:20","06:40","07:03","07:23","07:43","08:03","08:23","08:43",
+      "09:03","09:23","09:43","10:03","10:23","10:43","11:03","11:23","11:43",
+      "12:03","12:23","12:43","13:03","13:23","13:43","14:03","14:23","14:43",
+      "15:03","15:23","15:38","15:58","16:18","16:38","16:58","17:18","17:38",
+      "17:58","18:18","18:38","18:58","19:18","19:38","19:58","20:18","20:38",
+      "20:58","21:18"
     ],
-    weekend: []
+    weekend: [
+      "10:02","10:22","10:42","11:02","11:22","11:42","12:02","12:22","12:42",
+      "13:02","13:22","13:42","14:02","14:22","14:42","15:02","15:22","15:42",
+      "16:02","16:22","16:42","17:02","17:22","17:42","18:02","18:22","18:42",
+      "19:02","19:22","19:42","20:02","20:22","20:42","21:02","21:22"
+    ]
   }
 };
 
@@ -1365,7 +1382,7 @@ const COMMUTES = [
       let waitMin = null;
       if (data && data.stops) {
         const allPreds = [];
-        for (const sid of ['20490', '20523']) {
+        for (const sid of ['20514', '20523']) {
           const s = data.stops[sid];
           if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
         }
@@ -1427,10 +1444,10 @@ function updateCommuteEstimate() {
 
 function _nextWallStFerry() {
   // Minutes until the next scheduled Hoboken 14th St → Pier 11 / Wall St
-  // ferry. Weekday only (FERRY_SCHEDULES['14th'].weekend is empty).
+  // ferry. Weekday only (FERRY_SCHEDULES['Wall St'].weekend is empty).
   const now = new Date();
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const sched = (FERRY_SCHEDULES['14th'] || {}).weekday || [];
+  const sched = (FERRY_SCHEDULES['Wall St'] || {}).weekday || [];
   let earliest = null;
   for (const t of sched) {
     const [h, m] = t.split(':').map(n => parseInt(n, 10));
@@ -1719,7 +1736,7 @@ function get126BloomfieldSchedule() {
 function updateBusStatic() {
   const container = document.getElementById('busContent');
   let html = '';
-  html += renderDepartures(get126BloomfieldSchedule(), '126 @ 14th');
+  html += renderDepartures(get126BloomfieldSchedule(), '126 @ 13th');
   html += renderDepartures(get119Schedule(), '119 @ 15th');
   container.innerHTML = html;
 }
@@ -1842,9 +1859,9 @@ async function fetchProxy() {
       let html = '';
       let apiWorking = false;
 
-      const stop20490 = data.stops['20490'];
-      if (stop20490 && Array.isArray(stop20490.predictions) && stop20490.predictions.length > 0) {
-        html += renderLivePredictions(stop20490.predictions, '126 @ 14th');
+      const stop20514 = data.stops['20514'];
+      if (stop20514 && Array.isArray(stop20514.predictions) && stop20514.predictions.length > 0) {
+        html += renderLivePredictions(stop20514.predictions, '126 @ 13th');
         // API is working if we got an array of predictions back (live or scheduled)
         apiWorking = true;
       } else {
@@ -1852,17 +1869,17 @@ async function fetchProxy() {
         if (isSunday()) schedule = BUS_126_SCHEDULE.sunday;
         else if (isWeekend()) schedule = BUS_126_SCHEDULE.saturday;
         else schedule = BUS_126_SCHEDULE.weekday;
-        html += renderDepartures(schedule, '126 @ 14th');
+        html += renderDepartures(schedule, '126 @ 13th');
       }
 
       const stop20523 = data.stops['20523'];
       if (stop20523 && Array.isArray(stop20523.predictions) && stop20523.predictions.length > 0) {
-        const preds14 = (stop20490 && Array.isArray(stop20490.predictions)) ? stop20490.predictions : [];
-        const etaMins14 = preds14.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
+        const preds13 = (stop20514 && Array.isArray(stop20514.predictions)) ? stop20514.predictions : [];
+        const etaMins13 = preds13.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
         const filtered = stop20523.predictions.filter(p => {
           if (p.route !== '126') return true;
           const mins = parseInt(p.countdown, 10);
-          return !etaMins14.some(m14 => Math.abs(mins - m14) <= 3);
+          return !etaMins13.some(m13 => Math.abs(mins - m13) <= 3);
         });
         if (filtered.length > 0) {
           html += renderLivePredictions(filtered, '119 @ 15th');
@@ -1884,7 +1901,7 @@ async function fetchProxy() {
         // there), those predictions carry is_inferred=true. Even a single
         // inferred prediction means at least one data stream is degraded,
         // so surface that as orange headlights — more honest than green.
-        const allPreds = [stop20490, stop20523]
+        const allPreds = [stop20514, stop20523]
           .filter(s => s && Array.isArray(s.predictions))
           .flatMap(s => s.predictions);
         const anyInferred = allPreds.some(p => p.is_inferred);
@@ -1925,32 +1942,6 @@ function updateFerries() {
 // ============================================================
 // HOBOKEN HOP
 // ============================================================
-// Debounce the primary Hop ETA. PassioGo's schedule-ETA errors server-side
-// (solidETAfailed) and occasionally emits a single-poll plunge (e.g. 27→14 min)
-// that reverts on the next cycle. If the soonest ETA drops >4 min in one 15s
-// poll, hold the previous value for ONE cycle and only accept the low value if
-// the next poll confirms it (within 2 min). Genuine arrivals stay low on the
-// next poll so they still show (just ~15s later). State resets when the tracked
-// bus changes so we never compare ETAs across two different vehicles.
-let _hopEtaState = { shown: null, busKey: null, pendingLow: null };
-function smoothHopPrimary(raw, busKey) {
-  const s = _hopEtaState;
-  if (busKey !== s.busKey || s.shown === null) {   // new/changed bus — trust it
-    s.busKey = busKey; s.shown = raw; s.pendingLow = null;
-    return raw;
-  }
-  if (s.shown - raw > 4) {                          // suspicious single-poll drop
-    if (s.pendingLow !== null && Math.abs(raw - s.pendingLow) <= 2) {
-      s.shown = raw; s.pendingLow = null;           // confirmed on 2nd poll — accept
-      return raw;
-    }
-    s.pendingLow = raw;                             // hold the old value one cycle
-    return s.shown;
-  }
-  s.shown = raw; s.pendingLow = null;               // normal countdown or increase
-  return raw;
-}
-
 function renderHopEtas(data) {
   // Hop right panel mirrors the Lincoln Tunnel layout: big primary value +
   // "min" suffix on top, smaller status text below. The status line shows
@@ -2000,7 +1991,7 @@ function renderHopEtas(data) {
     return;
   }
 
-  showServiceMins(smoothHopPrimary(mins[0], data[0] && data[0].busId));
+  showServiceMins(mins[0]);
   if (mins.length > 1) {
     setStatus('next ' + mins.slice(1, 3).join(', ') + ' min', '#6bffb8');
   } else {
@@ -2023,7 +2014,7 @@ async function fetchHop() {
     for (const [key, entries] of Object.entries(data.ETAs || {})) {
       for (const entry of entries) {
         if (entry.eta && entry.eta !== 'no vehicles') {
-          etas.push({ eta: entry.eta, busId: entry.busId });
+          etas.push({ eta: entry.eta });
         }
       }
     }
@@ -2033,40 +2024,44 @@ async function fetchHop() {
       renderHopEtas({ status: 'no vehicles' });
     }
 
-    // Live bus positions — derive straight from the ETA entries. For this
-    // request PassioGo does NOT return a separate buses[] object (that only
-    // comes back on a getBuses=1 call, which then omits ETAs); instead each
-    // ETA entry carries the vehicle's live position in busLatLng. We query a
-    // Red Hop stop, so these are Red Hop vehicles, and the position matches
-    // the official passiogo.com feed to within a few meters.
+    // Build a routeId → route name map (PassioGo returns "routes" alongside "buses")
+    const routeNameById = {};
+    const routesArr = data.routes || [];
+    if (Array.isArray(routesArr)) {
+      for (const r of routesArr) {
+        routeNameById[r.id || r.routeId] = (r.name || r.routeName || '').toString();
+      }
+    } else if (typeof routesArr === 'object') {
+      for (const k of Object.keys(routesArr)) {
+        routeNameById[k] = (routesArr[k].name || routesArr[k].routeName || '').toString();
+      }
+    }
+
+    // Live bus positions
     const hopBuses = [];
-    const seenBus = {};
-    for (const [key, entries] of Object.entries(data.ETAs || {})) {
-      for (const e of entries) {
-        // Skip out-of-service or stale (outdated) fixes so we never plot a
-        // wrong location — an absent marker is better than a stale one.
-        if (e.OOS === 1 || e.OOS === '1') continue;
-        if (e.outdated === 1 || e.outdated === '1') continue;
-        const bl = e.busLatLng;
-        if (!Array.isArray(bl) || bl.length < 2) continue;
-        const lat = parseFloat(bl[0]);
-        const lon = parseFloat(bl[1]);
+    const busesData = data.buses || {};
+    for (const routeId of Object.keys(busesData)) {
+      const arr = busesData[routeId];
+      if (!Array.isArray(arr)) continue;
+      const routeName = routeNameById[routeId] || '';
+      for (const b of arr) {
+        if (b.outOfService === '1' || b.outOfService === 1) continue;
+        const lat = parseFloat(b.latitude);
+        const lon = parseFloat(b.longitude);
         if (!isFinite(lat) || !isFinite(lon)) continue;
-        const busKey = e.busId || e.busName || (lat + ',' + lon);
-        if (seenBus[busKey]) continue;   // same bus can appear across stops
-        seenBus[busKey] = true;
-        const routeName = (e.theStop && e.theStop.routeName) || 'Hop';
-        const probe = (routeName + ' ' + (e.busName || '')).toLowerCase();
+        // Determine color by route name (or bus name as fallback)
+        const probe = (routeName + ' ' + (b.busName || b.name || '')).toLowerCase();
         let color = '#b070ff';  // generic purple fallback
         if (probe.includes('red'))   color = '#ff5050';
         if (probe.includes('green')) color = '#6bffb8';
+        const course = parseFloat(b.calculatedCourse || b.course);
         hopBuses.push({
-          busId: e.busId || e.busName || '',
-          name: e.busName || 'Hop',
+          busId: b.busId || b.id || b.busName || b.name || '',
+          name: b.busName || b.name || 'Hop',
           lat: lat,
           lon: lon,
-          heading: null,   // ETA feed carries no course; Hop markers don't rotate
-          route: routeName,
+          heading: isFinite(course) ? course : null,
+          route: routeName || 'Hop',
           color: color,
         });
       }
@@ -2187,11 +2182,6 @@ const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
 const AUTO_FIT_RADIUS_MI = 5;
-// Added to every auto-zoom target so the whole map frames tighter.
-// Leaflet zoom is log2, so +0.35 levels ≈ 2^0.35 ≈ 1.27× closer than the
-// original framing. Needs the map's zoomSnap set fine enough (0.05) for a
-// fractional level to take.
-const ZOOM_BOOST = 0.35;
 
 // Mapping from Owntracks tracker ID (TID) to face image URL.
 const FACE_IMAGES = {
@@ -2221,15 +2211,10 @@ const PERSON_NAMES = {
 
 // Static home stubs — shown at home until real Tile data arrives.
 // When a Tile with matching TID comes online, the live position takes over.
-// Sydney / Elizabeth / Juno have no live location source (Life360 + Tile
-// consolidation broke the only public route), so they stay pinned at home
-// as stubs. received_at: 0 → they render with the faded "cold" styling,
-// which honestly signals "assumed home, not a live GPS fix."
-const HOME_STUBS = [
-  { tid: 'SY', name: 'Sydney',    lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-  { tid: 'EL', name: 'Elizabeth', lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-  { tid: 'JU', name: 'Juno',      lat: HOME.lat, lon: HOME.lon, received_at: 0 },
-];
+// Sydney / Elizabeth / Juno stubs removed — no working API path to their
+// Tile trackers (Life360 + Tile consolidation broke the only public route).
+// Re-add entries here if/when a working location source comes online.
+const HOME_STUBS = [];
 
 function displayName(loc) {
   return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
@@ -2394,7 +2379,6 @@ function initHobokenMap() {
     attributionControl: false,
     dragging: true,
     scrollWheelZoom: false,
-    zoomSnap: 0.05,   // allow fractional zoom so ZOOM_BOOST takes effect
   }, hasRotate ? {
     rotate: true,
     bearing: 0,
@@ -2403,7 +2387,7 @@ function initHobokenMap() {
   } : {}));
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
-  _hobokenMap.setView([40.750, -74.003], 14 + ZOOM_BOOST);
+  _hobokenMap.setView([40.750, -74.003], 14);
   // Jawg.Dark — clean dark theme, no road shield badges
   L.tileLayer('https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq', {
     maxZoom: 22,
@@ -2762,15 +2746,12 @@ function renderBuses(buses) {
 
 var _lastZoomKey = null;
 function _smoothZoomTo(center, zoom) {
-  zoom += ZOOM_BOOST;
   var key = center[0].toFixed(5) + ',' + center[1].toFixed(5) + ',' + zoom;
   if (_lastZoomKey === key) return;
   _lastZoomKey = key;
   _hobokenMap.flyTo(center, zoom, { duration: 1.2 });
 }
 function _smoothZoomBounds(bounds, opts) {
-  opts = Object.assign({}, opts);
-  if (opts.maxZoom != null) opts.maxZoom += ZOOM_BOOST;
   var key = bounds[0][0].toFixed(5) + ',' + bounds[0][1].toFixed(5) + ',' +
             bounds[1][0].toFixed(5) + ',' + bounds[1][1].toFixed(5) + ',' + (opts.maxZoom || '');
   if (_lastZoomKey === key) return;
@@ -2787,25 +2768,13 @@ function renderLocations(locations) {
   const atHome = locations.filter(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; });
   const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= HOME_RADIUS_MI; });
 
-  // At-home people orbit the home badge in a ring. Keep the ring hugging the
-  // home icon (fixed radius) and auto-SHRINK the faces so everyone fits around
-  // it — rather than letting the ring balloon outward as the crowd grows.
-  const n = atHome.length;
-  const MAX_HOME_FACE = 37;      // never bigger than a normal map face
-  const MIN_HOME_FACE = 16;      // still recognizable at a glance
-  const FACE_GAP = 3;            // px of breathing room between adjacent faces
-  const HOME_ORBIT_RADIUS = 32;  // px from home center to each face center
-  // Largest face size whose neighbors don't touch on the ring: the chord
-  // between adjacent face centers is 2*R*sin(pi/n), so face + gap must fit it.
-  let HOME_FACE_SIZE = MAX_HOME_FACE;
-  if (n >= 2) {
-    const chord = 2 * HOME_ORBIT_RADIUS * Math.sin(Math.PI / n);
-    HOME_FACE_SIZE = Math.max(MIN_HOME_FACE,
-      Math.min(MAX_HOME_FACE, Math.floor(chord - FACE_GAP)));
-  }
+  // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
+  // from home). Smaller icon so they look like satellites orbiting the home badge.
+  const HOME_FACE_SIZE = 28;
+  const HOME_ORBIT_RADIUS = 22; // px from home center to face center
   const homeIconConfig = {};
   atHome.forEach(function (l, idx) {
-    const angle = (idx / Math.max(n, 1)) * 2 * Math.PI - Math.PI / 2;
+    const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
     const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
     const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
     // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
@@ -2815,7 +2784,7 @@ function renderLocations(locations) {
       latlng: [HOME.lat, HOME.lon],
       iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
       iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
-      className: 'person-marker',
+      className: 'person-marker small',
     };
   });
 
@@ -2872,9 +2841,9 @@ function renderLocations(locations) {
     } else {
       const pos = positions[loc.tid] || { lat: loc.lat, lon: loc.lon };
       latlng = [pos.lat, pos.lon];
-      // Sized so faces dominate the map hierarchy (44 → 37, trimmed 15%).
-      iconSize = [37, 37];
-      iconAnchor = [18.5, 18.5];
+      // Enlarged from 36→44 so faces dominate the map hierarchy.
+      iconSize = [44, 44];
+      iconAnchor = [22, 22];
       className = 'person-marker' + staleClass;
     }
 
