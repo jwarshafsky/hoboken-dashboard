@@ -145,7 +145,7 @@ const NYC  = {lat: 40.7570, lon: -73.9903};          // Port Authority Bus Termi
 // Ride model for the inbound "ETA home": free-flow PABT->Hoboken minutes + walk.
 const RIDE_BASE_MIN = 18;     // 126 PABT -> Hoboken stop, light traffic
 const TUNNEL_FREEFLOW = 8;    // min; anything over this is added delay
-const WALK_MIN = 5;         // inbound: Hoboken stop -> home
+const WALK_MIN = 2;         // inbound: Hoboken stop -> home (was 5; Jeff cut it by 3)
 const WALK_TO_STOP_MIN = 3; // outbound: home -> Washington & 13th, so the
                             // headline total is "leave now" rather than
                             // "assuming you're already standing at the stop"
