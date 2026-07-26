@@ -2202,7 +2202,29 @@ const TILE_DEVICES = {
 };
 
 // Home: 1227 Garden St, Hoboken — also used as the radius center for the auto-fit logic.
-const HOME = { lat: 40.75202, lon: -74.02816, name: 'Home' };
+// PLACEHOLDER ONLY — this file is in a PUBLIC repo, so the real house
+// coordinates must never be written here. This is the centre of Hoboken,
+// accurate to a few blocks. The true position arrives with every /locations
+// poll (token-gated) and replaces it via applyHomeFromProxy(). `let`, not
+// `const`, precisely so it can be replaced.
+let HOME = { lat: 40.7460, lon: -74.0300, name: 'Home' };
+let _homeCoordsFromProxy = false;
+
+// Adopt the real coordinates the proxy sends, once. Everything downstream
+// (distance-to-home, at-home clustering, auto-fit, approach detection) reads
+// HOME live, so they all correct themselves on the next render; only the home
+// marker and the initial view are already painted and need nudging.
+function applyHomeFromProxy(home) {
+  if (!home || _homeCoordsFromProxy) return;
+  const lat = parseFloat(home.lat), lon = parseFloat(home.lon);
+  if (!isFinite(lat) || !isFinite(lon)) return;
+  HOME = { lat: lat, lon: lon, name: 'Home' };
+  _homeCoordsFromProxy = true;
+  if (_homeMarker) _homeMarker.setLatLng([lat, lon]);
+  // No setView here: fetchLocations calls this immediately before
+  // renderLocations(), whose auto-fit re-centres using the corrected HOME in
+  // the same tick. Forcing a view here would fight that logic.
+}
 const HOME_RADIUS_MI = 0.014;     // ~75 ft — inside the house
 const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
 // All of Hoboken — never zoom tighter than this. West edge ~ Jackson St.
@@ -2620,6 +2642,7 @@ async function fetchLocations() {
     if (!res.ok) { markFail('locations'); return; }
     const data = await res.json();
     markOk('locations');
+    applyHomeFromProxy(data.home);     // real coords before anything measures distance
     renderBuses(data.buses || []);     // first so _lastBuses is populated
     const liveLocs = data.locations || [];
     const liveTids = new Set(liveLocs.map(l => l.tid));
