@@ -36,9 +36,22 @@
   .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
   .dir{font-size:clamp(17px,5.6vw,22px); font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
   .dir .sub{font-size:12px; font-weight:500; color:var(--dim); display:block}
+  .btns{display:flex; align-items:center; gap:8px; flex:none}
   .swap{background:var(--card2); border:1px solid var(--line); color:var(--txt);
     border-radius:12px; padding:10px 14px; font-size:14px; font-weight:600; cursor:pointer}
   .swap:active{background:var(--line)}
+  /* Icon-only variant so two buttons still fit beside the centered ETA at 375px. */
+  .swap.icon{padding:10px 12px; font-size:16px; line-height:1}
+  /* The header ETA is absolutely centered, so the two side elements have to
+     leave it room. On narrow phones drop the word "Flip" and keep just the
+     glyph — cheap insurance against the second button crowding the centre. */
+  @media (max-width: 390px){
+    .swap#swapBtn{font-size:0; padding:10px 12px}
+    .swap#swapBtn::before{content:'⇄'; font-size:16px; line-height:1}
+  }
+  .swap.icon.spin{color:var(--accent)}
+  .swap.icon.spin span{display:inline-block; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:16px; margin-bottom:14px}
   .card h2{margin:0 0 12px; font-size:13px; font-weight:600; letter-spacing:.8px;
@@ -94,7 +107,10 @@
       </span>
     </div>
     <div class="hdr-eta" id="hdrEta"></div>
-    <button class="swap" id="swapBtn">⇄ Flip</button>
+    <div class="btns">
+      <button class="swap icon" id="refreshBtn" aria-label="Refresh"><span>↻</span></button>
+      <button class="swap" id="swapBtn">⇄ Flip</button>
+    </div>
   </div>
 
   <div id="content"></div>
@@ -376,6 +392,19 @@ document.getElementById('autoBtn').addEventListener('click', (e)=>{
   e.preventDefault(); manual = false;
   document.getElementById('dirSub').textContent = 'detecting location';
   detectDirection();
+});
+document.getElementById('refreshBtn').addEventListener('click', async (e)=>{
+  const b = e.currentTarget;
+  if (b.disabled) return;
+  // Spin for at least a beat even if the proxy answers from cache in ~90ms —
+  // an instant no-op button reads as broken.
+  b.disabled = true; b.classList.add('spin');
+  const started = Date.now();
+  try { await refresh(); }
+  finally {
+    setTimeout(()=>{ b.classList.remove('spin'); b.disabled = false; },
+               Math.max(0, 450 - (Date.now() - started)));
+  }
 });
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh(); });
 
