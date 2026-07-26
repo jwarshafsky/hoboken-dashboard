@@ -1061,7 +1061,14 @@
 // ============================================================
 // PROXY
 // ============================================================
-const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
+// Origin-aware proxy path (2026-07-26): served from the Beelink (wall display
+// on the LAN IP, phones via the tailnet name), API calls go to Caddy's /proxy
+// route, which injects X-Cal-Token server-side — the device holds no
+// credential. Served from GitHub Pages (public fallback), we talk to Cloud
+// Run directly and the localStorage token flow below still applies.
+const LOCAL_HOSTS = ['192.168.4.50', 'beelink.tailed2e3c.ts.net', '100.124.112.83'];
+const IS_LOCAL = LOCAL_HOSTS.indexOf(location.hostname) !== -1;
+const PROXY_URL = IS_LOCAL ? '/proxy' : 'https://proxy-105885243706.us-east1.run.app';
 
 // Trim trailing children of a container until they all fit without overflow.
 // Used for alerts + calendar so nothing is half-cut at the bottom.
@@ -2829,8 +2836,12 @@ function renderLocations(locations) {
   for (const loc of locations) {
     seen.add(loc.tid);
     const faceUrl = FACE_IMAGES[loc.tid];
+    // onerror: photos live only on the Beelink now (pulled from the public
+    // repo 2026-07-26) — on the Pages fallback the jpgs 404, so degrade to
+    // the same initials treatment as an unmapped TID.
     const html = faceUrl
-      ? '<img src="' + faceUrl + '" alt="' + displayName(loc) + '"/>'
+      ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
+        '" onerror="this.replaceWith(this.alt.slice(0,2).toUpperCase())"/>'
       : (displayName(loc) || '?').substring(0, 2).toUpperCase();
 
     // Freshness ladder (drives marker visual decay + pill copy below).
@@ -2996,6 +3007,12 @@ async function fetchAlerts() {
 // ============================================================
 function initCalAuth() {
   watchCalendarResize();
+  if (IS_LOCAL) {
+    // Caddy injects the token — never prompt on local origins.
+    document.getElementById('calSigninPrompt').style.display = 'none';
+    fetchCalEvents();
+    return;
+  }
   const token = localStorage.getItem('calToken');
   if (!token) {
     showCalTokenPrompt();
@@ -3046,6 +3063,15 @@ async function fetchCalEvents() {
     const res = await fetchT(PROXY_URL + '?mode=calendar',
       { headers: { 'X-Cal-Token': token } });
     if (res.status === 403) {
+      if (IS_LOCAL) {
+        // Local origins never use a typed token — a 403 here means Caddy's
+        // CAL_TOKEN env is broken or this browser isn't on the /proxy
+        // allowlist (TV stick + tailnet). Prompting would be misleading.
+        markFail('calendar');
+        document.getElementById('calEvents').innerHTML =
+          '<div class="cal-empty">Calendar blocked (proxy auth)</div>';
+        return;
+      }
       // Bad token — re-prompt
       localStorage.removeItem('calToken');
       showCalTokenPrompt();
