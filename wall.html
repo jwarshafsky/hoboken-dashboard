@@ -387,6 +387,50 @@
   .ms-pill--cold .ms-ago    { color: #a0a0b0; }
   .ms-ago { color: #777; margin-left: 5px; font-size: var(--fs-micro); }
 
+  /* Wall message — a note Jeff or Jenny types at /message.html. Overlaid on
+     the bottom of the map (the least information-dense panel) rather than
+     given a grid row, because every panel here uses explicit grid placement
+     and late-mode re-spans the map. Only rendered when a message is active,
+     so it costs nothing the rest of the time. */
+  #wallMsg {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 1200;
+    pointer-events: none;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 9px 13px;
+    border-radius: var(--r-chip);
+    border-left: 3px solid var(--c-live);
+    background: rgba(10, 10, 15, 0.86);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  #wallMsg[hidden] { display: none; }
+  .wm-text {
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--c-text);
+    line-height: 1.25;
+    /* Two lines max — a note longer than that stops being glanceable, and the
+       service caps input at 120 chars so this rarely triggers. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .wm-from {
+    font-size: var(--fs-label);
+    color: var(--c-label);
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  /* Shift the freshness pills up so the note never covers them. */
+  body.has-wall-msg #mapStatusOverlay { bottom: 46px; }
+
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
     flex: 1;
@@ -956,6 +1000,10 @@
 <div class="card" id="mapCard">
   <div id="hobokenMap"></div>
   <div id="mapStatusOverlay"></div>
+  <div id="wallMsg" hidden>
+    <div class="wm-text" id="wallMsgText"></div>
+    <div class="wm-from" id="wallMsgFrom"></div>
+  </div>
 </div>
 
 <!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
@@ -3476,6 +3524,7 @@ function _forceFullRefresh() {
   try { updateFerries    && updateFerries();    } catch (e) {}
   try { fetchHop         && fetchHop();         } catch (e) {}
   try { fetchCalEvents   && fetchCalEvents();   } catch (e) {}
+  try { fetchWallMessage && fetchWallMessage(); } catch (e) {}
 }
 
 document.addEventListener('visibilitychange', function () {
@@ -3556,6 +3605,37 @@ updateStatusBar();
 setInterval(updateTransit, 15000);
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
+
+// ============================================================
+// WALL MESSAGE
+// ============================================================
+// A note Jeff or Jenny types at http://192.168.4.50/message.html (home WiFi,
+// no Tailscale needed). Served by wall-message.service via Caddy. LOCAL ONLY:
+// the GitHub Pages fallback has no /api/message route, so we never even try
+// there — a 404 every 20s would be noise, not information.
+function fetchWallMessage() {
+  if (!IS_LOCAL) return;
+  if (document.hidden || isSleeping()) return;
+  fetch('/api/message', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      const box = document.getElementById('wallMsg');
+      if (!box) return;
+      const text = data && data.message;
+      if (!text) {
+        box.hidden = true;
+        document.body.classList.remove('has-wall-msg');
+        return;
+      }
+      document.getElementById('wallMsgText').textContent = text;
+      document.getElementById('wallMsgFrom').textContent = data.sender ? '— ' + data.sender : '';
+      box.hidden = false;
+      document.body.classList.add('has-wall-msg');
+    })
+    .catch(function () { /* fail soft — a missing note must never break the wall */ });
+}
+fetchWallMessage();
+setInterval(fetchWallMessage, 20000);
 
 // --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
 let camImgTimer = null, camObjUrl = null;
