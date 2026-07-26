@@ -1,3597 +1,476 @@
 <!DOCTYPE html>
-<!--
-  Hoboken Family Dashboard
-  ========================
-  Charter: A wall display that tells the Warshafskys where their people are
-  and what's next. Family presence is the primary use case; transit, weather,
-  and alerts are supporting data. Anything that doesn't serve that single
-  sentence goes in a "maybe" file, not in here.
--->
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<title>Hoboken Dashboard</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23151520'/><path fill='%236bffb8' d='M14 40c0 2.2 1 4.2 2.5 5.5V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-2.5h20V50c0 1.4 1.1 2.5 2.5 2.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-4.5c1.5-1.4 2.5-3.3 2.5-5.5V15c0-8.75-8.95-10-20-10S14 6.25 14 15v25zm8.75 2.5c-2.1 0-3.75-1.7-3.75-3.75S20.65 35 22.75 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm22.5 0c-2.1 0-3.75-1.7-3.75-3.75S43.15 35 45.25 35s3.75 1.7 3.75 3.75-1.65 3.75-3.75 3.75zm3.75-15h-30V15h30v12.5z'/></svg>">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f14">
+<meta name="apple-mobile-web-app-title" content="Commute">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/pwa/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/pwa/icon-192.png">
+<title>Commute</title>
 <style>
-  /* ─────────────────────────────────────────────────────────────────
-     Design tokens — keep all radii, font sizes, and key colors here.
-     New panels MUST reuse these instead of introducing new values.
-     ───────────────────────────────────────────────────────────────── */
-  :root {
-    /* Border radii */
-    --r-card:  14px;
-    --r-chip:  8px;
-    --r-pill:  999px;
-    --r-badge: 4px;
-
-    /* Font sizes (4-tier + 1 sub for emphasis numbers) */
-    --fs-micro: 0.6rem;   /* tiny labels (badges, day headers, micro status) */
-    --fs-label: 0.75rem;  /* secondary text */
-    --fs-body:  0.95rem;  /* primary readable content */
-    --fs-sub:   1.4rem;   /* secondary numbers (tunnel min, hop ETA) */
-    --fs-hero:  2.4rem;   /* time, temperature */
-
-    /* Semantic colors */
-    --c-live:   #6bffb8;  /* GREEN: reserved for live-state ONLY */
-    --c-urgent: #ff6b6b;  /* RED: actionable urgency (≤5min bus, alerts) */
-    --c-warn:   #ffb84d;  /* AMBER: warnings */
-    --c-text:   #e8e8ec;
-    --c-label:  #9a9aa8;
-    --c-mute:   #888;
-    --c-deep:   #0a0a0f;
-    --c-border: #2a2a35;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: -apple-system, 'Helvetica Neue', sans-serif;
-    background: #000;
-    color: #e8e8ec;
-    height: 100vh;
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: 0.67fr 1.62fr 0.97fr;
-    grid-template-rows: 1fr auto auto;
-    gap: 10px;
-    padding: 12px;
-  }
-
-  /* TV simulation mode — body becomes a fixed 930x539 surface (the Onn's
-     effective CSS viewport) that's scaled
-     to fit the browser window. Activate by adding ?tv to the URL. */
-  html.tv-sim {
-    background: #000;
-    overflow: hidden;
-  }
-  html.tv-sim body {
-    width: 930px;
-    height: 539px;
-    transform-origin: top left;
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-
-  /* Cards */
-  .card {
-    background: #0a0a0f;
-    border-radius: 14px;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 0.5px solid #2a2a35;
-  }
-
-  .card-title {
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #9a9aa8;
-    margin-bottom: 6px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .card-title svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-  }
-
-  /* Weather card — bottom-right. Three vertical zones:
-       1) HERO  : big icon + hero temp + desc + hi/lo + rain pill
-       2) HOURLY: 7-step hourly forecast strip
-       3) STATS : wind / humidity / pollen as 3 labeled stat blocks
-     Sized to fit ~2× transit-card height × column-3 width. */
-  .weather-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 6px;
-    padding: 14px 12px;
-  }
-
-  .weather-main { display: contents; }  /* transparent wrapper */
-
-  /* HERO ROW ------------------------------------------------------- */
-  /* Three elements: summary (left) | icon (center) | temp (right), all on
-     one line at the same height, sitting just above the forecast strip. */
-  .weather-top {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
-    padding: 2px 6px;
-  }
-
-  .weather-icon {
-    flex-shrink: 0;
-    /* amcharts SVGs have ~15% padding inside the 64-unit viewBox, so the
-       visible art is ~85% of the box. */
-    width: 86px;
-    height: 86px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-  }
-  .weather-icon img.wi { width: 100%; height: 100%; }
-
-  /* Weather icon animations live INSIDE each amcharts SVG file under icons/.
-     Sun and moon stay still (we stripped their rotation rules); clouds drift,
-     rain falls, snow drifts, lightning flickers. CSS in this dashboard does
-     not reach into the SVG sandbox when loaded via <img> — that's by design,
-     animations are self-contained per-icon. */
-
-  /* Summary block sits in the MIDDLE of the hero — description on top,
-     hi/lo and rain pill below. Centered text so it reads as the middle
-     anchor between icon (left) and temp (right). No flex:1 — it shrinks
-     to its content width so space-evenly can distribute the gaps. */
-  .weather-summary {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    text-align: center;
-  }
-
-  .weather-temp {
-    flex-shrink: 0;
-    font-size: 1.9rem;   /* a touch smaller so it stops crowding the forecast text */
-    font-weight: 200;
-    color: #fff;
-    line-height: 1;
-    letter-spacing: -0.01em;
-  }
-
-  .weather-desc {
-    font-size: 1.05rem;
-    color: #e0e0e6;
-    line-height: 1.2;
-    font-weight: 400;
-    /* description can wrap if it's long (e.g. "Thunderstorm + heavy hail") */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .weather-meta {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 4px 10px;
-    margin-top: 3px;
-    font-size: var(--fs-label);
-    color: var(--c-mute);
-    white-space: nowrap;
-  }
-  .weather-meta .wm-hilo { color: var(--c-mute); }
-  .weather-meta .wm-hilo span { color: #cfcfd6; font-weight: 500; }
-
-  /* Rain probability — small amber pill, only visible when JS sets display:flex */
-  #weatherRain {
-    align-items: center;
-    gap: 4px;
-    padding: 2px 7px;
-    background: rgba(240, 192, 64, 0.10);
-    border: 0.5px solid rgba(240, 192, 64, 0.35);
-    border-radius: var(--r-pill);
-    color: #f0c040;
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    line-height: 1;
-  }
-  #weatherRain svg { flex-shrink: 0; }
-
-  /* HOURLY FORECAST ----------------------------------------------- */
-  .weather-forecast {
-    display: flex;
-    flex-direction: row;
-    gap: 0;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 0.5px solid #1e1e2e;
-    border-bottom: 0.5px solid #1e1e2e;
-    padding: 7px 2px;
-  }
-
-  .weather-hour {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .weather-hour .wh-time {
-    font-size: var(--fs-micro);
-    color: var(--c-label);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .weather-hour .wh-icon {
-    line-height: 1;
-    opacity: 0.95;
-  }
-  .weather-hour .wh-icon img { width: 22px; height: 22px; display: block; }
-
-  .weather-hour .wh-temp {
-    font-size: var(--fs-label);
-    font-weight: 500;
-    color: #e0e0e6;
-    line-height: 1;
-  }
-
-  /* STATS ROW (wind / humidity / pollen / UV) ---------------------- */
-  .weather-details {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    padding: 2px 2px 0;
-  }
-
-  .weather-details .wd-stat + .wd-stat {
-    border-left: 0.5px solid #1e1e2e;
-    padding-left: 8px;
-  }
-
-  .weather-details .wd-stat {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    line-height: 1;
-  }
-
-  .weather-details .wd-label {
-    font-size: var(--fs-micro);
-    color: var(--c-label);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-  }
-
-  .weather-details .wd-value {
-    font-size: var(--fs-body);
-    color: #e0e0e6;
-    font-weight: 500;
-    line-height: 1;
-  }
-
-  .weather-details .wd-unit {
-    font-size: var(--fs-micro);
-    color: var(--c-mute);
-    margin-left: 1px;
-    font-weight: 400;
-  }
-
-  /* Calendar — top row, right column */
-  #calCard {
-    grid-row: 1;
-    grid-column: 3;
-  }
-
-  /* Map card — top row, spans left two columns */
-  #mapCard {
-    grid-row: 1;
-    grid-column: 1 / 3;
-    padding: 0;
-    overflow: hidden;
-  }
-
-  /* Late mode (weekday after 5pm, weekend after 9pm):
-     hide bus + ferry, let map take the full left height. */
-  body.late-mode #busCard,
-  body.late-mode #ferryCard { display: none; }
-  body.late-mode #mapCard   { grid-row: 1 / 4; }
-
-  /* Weather card — bottom right, spans bus + ferry rows */
-  #weatherCard {
-    grid-row: 2 / 4;
-    grid-column: 3;
-  }
-
-  #mapCard { position: relative; }
-  #mapCard #hobokenMap { width: 100%; height: 100%; }
-
-  /* View-mode toast — top-right of map, fades in/out on OK-button cycles. */
-  #viewModeToast {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 600;
-    pointer-events: none;
-    background: rgba(10, 10, 15, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: var(--r-pill, 12px);
-    padding: 5px 12px;
-    font-size: var(--fs-label);
-    font-weight: 600;
-    color: #e8e8ec;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-  }
-  #viewModeToast.show { opacity: 1; }
-
-
-  /* Overlay showing when each person last updated — one pill per person,
-     sitting in the bottom-left corner of the map. */
-  #mapStatusOverlay {
-    position: absolute;
-    bottom: 8px;
-    left: 8px;
-    z-index: 1000;
-    pointer-events: none;
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .ms-pill {
-    background: rgba(0, 0, 0, 0.55);
-    padding: 3px 9px;
-    border-radius: 12px;
-    /* fs-label, not micro — this pill is the most charter-critical text on
-       screen ("Jeff · on 126 · 30s ago") and must read from 10 feet. */
-    font-size: var(--fs-label);
-    color: #ddd;
-    line-height: 1.3;
-    white-space: nowrap;
-  }
-  .ms-name { color: #fff; font-weight: 600; }
-  .ms-status { color: #ddd; margin-left: 5px; }
-  /* Freshness-pill tinting matches map-marker decay. */
-  .ms-pill--warm .ms-status { color: #f0c040; }
-  .ms-pill--warm .ms-ago    { color: #f0c040; }
-  .ms-pill--cold            { opacity: 0.6; }
-  .ms-pill--cold .ms-status { color: #a0a0b0; font-style: italic; }
-  .ms-pill--cold .ms-ago    { color: #a0a0b0; }
-  .ms-ago { color: #777; margin-left: 5px; font-size: var(--fs-micro); }
-
-  /* Calendar events (rendered from Google Calendar API) */
-  .cal-content {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 0;
-    padding-right: 4px;
-  }
-
-  .cal-content::-webkit-scrollbar { width: 0; }
-
-  .cal-day-header {
-    font-size: var(--fs-micro);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #6bffb8;
-    margin: 6px 0 3px 0;
-    padding-bottom: 2px;
-    border-bottom: 0.5px solid #1a1a28;
-  }
-
-  .cal-day-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-
-  .cal-header-time {
-    font-weight: 700;
-    font-size: 1.15rem;
-    color: #fff;
-    /* Slight negative tracking + stretch keeps the glyphs narrower so the
-       date label on the left and the clock on the right don't crowd each
-       other on the TV's narrow calendar column. */
-    letter-spacing: -0.03em;
-    font-stretch: 85%;
-    text-transform: none;
-    white-space: nowrap;
-  }
-
-  .cal-day-header:first-child { margin-top: 0; }
-
-  .cal-day-header.is-today {
-    color: #fff;
-    font-size: 1.15rem;
-    margin-bottom: 8px;
-    white-space: nowrap;
-    letter-spacing: -0.03em;
-    font-stretch: 85%;
-  }
-  .cal-day-header.is-future { color: #9a9aa8; }
-
-  /* Morning commute estimate — one line per family commuter under the
-     TODAY day header (Mon-Fri 7:00-10:30 AM). Same font size as a
-     cal-event so each line reads as a calendar-style item, not a banner.
-     The minute count picks up amber when that person's commute is tight. */
-  .cal-commute {
-    font-size: var(--fs-label);
-    color: #cfcfd6;
-    padding: 2px 0;
-    line-height: 1.25;
-  }
-  .cal-commute .commute-min {
-    font-weight: 600;
-    color: #fff;
-  }
-  .cal-commute.tight .commute-min { color: #ff9b40; }
-
-  .cal-event {
-    padding: 2px 0;
-    font-size: var(--fs-label);
-    line-height: 1.25;
-  }
-
-  .cal-event-time {
-    color: #888;
-    font-weight: 500;
-    font-size: var(--fs-micro);
-    margin-left: 4px;
-    white-space: nowrap;
-  }
-
-  .cal-leave-by {
-    color: #ffb84d;
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    margin-top: 1px;
-  }
-  .cal-leave-mode {
-    color: #aaa;
-    font-weight: 400;
-  }
-
-  .cal-event-title {
-    color: #e8e8ec;
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .cal-event.all-day .cal-event-time { color: #9a9aa8; }
-
-  .cal-empty, .cal-signin-prompt {
-    font-size: var(--fs-label);
-    color: #9a9aa8;
-    padding: 20px 8px;
-    text-align: center;
-  }
-
-  .cal-signin-btn {
-    background: #6bffb8;
-    color: #000;
-    border: none;
-    border-radius: 6px;
-    padding: 14px 28px;
-    font-size: var(--fs-body);
-    font-weight: 600;
-    cursor: pointer;
-    margin-top: 12px;
-    outline: none;
-  }
-
-  .cal-signin-btn:focus {
-    box-shadow: 0 0 0 3px #fff;
-    transform: scale(1.05);
-  }
-
-  /* Alerts now stacked inside the calendar card (right column) */
-  .cal-alert-divider {
-    border-top: 0.5px solid #2a2a35;
-    margin: 8px -12px 6px -12px;
-  }
-
-  .alerts-list {
-    flex-shrink: 0;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    max-height: 50%;
-  }
-
-  .alert-item {
-    font-size: var(--fs-micro);
-    line-height: 1.3;
-    color: #ccc;
-    padding: 3px 0;
-    border-bottom: 0.5px solid #1a1a28;
-  }
-
-  .alert-item:last-child { border-bottom: none; }
-
-  .alert-item.is-alert {
-    color: #ff9b6b;
-    font-weight: 600;
-  }
-
-  .alert-badge {
-    display: inline-block;
-    font-size: var(--fs-micro);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 1px 4px;
-    border-radius: 3px;
-    margin-right: 4px;
-    vertical-align: middle;
-  }
-
-  .alert-badge.njt {
-    background: #c0392b;
-    color: #fff;
-  }
-
-  .alert-badge.nixle {
-    background: #e67e22;
-    color: #fff;
-  }
-
-  .alert-badge.news {
-    background: #2a2a3a;
-    color: #888;
-  }
-
-  /* Hide Leaflet controls — we want a clean ambient view */
-  .leaflet-control-zoom,
-  .leaflet-control-attribution {
-    display: none !important;
-  }
-
-  /* Custom location markers */
-  .person-marker {
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.55);
-    box-shadow: 0 0 6px rgba(0,0,0,0.65);
-    overflow: hidden;
-    background: #3a3a48;
-    color: #000;
-    font-weight: 700;
-    font-size: var(--fs-label);
-    line-height: 44px;
-    text-align: center;
-    transition: opacity 0.5s ease, filter 0.5s ease;
-  }
-
-  /* Freshness ladder. Fresh markers are full color; older positions fade
-     a touch (and pick up a dashed border) so the family doesn't trust
-     frozen coordinates as live — but faces remain recognizable. Color is
-     preserved at every tier. */
-  .person-marker.stale-recent { opacity: 0.92; }
-  .person-marker.stale-warm   { opacity: 0.8; border-style: dashed; }
-  .person-marker.stale-cold   { opacity: 0.65; border-style: dashed; }
-
-  .person-marker img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  /* Smaller "orbit" face used when a person is at home — bumped from 20→28
-     so faces are still recognizable around the house badge. */
-  .person-marker.small {
-    width: 28px !important;
-    height: 28px !important;
-    line-height: 26px;
-    font-size: var(--fs-micro);
-    border-width: 1.5px;
-  }
-
-  .home-marker {
-    width: 24px !important;
-    height: 24px !important;
-    background: rgba(58, 123, 213, 0.85);
-    border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.35);
-    box-shadow: 0 0 4px rgba(0,0,0,0.5);
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-  }
-  .home-marker svg { width: 16px; height: 16px; }
-
-  .bus-marker {
-    background: none !important;
-    border: none !important;
-    box-shadow: none !important;
-    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
-  }
-  .leaflet-tooltip.bus-tip {
-    background: rgba(10, 10, 15, 0.92);
-    color: #e8e8ec;
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 6px;
-    padding: 3px 7px;
-    font-size: 11px;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
-  }
-  .leaflet-tooltip.bus-tip::before { display: none; }
-  /* NJT bus marker — NJTbus.png logo + direction arrow above (NY-bound) or
-     below (return). Sizes are written inline by _busSvg() based on the
-     map-zoom-derived scale, so we just provide the layout primitives here
-     (column flex, centered, body clipped to a circle). */
-  .bus-marker .nbm-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-  }
-  .bus-marker .nbm-body {
-    display: block;
-    /* NJTbus.png has a white square background — clip to circle to match
-       the round logo and avoid white corners against the dark map. */
-    border-radius: 50%;
-    clip-path: circle(50%);
-  }
-  .bus-marker .nbm-arrow { display: block; }
-
-  /* Hoboken Hop shuttle marker — bus icon, color is set inline per bus
-     (red for Red Hop, green for Green Hop) */
-  .hop-marker {
-    width: 22px !important;
-    height: 22px !important;
-    background: transparent;
-    border: none;
-    filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
-  }
-
-  /* Tile (Life360) tracker markers — purple */
-  .tile-marker {
-    width: 26px !important;
-    height: 26px !important;
-    background: #c870ff;
-    border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.45);
-    box-shadow: 0 0 4px rgba(0,0,0,0.6);
-    font-size: var(--fs-body);
-    font-weight: 700;
-    color: #000;
-    line-height: 22px;
-    text-align: center;
-  }
-
-  /* Transit cards - full width.
-     min-height keeps bus and ferry visually equal even when the ferry has
-     only one route to display (bus shows 126 + 119, naturally taller).
-     Compact padding lets map + calendar (row 1) take more vertical space. */
-  .transit-card {
-    grid-column: 1 / 3;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 12px;
-    min-height: 86px;
-  }
-
-  .transit-icon {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-  }
-
-  .transit-icon svg {
-    width: 32px;
-    height: 32px;
-    fill: #555;
-  }
-
-  .transit-body {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .transit-title {
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #9a9aa8;
-    margin-bottom: 2px;
-  }
-
-  .transit-routes {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    align-items: flex-start;
-    overflow: hidden;
-  }
-
-  /* Stale-panel dimmer: applied when a source has been offline >5 min, so
-     frozen countdowns don't masquerade as live data. */
-  .panel-stale { opacity: 0.4; filter: grayscale(0.5); transition: opacity 0.4s, filter 0.4s; }
-
-  .route-group {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .route-label {
-    /* fs-label, not micro — at 10 feet the countdown numbers were readable
-       but the route they belonged to wasn't. */
-    font-size: var(--fs-label);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #9a9aa8;
-    white-space: nowrap;
-    min-width: 74px;
-    flex-shrink: 0;
-  }
-
-  .dep-row {
-    display: flex;
-    gap: 5px;
-    flex-wrap: nowrap;
-  }
-
-  .dep-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0;
-    background: #1a1a2a;
-    padding: 3px 6px;
-    border-radius: 6px;
-    width: 64px;   /* +4px headroom for the larger --fs-sub countdown */
-    text-align: center;
-    box-sizing: border-box;
-    flex-shrink: 0;
-  }
-
-  .dep-chip:first-child {
-    background: #1a2a1a;
-  }
-
-  .dep-chip .cd-unit {
-    font-size: 0.65em;
-    font-weight: 400;
-  }
-
-  .dep-chip .t {
-    font-size: var(--fs-micro);
-    font-weight: 400;
-    color: #888;
-    order: 2;
-    line-height: 1.1;
-  }
-
-  .dep-chip:first-child .t {
-    font-size: var(--fs-micro);
-  }
-
-  .dep-chip .cd {
-    font-size: var(--fs-sub);   /* match tunnel/hop big-number size — the catchable
-                                   bus countdown is the most decision-relevant number
-                                   on the wall and shouldn't be out-sized by traffic. */
-    font-weight: 600;
-    color: #fff;
-    order: 1;
-    line-height: 1.1;
-  }
-
-  .tunnel-traffic {
-    flex-shrink: 0;
-    text-align: center;
-    padding: 0 14px;
-    border-left: 0.5px solid #1e1e2e;
-    margin-left: 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 130px;
-    box-sizing: border-box;
-    align-self: stretch;
-  }
-
-  .tunnel-label {
-    font-size: var(--fs-micro);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #9a9aa8;
-    margin-bottom: 2px;
-  }
-
-  .tunnel-time {
-    font-size: var(--fs-sub);
-    font-weight: 300;
-    color: #fff;
-  }
-
-  .tunnel-min {
-    font-size: var(--fs-label);
-    color: #888;
-  }
-
-  .tunnel-status {
-    font-size: var(--fs-micro);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-
-  .no-service {
-    font-size: var(--fs-label);
-    color: #6a6a78;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .no-service svg { width: 11px; height: 11px; flex-shrink: 0; opacity: 0.8; }
-  /* Three flavors of "nothing to show right now": */
-  /* 1) Intentional emptiness — service is asleep / not running today */
-  .no-service.is-asleep   { color: #6a6a78; }
-  /* 2) Schedule fallback — proxy didn't return live predictions but we know
-        when the next scheduled departure is */
-  .no-service.is-fallback { color: #9a9aa8; }
-  /* 3) Honest error — needs to read amber, not the same as quiet emptiness */
-  .no-service.is-error    { color: #f0c040; }
-
-  /* Bus headlights — green when API live, orange when inferred from
-     vehicle positions, red when falling back to static schedule. */
-  .bus-headlight { filter: none; }
-  .bus-headlight.live { fill: #6bffb8; }
-  .bus-headlight.inferred { fill: #ffa040; }
-  .bus-headlight.schedule { fill: #c0392b; }
-
-  /* Ferry wave animation (only when active) */
-  .ferry-wave {
-    transform-origin: center;
-  }
-
-  .ferry-wave.active {
-    animation: ferry-wave-move 2.5s ease-in-out infinite;
-  }
-
-  @keyframes ferry-wave-move {
-    0%, 100% { transform: translateX(-1.5px); }
-    50% { transform: translateX(1.5px); }
-  }
-
-  /* Pause animations during sleep mode to save CPU/GPU on slow hardware.
-     Note: weather-icon animations live inside each <img>-loaded SVG and
-     can't be reached from this stylesheet (SVG runs sandboxed). They keep
-     animating during sleep — typically not visible since sleep hides body. */
-  body.sleeping .ferry-wave {
-    animation-play-state: paused;
-  }
-
-  /* Respect user/system reduced-motion preference */
-  @media (prefers-reduced-motion: reduce) {
-    .ferry-wave.active {
-      animation: none !important;
-    }
-  }
-
-  .status-bar {
-    position: fixed;
-    bottom: 1px;
-    right: 14px;
-    left: 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: var(--fs-micro);
-    color: #555;
-    pointer-events: none;
-    line-height: 1;
-  }
-
-  .status-warning {
-    color: #ffb84d;
-    font-weight: 600;
-  }
-
-  .status-ok { color: #666; }
-
-  @media (max-width: 800px) {
-    body {
-      grid-template-columns: 1fr;
-      grid-template-rows: auto auto auto auto auto auto;
-    }
-    #calCard, #alertsCard, #weatherCard { grid-row: auto; grid-column: auto; }
-    .transit-card { grid-column: auto; flex-direction: column; align-items: flex-start; }
-    .weather-temp { font-size: var(--fs-hero); }
-    .weather-forecast { flex-direction: row; flex-wrap: wrap; }
-  }
-    /* camera-feed overlay (Front rapid snapshots / Lower Door frames) */
-    .cam-overlay{position:absolute;inset:0;background:#000;z-index:30;border-radius:inherit;overflow:hidden}
-    .cam-overlay img{width:100%;height:100%;object-fit:cover;display:block}
-    .cam-label{position:absolute;left:8px;bottom:8px;padding:2px 9px;border-radius:7px;background:rgba(0,0,0,.62);color:#fff;font-weight:700;font-size:13px;letter-spacing:.2px}
+  :root{
+    --bg:#0b0f14; --card:#151b24; --card2:#1b2430; --line:#243040;
+    --txt:#eef3f9; --dim:#8ea0b5; --live:#6bffb8;
+    --urgent:#ff5050; --warn:#ff9b40; --yellow:#e0c040; --accent:#4aa8ff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--txt);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  body{padding:max(14px, calc(env(safe-area-inset-top, 0px) + 10px)) 14px calc(24px+env(safe-area-inset-bottom))}
+  /* Installed (standalone) PWA: page draws under the status bar / Dynamic
+     Island, and iOS sometimes reports safe-area-inset-top as 0 there —
+     enforce a floor so the header and Flip button clear the camera bar. */
+  @media (display-mode: standalone){
+    body{padding-top:max(54px, calc(env(safe-area-inset-top, 0px) + 10px))}
+  }
+  body.standalone{padding-top:max(54px, calc(env(safe-area-inset-top, 0px) + 10px))}
+  .top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; position:relative}
+  .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
+    font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
+  .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
+  .dir{font-size:clamp(17px,5.6vw,22px); font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
+  .dir .sub{font-size:12px; font-weight:500; color:var(--dim); display:block}
+  .btns{display:flex; align-items:center; gap:8px; flex:none}
+  .swap{background:var(--card2); border:1px solid var(--line); color:var(--txt);
+    border-radius:12px; padding:10px 14px; font-size:14px; font-weight:600; cursor:pointer}
+  .swap:active{background:var(--line)}
+  /* Icon-only variant so two buttons still fit beside the centered ETA at 375px. */
+  .swap.icon{padding:10px 12px; font-size:16px; line-height:1}
+  /* The header ETA is absolutely centered, so the two side elements have to
+     leave it room. On narrow phones drop the word "Flip" and keep just the
+     glyph — cheap insurance against the second button crowding the centre. */
+  @media (max-width: 340px){
+    .swap#swapBtn{font-size:0; padding:10px 12px}
+    .swap#swapBtn::before{content:'⇄'; font-size:16px; line-height:1}
+  }
+  .swap.icon.spin{color:var(--accent)}
+  .swap.icon.spin span{display:inline-block; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:16px; margin-bottom:14px}
+  .card h2{margin:0 0 12px; font-size:13px; font-weight:600; letter-spacing:.8px;
+    text-transform:uppercase; color:var(--dim)}
+  .stop{margin-bottom:16px}
+  .stop:last-child{margin-bottom:0}
+  .stop .name{font-size:15px; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--dim); flex:none}
+  .dot.live{background:var(--live); box-shadow:0 0 8px var(--live)}
+  .dot.inferred{background:var(--warn)}
+  .dot.sched{background:var(--dim)}
+  .rows{display:flex; flex-direction:column; gap:8px}
+  .row{display:flex; align-items:center; gap:12px; background:var(--card2);
+    border-radius:12px; padding:12px 14px}
+  .mins{font-size:28px; font-weight:800; line-height:1; min-width:70px}
+  .mins small{font-size:13px; font-weight:600; color:var(--dim); margin-left:3px}
+  .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--dim)}
+  /* "runs ~N late" is the statistical bias correction for this route and
+     hour, NOT a measurement of this particular bus. Off by default; tap the
+     bus/house icon to reveal. Always rendered and toggled purely in CSS, so
+     flipping it is instant and needs no re-fetch. */
+  .late{display:none; font-size:11px; font-weight:600; color:var(--warn); white-space:nowrap}
+  body.show-late .late{display:block}
+  #dirIcon{cursor:pointer; user-select:none; -webkit-user-select:none}
+  body.show-late #dirIcon{filter:drop-shadow(0 0 6px var(--warn))}
+  .load{display:inline-flex; align-items:flex-end; gap:2px}
+  .load i{display:block; width:5px; border-radius:2px}
+  .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
+  .tag{font-size:10px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin-top:2px}
+  .tag.est{color:var(--warn)}
+  /* Route number, tucked under the fullness bars. */
+  .rt{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:3px}
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .colhead{font-size:13px; font-weight:800; text-align:center; color:var(--accent);
+    background:#0e1620; border:1px solid var(--line); border-radius:8px;
+    padding:5px 0; margin-bottom:8px}
+  .tunnel{display:flex; align-items:baseline; gap:10px}
+  .tunnel .big{font-size:40px; font-weight:800; line-height:1}
+  .tunnel .lbl{font-size:13px; color:var(--dim)}
+  .eta{display:flex; align-items:baseline; gap:10px; margin-top:4px}
+  .eta .big{font-size:34px; font-weight:800; color:var(--live)}
+  .eta .lbl{font-size:13px; color:var(--dim)}
+  .empty{color:var(--dim); font-size:14px; padding:8px 2px}
+  /* Upstream failure reads amber — distinct from quiet emptiness. */
+  .empty.err{color:var(--warn)}
+  .note{background:#1a222e; border:1px dashed var(--line); border-radius:12px;
+    padding:12px 14px; color:var(--dim); font-size:13px; margin-bottom:14px}
+  .foot{display:flex; justify-content:space-between; align-items:center;
+    color:var(--dim); font-size:12px; margin-top:6px}
+  .foot .stat{display:flex; align-items:center; gap:6px}
+  .stale{opacity:.5}
+  a.reset{color:var(--accent); text-decoration:none}
 </style>
 </head>
 <body>
-
-<!-- Row 1-2: Map (middle, always visible, fills its panel) -->
-<div class="card" id="mapCard">
-  <div id="hobokenMap"></div>
-  <div id="mapStatusOverlay"></div>
-</div>
-
-<!-- Row 1-2: Calendar + Alerts (right column, stacked with divider) -->
-<div class="card" id="calCard">
-  <div class="cal-content" id="calContent">
-    <div class="cal-signin-prompt" id="calSigninPrompt" style="display:none;"></div>
-    <div id="calEvents"></div>
-  </div>
-  <div class="cal-alert-divider"></div>
-  <div class="alerts-list" id="alertsList">
-    <div class="alert-item" style="color:#444;">Loading...</div>
-  </div>
-</div>
-
-<!-- Row 2: Weather (below clock, left) -->
-<div class="card weather-card" id="weatherCard">
-      <div id="camOverlay" class="cam-overlay" style="display:none"><img id="camImg" alt="camera"><div id="camLabel" class="cam-label"></div></div>
-  <div class="weather-main">
-    <!-- Hero row: desc + hi/lo + rain (left) | icon (center) | temp (right) -->
-    <div class="weather-top">
-      <div class="weather-summary">
-        <div class="weather-desc" id="weatherDesc">Loading...</div>
-        <div class="weather-meta">
-          <div class="wm-hilo">Hi&nbsp;<span id="weatherHi">--</span>&deg;&nbsp;&middot;&nbsp;Lo&nbsp;<span id="weatherLo">--</span>&deg;</div>
-          <div id="weatherRain" style="display:none;"><svg viewBox="0 0 24 24" width="11" height="11" fill="#f0c040"><path d="M17 13.96c0 .61-.49 1.1-1.1 1.1H15v6c0 .55-.45 1-1 1s-1-.45-1-1v-6h-2v6c0 .55-.45 1-1 1s-1-.45-1-1v-6H8.1c-.61 0-1.1-.49-1.1-1.1 0-3.86 2.5-7.05 5-7.45V5c0-.55.45-1 1-1s1 .45 1 1v1.51c2.5.4 5 3.59 5 7.45z"/></svg><span id="weatherRainPct">--</span>% rain</div>
-        </div>
-      </div>
-      <div class="weather-icon" id="weatherIcon">--</div>
-      <div class="weather-temp" id="weatherTemp">--&deg;F</div>
+  <div class="top">
+    <div class="dir" id="dirLabel">
+      <span id="dirIcon" role="button" tabindex="0" title="Show/hide the &quot;runs ~N late&quot; bias correction">🚌</span>
+      <span>
+        <span id="dirText">Loading…</span>
+        <span class="sub" id="dirSub">detecting location</span>
+      </span>
+    </div>
+    <div class="hdr-eta" id="hdrEta"></div>
+    <div class="btns">
+      <button class="swap icon" id="refreshBtn" aria-label="Refresh"><span>↻</span></button>
+      <button class="swap" id="swapBtn">⇄ Flip</button>
     </div>
   </div>
-  <div class="weather-forecast" id="weatherForecast"></div>
-  <div class="weather-details">
-    <div class="wd-stat"><div class="wd-label">Wind</div><div class="wd-value"><span id="weatherWind">--</span><span class="wd-unit">mph</span></div></div>
-    <div class="wd-stat"><div class="wd-label">Humidity</div><div class="wd-value"><span id="weatherHumidity">--</span><span class="wd-unit">%</span></div></div>
-    <div class="wd-stat"><div class="wd-label">UV</div><div class="wd-value" id="weatherUV">--</div></div>
-    <div class="wd-stat"><div class="wd-label">Pollen</div><div class="wd-value" id="weatherPollen">--</div></div>
-  </div>
-</div>
 
-<!-- Row 3: Bus (full width) -->
-<div class="card transit-card" id="busCard">
-  <div class="transit-icon" id="busIcon">
-    <svg viewBox="0 0 24 24" fill="#555" width="32" height="32"><path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z"/><circle class="bus-headlight schedule" id="busHL1" cx="7.5" cy="15.5" r="1.5"/><circle class="bus-headlight schedule" id="busHL2" cx="16.5" cy="15.5" r="1.5"/></svg>
-  </div>
-  <div class="transit-body">
-    <div class="transit-title">Bus to NY</div>
-    <div class="transit-routes" id="busContent">
-      <div class="no-service">Loading...</div>
-    </div>
-  </div>
-  <div class="tunnel-traffic" id="tunnelTraffic">
-    <div class="tunnel-label">Lincoln Tunnel</div>
-    <div><span class="tunnel-time" id="tunnelTime">--</span><span class="tunnel-min" id="tunnelMin">&nbsp;min</span></div>
-    <div class="tunnel-status" id="tunnelStatus">--</div>
-  </div>
-</div>
+  <div id="content"></div>
 
-<!-- Row 4: Ferry (full width) -->
-<div class="card transit-card" id="ferryCard">
-  <div class="transit-icon">
-    <svg viewBox="0 0 24 24" fill="#555" width="32" height="32" overflow="visible"><!-- Boat body (hull + upper structure) --><path d="M3.95 19H4c1.6 0 3.02-.88 4-2 .98 1.12 2.4 2 4 2s3.02-.88 4-2c.98 1.12 2.4 2 4 2h.05l1.89-6.68c.08-.26.06-.54-.06-.78s-.34-.42-.6-.5L20 10.62V6c0-1.1-.9-2-2-2h-3V1H9v3H6c-1.1 0-2 .9-2 2v4.62l-1.29.42c-.26.08-.48.26-.6.5s-.14.52-.05.78L3.95 19zM6 6h12v3.97L12 8 6 9.97V6z"/><!-- Wave below boat --><g class="ferry-wave active" id="ferryWave"><path d="M20 21c-1.39 0-2.78-.47-4-1.32-2.44 1.71-5.56 1.71-8 0C6.78 20.53 5.39 21 4 21H2v2h2c1.38 0 2.74-.35 4-.99 2.52 1.29 5.48 1.29 8 0 1.26.65 2.62.99 4 .99h2v-2h-2z"/></g></svg>
+  <div class="foot">
+    <span class="stat"><span class="dot" id="healthDot"></span><span id="updated">—</span></span>
+    <a class="reset" id="autoBtn" href="#">Use my location</a>
   </div>
-  <div class="transit-body">
-    <div class="transit-title" id="ferryTitle">Ferry to Wall St</div>
-    <div class="transit-routes" id="ferryContent">
-      <div class="no-service">Loading...</div>
-    </div>
-  </div>
-  <!-- Hop right panel mirrors Lincoln Tunnel structure: label / big number / status -->
-  <div class="tunnel-traffic" id="hopTraffic">
-    <div class="tunnel-label">Hop</div>
-    <div id="hopValueRow"><span class="tunnel-time" id="hopTime">--</span><span class="tunnel-min" id="hopMin">&nbsp;min</span></div>
-    <div class="tunnel-status" id="hopStatus">--</div>
-  </div>
-</div>
-
-<div class="status-bar">
-  <span id="statusFreshness">Loading...</span>
-  <span id="statusErrors" class="status-ok"></span>
-</div>
 
 <script>
-// ============================================================
-// TV SIMULATION MODE — ?tv in URL renders the dashboard at fixed 930x539,
-// scaled to fit any browser window while preserving TV proportions.
-// ============================================================
-(function setupTvSimulation() {
-  if (!/(\?|&)tv(=|&|$)/.test(location.search)) return;
-  document.documentElement.classList.add('tv-sim');
-  function applyScale() {
-    const targetW = 930, targetH = 539;
-    const scale = Math.min(window.innerWidth / targetW, window.innerHeight / targetH);
-    const offsetX = (window.innerWidth  - targetW * scale) / 2;
-    const offsetY = (window.innerHeight - targetH * scale) / 2;
-    document.body.style.transform = 'translate(' + offsetX + 'px,' + offsetY + 'px) scale(' + scale + ')';
-  }
-  if (document.body) applyScale();
-  else window.addEventListener('DOMContentLoaded', applyScale);
-  window.addEventListener('resize', applyScale);
-})();
+const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
+const POLL_MS = 15000;
+const TIMEOUT_MS = 20000;  // comfortably above the proxy's 8s NJT timeout, so a
+                           // cold (uncached) first load shows data rather than
+                           // aborting early
+// Buses shown per stop (and per route on the inbound board). Three is the
+// practical ceiling — by the 4th departure you'd have left already.
+const MAX_PER_STOP = 3;
 
-// ============================================================
-// PROXY
-// ============================================================
-// Origin-aware proxy path (2026-07-26): served from the Beelink (wall display
-// on the LAN IP, phones via the tailnet name), API calls go to Caddy's /proxy
-// route, which injects X-Cal-Token server-side — the device holds no
-// credential. Served from GitHub Pages (public fallback), we talk to Cloud
-// Run directly and the localStorage token flow below still applies.
-const LOCAL_HOSTS = ['192.168.4.50', 'beelink.tailed2e3c.ts.net', '100.124.112.83'];
-const IS_LOCAL = LOCAL_HOSTS.indexOf(location.hostname) !== -1;
-const PROXY_URL = IS_LOCAL ? '/proxy' : 'https://proxy-105885243706.us-east1.run.app';
+// Anchors for auto direction detection.
+const HOME = {lat: 40.7495, lon: -74.0300};          // central Hoboken
+const NYC  = {lat: 40.7570, lon: -73.9903};          // Port Authority Bus Terminal
+// Ride model for the inbound "ETA home": free-flow PABT->Hoboken minutes + walk.
+const RIDE_BASE_MIN = 18;     // 126 PABT -> Hoboken stop, light traffic
+const TUNNEL_FREEFLOW = 8;    // min; anything over this is added delay
+const WALK_MIN = 2;         // inbound: Hoboken stop -> home (was 5; Jeff cut it by 3)
+const WALK_TO_STOP_MIN = 3; // outbound: home -> Washington & 13th, so the
+                            // headline total is "leave now" rather than
+                            // "assuming you're already standing at the stop"
 
-// Trim trailing children of a container until they all fit without overflow.
-// Used for alerts + calendar so nothing is half-cut at the bottom.
-function trimOverflow(container) {
-  if (!container) return;
-  // Wait for layout
-  let safety = 200;
-  while (safety-- > 0 &&
-         container.scrollHeight > container.clientHeight + 1 &&
-         container.lastElementChild) {
-    container.removeChild(container.lastElementChild);
-  }
+let dir = null;               // 'out' (to NYC) | 'in' (to Hoboken)
+let manual = false;           // user flipped/overrode auto
+let lastFetchedAt = 0;
+let timer = null;
+
+function haversine(a, b){
+  const R=3958.8, toR=x=>x*Math.PI/180;
+  const dLat=toR(b.lat-a.lat), dLon=toR(b.lon-a.lon);
+  const s=Math.sin(dLat/2)**2 + Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
 }
 
-// fetch with abort timeout — prevents hung TCP from piling up callbacks
-function fetchT(url, opts, ms) {
-  ms = ms || 15000;
+function detectDirection(){
+  if (manual) { render(); return; }
+  if (!navigator.geolocation){ setDir('out'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      // A late fix must never undo a manual flip made while geo was resolving.
+      if (manual) return;
+      const me = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+      setDir(haversine(me, NYC) < haversine(me, HOME) ? 'in' : 'out', true);
+    },
+    () => { if (!manual && dir === null) setDir('out'); },   // denied/failed → default outbound
+    {enableHighAccuracy:false, timeout:8000, maximumAge:60000}
+  );
+}
+
+function setDir(d, fromGeo){
+  const changed = d !== dir;
+  dir = d;
+  if (fromGeo) document.getElementById('dirSub').textContent = 'from your location';
+  if (changed || fromGeo){ render(); refresh(); }
+}
+
+function fetchT(url){
   const c = new AbortController();
-  const id = setTimeout(function() { c.abort(); }, ms);
-  return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }))
-    .finally(function() { clearTimeout(id); });
+  const t = setTimeout(()=>c.abort(), TIMEOUT_MS);
+  return fetch(url, {signal:c.signal, headers:{'Accept':'application/json'}})
+    .finally(()=>clearTimeout(t));
 }
 
-// ============================================================
-// API STATUS TRACKING
-// ============================================================
-const apiStatus = {
-  transit:   { ok: null, lastUpdate: null },
-  weather:   { ok: null, lastUpdate: null },
-  hop:       { ok: null, lastUpdate: null },
-  alerts:    { ok: null, lastUpdate: null },
-  locations: { ok: null, lastUpdate: null },
-  calendar:  { ok: null, lastUpdate: null },
-};
-
-function markOk(key) {
-  apiStatus[key].ok = true;
-  apiStatus[key].lastUpdate = Date.now();
-  apiStatus[key].failCount = 0;
+// Reconcile a proxy countdown (minutes as of fetched_at) against the wall clock.
+function liveMins(countdown, fetchedAt){
+  const m = parseInt(countdown, 10);
+  if (!isFinite(m)) return null;
+  const drift = fetchedAt ? Math.floor((Date.now()/1000 - fetchedAt)) / 60 : 0;
+  return Math.max(0, Math.round(m - drift));
 }
 
-function markFail(key) {
-  // Require 2 consecutive failures before flagging offline — prevents flashes
-  // from transient Cloud Run cold starts or network blips.
-  apiStatus[key].failCount = (apiStatus[key].failCount || 0) + 1;
-  if (apiStatus[key].failCount >= 2) {
-    apiStatus[key].ok = false;
-  }
+function tunnelColor(tt){
+  if (!isFinite(tt)) return 'var(--dim)';
+  if (tt >= 35) return 'var(--urgent)';
+  if (tt >= 20) return 'var(--warn)';
+  if (tt >= 10) return 'var(--yellow)';
+  return 'var(--live)';
 }
 
-function agoText(ts) {
-  if (!ts) return 'never';
-  const sec = Math.floor((Date.now() - ts) / 1000);
-  if (sec < 60) return `${sec}s ago`;
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-  return `${Math.floor(sec / 3600)}h ago`;
+// Bus fullness as 3 ascending bars (cell-signal style) instead of NJT's raw
+// "HALF_EMPTY" text. EMPTY→1 green, HALF_EMPTY→2 yellow, FULL→3 red.
+function loadBars(passload){
+  const key = (passload || '').toUpperCase();
+  if (!key || /no data/i.test(key)) return '';
+  const lvl = key.includes('FULL') && !key.includes('HALF') ? 3
+            : key.includes('HALF') ? 2
+            : key.includes('EMPTY') ? 1 : 0;
+  if (!lvl) return '';
+  const color = ['var(--live)','var(--yellow)','var(--urgent)'][lvl-1];
+  const label = ['seats','filling','full'][lvl-1];
+  let bars = '';
+  for (let i = 1; i <= 3; i++)
+    bars += `<i style="height:${4+i*4}px; background:${i<=lvl?color:'var(--line)'}"></i>`;
+  return `<span class="load">${bars}<span class="loadlbl">${label}</span></span>`;
 }
 
-function updateStatusBar() {
-  // Freshness: most recent successful update (transit/hop update every 15s)
-  let newest = null;
-  for (const key of Object.keys(apiStatus)) {
-    const ts = apiStatus[key].lastUpdate;
-    if (ts && (newest === null || ts > newest)) newest = ts;
-  }
-  document.getElementById('statusFreshness').textContent =
-    newest ? `Updated ${agoText(newest)}` : 'Loading...';
+// The proxy sends NJT's own countdown as `raw_countdown` and a bias-corrected
+// `countdown`. We show NJT's number as the headline (so it matches the NJT app)
+// and surface the correction as a small "runs ~N late" note.
+function njtCountdown(p){
+  return (p.raw_countdown != null && p.raw_countdown !== '') ? p.raw_countdown : p.countdown;
+}
+function lateNote(p){
+  const cd = parseInt(p.countdown, 10), rc = parseInt(p.raw_countdown, 10);
+  return (isFinite(cd) && isFinite(rc) && cd - rc >= 1)
+    ? `<span class="late">runs ~${cd - rc} late</span>` : '';
+}
 
-  // Errors: list any failed APIs
-  const failed = [];
-  for (const [key, s] of Object.entries(apiStatus)) {
-    if (s.ok === false) failed.push(key);
-  }
-  const errEl = document.getElementById('statusErrors');
-  if (failed.length > 0) {
-    errEl.className = 'status-warning';
-    errEl.innerHTML =
-      '<svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor" style="vertical-align:middle;margin-right:3px;">' +
-      '<path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>' +
-      failed.join(', ') + ' offline';
+function predRow(p, fetchedAt, compact){
+  const m = liveMins(njtCountdown(p), fetchedAt);
+  const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
+  const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
+  const load = loadBars(p.passload);
+  const tag = p.is_inferred ? '<div class="tag est">est</div>' : '';
+  // Fleet number of the actual bus (e.g. 20541), under the fullness bars.
+  // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
+  // so render nothing rather than an empty line in that case.
+  const rt = p.vehicle_id ? `<span class="rt">#${p.vehicle_id}</span>` : '';
+  return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
+    <span class="mins">${label}${unit}</span>
+    <span class="meta">${lateNote(p)}${load}${rt}${tag}</span>
+  </div>`;
+}
+
+// Drop "phantom" departures: entries NJT emits from its printed timetable with
+// no bus actually broadcasting for them (is_live false, and not one of our
+// GPS-inferred estimates). They count down like a real bus, carry no fleet
+// number, never appear in the NJT app, and evaporate the moment NJT's feed
+// blips — so they're worse than showing nothing. Non-arrays (the {error:...}
+// object) pass through untouched so the error branch still fires.
+function realBuses(preds){
+  return Array.isArray(preds) ? preds.filter(p => p.is_live || p.is_inferred) : preds;
+}
+
+function renderStop(name, preds, fetchedAt){
+  let mode = 'sched', rows = '';
+  if (Array.isArray(preds) && preds.length){
+    const any = preds.some(p=>p.is_live), inf = preds.some(p=>p.is_inferred);
+    mode = inf ? 'inferred' : (any ? 'live' : 'sched');
+    rows = preds.slice(0,MAX_PER_STOP).map(p=>predRow(p, fetchedAt)).join('');
+  } else if (preds && preds.error) {
+    // An upstream failure is NOT the same as "no buses are coming", and saying
+    // the latter sent us hunting for a bug in this page when NJT's prediction
+    // API was simply timing out. Say which it is.
+    const auth = /auth/i.test(preds.error);
+    rows = `<div class="empty err">` +
+      (auth ? 'NJT authentication failed.'
+            : 'NJT feed unreachable right now.') +
+      `<br><span style="opacity:.75">Times will return on their own.</span></div>`;
+    mode = 'sched';
   } else {
-    errEl.className = 'status-ok';
-    errEl.textContent = '';
+    rows = `<div class="empty">No upcoming buses in the feed right now.</div>`;
   }
-
-  // When transit or hop has been offline >5 min, dim the corresponding
-  // panel so the family doesn't trust frozen countdowns as live.
-  const FIVE_MIN = 5 * 60 * 1000;
-  const now = Date.now();
-  function staleClass(panelId, key) {
-    const s = apiStatus[key];
-    if (!s) return;
-    const offline = s.ok === false;
-    const ageMs = s.lastUpdate ? (now - s.lastUpdate) : Infinity;
-    const stale = offline && ageMs > FIVE_MIN;
-    const el = document.getElementById(panelId);
-    if (el) el.classList.toggle('panel-stale', stale);
-  }
-  staleClass('busContent', 'transit');
-  staleClass('ferryContent', 'transit');
-  staleClass('hopTraffic', 'hop');
-  staleClass('mapStatusOverlay', 'locations');
+  return `<div class="stop">
+    <div class="name"><span class="dot ${mode}"></span>${name}</div>
+    <div class="rows">${rows}</div>
+  </div>`;
 }
 
-// ============================================================
-// FERRY SCHEDULES
-// ============================================================
-// Weekdays are commute-focused: Wall St (Pier 11) service from both Hoboken
-// terminals — 14th St and Downtown (NJ Transit Terminal). Weekends are
-// leisure-focused: only 14th St → Midtown runs (Wall St routes are Mon-Fri).
-// Row labels name the ORIGIN on weekdays (destination fixed in the card
-// title) and the DESTINATION on weekends (origin fixed in the title).
-const FERRY_VIEWS = {
-  weekday: {
-    title: 'Ferry to Wall St',
-    rows: [
-      { label: '14th St', times: [
-        "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
-        "16:10","16:40","17:05","17:30","17:55","18:20","18:50"
-      ]},
-      { label: 'Downtown', times: [
-        "06:20","06:55","07:30","08:05","08:40","09:15","09:50",
-        "15:25","16:00","16:35","17:10","17:45","18:20","18:55"
-      ]},
-    ],
-  },
-  weekend: {
-    title: 'Ferry from Hoboken 14th St',
-    rows: [
-      { label: 'Midtown', times: [
-        "10:02","10:22","10:42","11:02","11:22","11:42","12:02","12:22","12:42",
-        "13:02","13:22","13:42","14:02","14:22","14:42","15:02","15:22","15:42",
-        "16:02","16:22","16:42","17:02","17:22","17:42","18:02","18:22","18:42",
-        "19:02","19:22","19:42","20:02","20:22","20:42","21:02","21:22"
-      ]},
-    ],
-  },
-};
-
-// ============================================================
-// BUS 126 SCHEDULE
-// ============================================================
-const BUS_126_SCHEDULE = {
-  weekday: [
-    "05:10","05:40","06:05","06:15","06:25","06:35","06:45","06:55",
-    "07:05","07:15","07:25","07:35","07:45","07:55","08:05","08:15",
-    "08:25","08:35","08:45","08:55","09:05","09:15","09:25",
-    "09:35","09:45","09:55","10:20","10:40","10:55","11:15","11:35",
-    "11:55","12:15","12:35","12:50","13:05","13:20","13:35","13:45",
-    "13:55","14:05","14:15","14:25","14:35",
-    "14:43","14:51","14:59","15:07","15:15","15:23","15:29","15:35",
-    "15:41","15:48","15:55","16:00","16:05","16:08","16:13","16:15",
-    "16:20","16:25","16:30",
-    "16:35","16:39","16:43","16:47","16:49","16:51","16:52","16:54",
-    "16:55","16:57","16:58","17:00","17:01","17:03","17:04","17:06",
-    "17:07","17:09","17:10","17:12","17:13","17:15","17:16","17:18",
-    "17:19","17:21","17:22","17:24","17:25","17:27","17:28","17:30",
-    "17:31","17:33","17:36","17:37","17:39","17:40","17:42","17:43",
-    "17:45","17:46","17:48","17:49","17:51","17:52","17:54","17:55",
-    "17:57","17:58","18:01","18:04","18:05","18:07","18:09","18:10",
-    "18:13","18:16","18:17","18:19","18:21","18:22","18:26","18:31",
-    "18:32","18:37","18:39","18:44","18:47","18:50","18:55","18:57",
-    "19:01","19:02","19:07","19:13","19:20","19:23","19:27",
-    "19:35","19:42","19:45","19:50","19:57","20:00","20:05",
-    "20:13","20:15","20:21","20:29","20:37","20:40","20:45",
-    "20:53","21:01","21:09","21:17","21:18","21:27","21:37",
-    "21:47","21:57","22:07","22:17","22:27","22:37","22:50",
-    "23:05","23:35","00:05","00:36","01:05","01:35"
-  ],
-  saturday: [
-    "06:05","06:35","06:55","07:15","07:35","07:55","08:15","08:35",
-    "08:55","09:05","09:15","09:25","09:40","10:00","10:07","10:22",
-    "10:34","10:46","10:55","11:05","11:15","11:22",
-    "11:35","11:45","11:55","12:05","12:15","12:25","12:35","12:45",
-    "12:55","13:05","13:15","13:25","13:35","13:46","13:58","14:10",
-    "14:22","14:34","14:46","14:58","15:10","15:22","15:34","15:46",
-    "15:58","16:10","16:22","16:34","16:46","16:58","17:10","17:20",
-    "17:30","17:40","17:50","18:00","18:10","18:20","18:30","18:40",
-    "18:50","19:00","19:10","19:20","19:30","19:40","19:50",
-    "20:00","20:10","20:20","20:30",
-    "20:42","20:54","21:06","21:18","21:30","21:42","21:52",
-    "22:02","22:12","22:22","22:37","22:52","23:12","23:32",
-    "00:03","00:36","01:05","01:35"
-  ],
-  sunday: [
-    "07:05","07:35","08:05","08:35","09:10","09:30","10:00","10:20",
-    "10:35","10:50","11:05","11:20","11:35","11:50","12:05","12:20",
-    "12:35","12:50","13:05","13:20","13:35","13:50","14:05","14:15",
-    "14:25","14:35","14:45","14:55","15:05","15:15","15:25","15:35",
-    "15:45","15:55","16:05","16:15","16:25","16:35","16:45","16:55",
-    "17:05","17:15","17:25","17:35","17:45","17:55","18:05","18:15",
-    "18:25","18:35","18:55","19:15","19:35","19:55","20:15",
-    "20:25","20:35","20:55","21:15",
-    "21:35","22:05","22:36","23:05","23:35"
-  ]
-};
-
-// ============================================================
-// BUS 119 SCHEDULE
-// ============================================================
-const BUS_119_SCHEDULE = {
-  weekday: [
-    "05:46","06:16","06:53","07:21","07:45","08:05","08:25","08:45",
-    "09:05","09:25","10:05","10:53",
-    "16:12","16:42","17:09","17:30","17:55","18:25","18:55","19:25",
-    "19:40","20:16","21:16"
-  ],
-  saturday: [],
-  sunday: []
-};
-
-// ============================================================
-// WEATHER ICONS (SVG paths) \u2014 render reliably without emoji fonts
-// ============================================================
-// WEATHER ICONS — adapted from amCharts 1.0.0 weather pack.
-// Each icon is an SVG file under icons/ with embedded CSS @keyframes for
-// cloud drift, rain fall, snow drift, and lightning flash. We stripped the
-// am-weather-sun and am-weather-moon rotation animations from each file —
-// per project requirement: sun and moon stay still; only clouds move.
-//
-// Day/night variants are separate files (e.g. cloudy-day-1 / cloudy-night-1)
-// — wIcon() picks the right one from the isNight flag (sourced from
-// Open-Meteo's hourly is_day array).
-
-// Each logical key maps to [dayFile, nightFile] (no .svg extension).
-const ICON_FILES = {
-  clear:         ['day',             'night'],
-  mostly_clear:  ['cloudy-day-1',    'cloudy-night-1'],
-  partly_cloudy: ['cloudy-day-2',    'cloudy-night-2'],
-  overcast:      ['cloudy',          'cloudy'],
-  fog:           ['cloudy',          'cloudy'],         // no fog icon in pack
-  drizzle:       ['rainy-1',         'rainy-1'],
-  rain:          ['rainy-3',         'rainy-3'],
-  heavy_rain:    ['rainy-5',         'rainy-5'],
-  snow:          ['snowy-2',         'snowy-2'],
-  heavy_snow:    ['snowy-4',         'snowy-4'],
-  storm:         ['thunder',         'thunder'],
-};
-
-function wIcon(key, size, isNight) {
-  // Small icons (<30px — the hourly forecast strip) use the static amcharts
-  // SVGs with no animations. Only the big hero icon renders the animated
-  // version. Otherwise the dashboard becomes a wall of motion that competes
-  // with itself; animation belongs on the focal element only.
-  const s = size || 24;
-  const pair = ICON_FILES[key] || ICON_FILES.overcast;
-  const file = isNight ? pair[1] : pair[0];
-  const folder = s < 30 ? 'icons/static' : 'icons';
-  return `<img class="wi" src="${folder}/${file}.svg" width="${s}" height="${s}" alt="" style="display:inline-block;vertical-align:middle;">`;
-}
-
-const WMO_CODES = {
-  0:  ["Clear sky",                   "clear"],
-  1:  ["Mostly clear",                "mostly_clear"],
-  2:  ["Partly cloudy",               "partly_cloudy"],
-  3:  ["Overcast",                    "overcast"],
-  45: ["Foggy",                       "fog"],
-  48: ["Rime fog",                    "fog"],
-  51: ["Light drizzle",               "drizzle"],
-  53: ["Drizzle",                     "drizzle"],
-  55: ["Heavy drizzle",               "rain"],
-  61: ["Light rain",                  "rain"],
-  63: ["Rain",                        "rain"],
-  65: ["Heavy rain",                  "heavy_rain"],
-  66: ["Freezing rain",               "rain"],
-  67: ["Heavy freezing rain",         "heavy_rain"],
-  71: ["Light snow",                  "snow"],
-  73: ["Snow",                        "snow"],
-  75: ["Heavy snow",                  "heavy_snow"],
-  77: ["Snow grains",                 "snow"],
-  80: ["Rain showers",                "rain"],
-  81: ["Moderate showers",            "rain"],
-  82: ["Heavy showers",               "heavy_rain"],
-  85: ["Snow showers",                "snow"],
-  86: ["Heavy snow showers",          "heavy_snow"],
-  95: ["Thunderstorm",                "storm"],
-  96: ["Thunderstorm + hail",         "storm"],
-  99: ["Thunderstorm + heavy hail",   "storm"]
-};
-
-// ============================================================
-// CLOCK
-// ============================================================
-function updateClock() {
-  const now = new Date();
-  const h = now.getHours();
-  const m = String(now.getMinutes()).padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-
-  const timeStr = `${h12}:${m} ${ampm}`;
-  const el = document.querySelector('.cal-header-time');
-  if (el) el.textContent = timeStr;
-
-  // Refresh the commute estimate every clock tick so the wait countdown
-  // tracks elapsed time between proxy polls (proxy fetches are typically
-  // every 30-60s; we want minute-accurate display).
-  updateCommuteEstimate();
-}
-
-// ============================================================
-// COMMUTE ESTIMATES — Mon-Fri 7:00-10:30 AM
-// One line per commuter under the TODAY header. Each entry below has a
-// calculator that returns total minutes from leaving home NOW to being
-// at the destination, or null if data is unavailable.
-//
-//   Jeff  → 11 Times Square via 126/119 + Lincoln Tunnel
-//           wait_for_next_bus + 13 (ride to PABT) + tunnel_extra + 5
-//           (2 walk to stop + 3 walk to office)
-//
-//   Jenny → 37 Old Slip via Hoboken 14th St ferry to Pier 11
-//           wait_for_next_ferry + 7 (walk to terminal) + 14 (ride)
-//           + 4 (Pier 11 to office)
-// ============================================================
-const COMMUTES = [
-  {
-    name: 'Jeff',
-    destination: '11 Times Sq',
-    tightThreshold: 35,
-    calc: function () {
-      const data = window._lastProxyData;
-      const fetchedAtSec = window._transitFetchedAt || Math.floor(Date.now() / 1000);
-      // Collect next-bus minutes from both stops, reconciled against now.
-      let waitMin = null;
-      if (data && data.stops) {
-        const allPreds = [];
-        for (const sid of ['20514', '20523']) {
-          const s = data.stops[sid];
-          if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
-        }
-        for (const p of allPreds) {
-          const reported = njtRaw(p);
-          if (!isFinite(reported)) continue;
-          const arrivalMs = fetchedAtSec * 1000 + reported * 60000;
-          const mins = Math.max(0, Math.round((arrivalMs - Date.now()) / 60000));
-          if (mins < 60 && (waitMin === null || mins < waitMin)) waitMin = mins;
-        }
-      }
-      if (waitMin === null) waitMin = _nextBusFromSchedule();
-      if (waitMin === null) return null;
-      // Tunnel schedule bakes in ~8 min — count excess as delay.
-      let tunnelExtra = 0;
-      if (data && data.tunnel && data.tunnel.travelTime) {
-        const t = parseInt(data.tunnel.travelTime, 10);
-        if (isFinite(t) && t > 8) tunnelExtra = t - 8;
-      }
-      return waitMin + 13 + tunnelExtra + 5;
-    },
-  },
-  {
-    name: 'Jenny',
-    destination: '37 Old Slip',
-    tightThreshold: 50,
-    calc: function () {
-      const waitMin = _nextWallStFerry();
-      if (waitMin === null) return null;
-      // 7 walk-to-terminal + 14 ride + 4 walk-to-office
-      return waitMin + 25;
-    },
-  },
-];
-
-function updateCommuteEstimate() {
-  const container = document.getElementById('commuteContainer');
-  if (!container) return;
-  const now = new Date();
-  const day = now.getDay();
-  const time = now.getHours() * 60 + now.getMinutes();
-  // Mon-Fri only (excl. holidays), 7:00 AM to 10:30 AM inclusive
-  if (day === 0 || day === 6 || isHolidayService() || time < 7 * 60 || time > 10 * 60 + 30) {
-    container.innerHTML = '';
-    return;
+function tunnelCard(tunnel){
+  if (!tunnel || tunnel.error){
+    return `<div class="card"><h2>Lincoln Tunnel</h2>
+      <div class="empty">Tunnel time unavailable.</div></div>`;
   }
+  const tt = parseInt(tunnel.travelTime, 10);
+  const c = tunnelColor(tt);
+  const sub = dir === 'in' ? 'affects your bus ride' : 'crossing to NYC';
+  return `<div class="card"><h2>Lincoln Tunnel</h2>
+    <div class="tunnel"><span class="big" style="color:${c}">${isFinite(tt)?tt:'--'}</span>
+      <span class="lbl">min · ${sub}</span></div></div>`;
+}
+
+// Header ETA — total door-to-door minutes, centered at the top of the page.
+function setHdrEta(mins){
+  document.getElementById('hdrEta').innerHTML =
+    (mins !== null && isFinite(mins)) ? `${mins}<small>min total</small>` : '';
+}
+
+// Outbound: to NYC. Uses proxy `/` (stops 20514, 20523 + tunnel).
+async function refreshOut(){
+  const res = await fetchT(PROXY_URL);
+  const data = await res.json();
+  lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
+  const s2 = data.stops && data.stops['20523'];
+  const s3 = data.stops && data.stops['20514'];
+  // Strip phantoms first, so neither the board nor the header ETA below can be
+  // built from a timetable entry with no bus behind it.
+  if (s2) s2.predictions = realBuses(s2.predictions);
+  if (s3) s3.predictions = realBuses(s3.predictions);
+  // 15th & Willow is the 119 stop (the 126 is covered at Washington & 13th) —
+  // show only 119s there. Applies to the header ETA below too.
+  if (s2 && Array.isArray(s2.predictions))
+    s2.predictions = s2.predictions.filter(p => p.route === '119');
+  // No card header here: each row now carries its own route number, and each
+  // stop carries its own name, so a "126 / 119 to Port Authority" title only
+  // repeated what the rows already say.
+  let html = `<div class="card">`;
+  html += renderStop('Washington & 13th', s3 && s3.predictions, lastFetchedAt);
+  html += renderStop('15th & Willow', s2 && s2.predictions, lastFetchedAt);
+  html += `</div>`;
+  html += tunnelCard(data.tunnel);
+  document.getElementById('content').innerHTML = html;
+
+  // Total: walk to the stop + next bus at Washington & 13th + tunnel-adjusted
+  // ride to PABT. No walk is added at the far end — the office is at PABT.
+  const waits = [s3]
+    .map(s => s && Array.isArray(s.predictions) && s.predictions.length
+      ? liveMins(njtCountdown(s.predictions[0]), lastFetchedAt) : null)
+    .filter(v => v !== null);
+  const tt = data.tunnel && !data.tunnel.error ? parseInt(data.tunnel.travelTime,10) : NaN;
+  const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
+  setHdrEta(waits.length
+    ? Math.min(...waits) + RIDE_BASE_MIN + delay + WALK_TO_STOP_MIN : null);
+  markHealth(data);
+}
+
+// Inbound: to Hoboken. Uses proxy `?mode=commute_home` (Hoboken-bound 126 from PABT).
+// Falls back gracefully until the proxy ships that mode.
+async function refreshIn(){
+  let homeData = null;
+  try {
+    const r = await fetchT(PROXY_URL + '?mode=commute_home');
+    homeData = await r.json();
+  } catch(e){ homeData = {error:'unavailable'}; }
+
+  // Only trust data from the real commute_home mode. Before the proxy ships it,
+  // `?mode=commute_home` falls through to the default (outbound) response, whose
+  // `tunnel` is the ToNY crossing — wrong direction for the ride home. Gate on
+  // the `predictions` key, which only the real inbound response carries.
+  const preds = homeData && Array.isArray(homeData.predictions) ? homeData.predictions : null;
+  const supported = Array.isArray(preds);
+  const tunnel = supported ? (homeData.tunnel || null) : null;   // ToNJ / homebound
 
   let html = '';
-  for (const c of COMMUTES) {
-    const total = c.calc();
-    if (total === null) continue;
-    const tightCls = total >= c.tightThreshold ? ' tight' : '';
-    html += '<div class="cal-commute' + tightCls + '">' +
-      c.name + ' → ' + c.destination + ': ' +
-      '<span class="commute-min">' + total + '</span> min</div>';
+  if (!supported){
+    html += `<div class="note">Inbound bus times and the homebound tunnel turn on
+      once the proxy update (Port Authority → Hoboken) is deployed.</div>`;
   }
-  container.innerHTML = html;
-}
+  lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
+  // Two columns: 126 departures left, 119 right (both get home; 126 runs up
+  // Washington, 119 up Willow).
+  const realPreds = realBuses(preds) || [];
+  const p126 = realPreds.filter(p => p.route === '126').slice(0,MAX_PER_STOP);
+  const p119 = realPreds.filter(p => p.route === '119').slice(0,MAX_PER_STOP);
+  const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
+    list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
+                : '<div class="empty">none soon</div>'}</div></div>`;
+  const mode = realPreds.some(p => p.is_inferred) ? 'inferred'
+             : (realPreds.some(p => p.is_live) ? 'live' : 'sched');
+  html += `<div class="card"><h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>Home from Port Authority</h2>`;
+  html += `<div class="twocol">${col('126', p126)}${col('119', p119)}</div></div>`;
+  html += tunnelCard(tunnel);
 
-function _nextWallStFerry() {
-  // Minutes until the next scheduled Hoboken 14th St → Pier 11 / Wall St
-  // ferry. Weekday only (Wall St routes don't run weekends), and the commute
-  // estimate itself is weekday-gated, so reading the weekday view is safe.
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const row14 = FERRY_VIEWS.weekday.rows.find(r => r.label === '14th St');
-  const sched = row14 ? row14.times : [];
-  let earliest = null;
-  for (const t of sched) {
-    const [h, m] = t.split(':').map(n => parseInt(n, 10));
-    const depMin = h * 60 + m;
-    const delta = depMin - nowMin;
-    if (delta >= 0 && (earliest === null || delta < earliest)) earliest = delta;
+  // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
+  let total = null;
+  // realPreds, NOT preds — the header total must use the same phantom-filtered
+  // list as the board below it, or it can be built from a departure with no bus
+  // behind it. (The proxy also strips phantoms server-side; this is the belt to
+  // that braces.) `?? 0` not `|| 0`: liveMins returns null for an unparseable
+  // countdown, and `||` silently turned that into "due now".
+  if (supported && realPreds.length){
+    const next = liveMins(njtCountdown(realPreds[0]), lastFetchedAt) ?? 0;
+    const tt = tunnel && !tunnel.error ? parseInt(tunnel.travelTime,10) : NaN;
+    const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
+    total = next + RIDE_BASE_MIN + delay + WALK_MIN;
   }
-  return earliest;
+  document.getElementById('content').innerHTML = html;
+  setHdrEta(total);
+  markHealth(supported ? homeData : null);
 }
 
-function _nextBusFromSchedule() {
-  // Minutes until the next scheduled 126 or 119, whichever is sooner.
-  const now = new Date();
-  const nowMin = now.getHours() * 60 + now.getMinutes();
-  const sched126 = isSunday() ? BUS_126_SCHEDULE.sunday
-                  : isWeekend() ? BUS_126_SCHEDULE.saturday
-                  : BUS_126_SCHEDULE.weekday;
-  const sched119 = isWeekend() ? BUS_119_SCHEDULE.saturday : BUS_119_SCHEDULE.weekday;
-  let earliest = null;
-  for (const arr of [sched126, sched119]) {
-    if (!arr) continue;
-    for (const t of arr) {
-      const [h, m] = t.split(':').map(n => parseInt(n, 10));
-      const depMin = h * 60 + m;
-      const delta = depMin - nowMin;
-      if (delta >= 0 && (earliest === null || delta < earliest)) earliest = delta;
-    }
-  }
-  return earliest;
+function markHealth(data){
+  const dot = document.getElementById('healthDot');
+  const ok = !!data;
+  dot.className = 'dot ' + (ok ? 'live' : 'inferred');
+  document.getElementById('updated').textContent =
+    'updated ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
 }
 
-// ============================================================
-// WEATHER
-// ============================================================
-async function updateWeather() {
-  if (document.hidden || isSleeping()) return;
-  let apiSucceeded = false;
-  try {
-    const url = 'https://api.open-meteo.com/v1/forecast?latitude=40.744&longitude=-74.032'
-      + '&current_weather=true&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max'
-      + '&hourly=relativehumidity_2m,temperature_2m,weathercode,precipitation_probability,is_day,uv_index'
-      + '&temperature_unit=fahrenheit&timezone=America/New_York';
-    const res = await fetchT(url);
-    const data = await res.json();
-    apiSucceeded = true;
-    markOk('weather');
-    const cw = data.current_weather;
-    const code = WMO_CODES[cw.weathercode] || ["Unknown", "?"];
-
-    // Is it night right now? Use the per-hour is_day flag from the API.
-    const nowHourForNight = new Date().getHours();
-    const isNightNow = !(data.hourly && data.hourly.is_day && data.hourly.is_day[nowHourForNight]);
-
-    const tempF = Math.round(cw.temperature);
-    document.getElementById('weatherTemp').innerHTML = `${tempF}&deg;F`;
-    document.getElementById('weatherDesc').textContent = code[0];
-    document.getElementById('weatherIcon').innerHTML = wIcon(code[1], 44, isNightNow);
-    document.getElementById('weatherWind').textContent = Math.round(cw.windspeed);
-
-    // UV — prefer current hour's value, fall back to today's daily max
-    try {
-      let uvNow = null;
-      const hourlyUV = data.hourly && data.hourly.uv_index;
-      if (Array.isArray(hourlyUV) && hourlyUV[nowHourForNight] != null) {
-        uvNow = hourlyUV[nowHourForNight];
-      } else if (data.daily && Array.isArray(data.daily.uv_index_max)) {
-        uvNow = data.daily.uv_index_max[0];
-      }
-      const uvEl = document.getElementById('weatherUV');
-      if (uvEl) {
-        if (uvNow == null) {
-          uvEl.textContent = '--';
-        } else {
-          const uvR = Math.round(uvNow);
-          uvEl.textContent = uvR;
-          // Only call out elevated UV. Low / moderate stay neutral white
-          // (matches the rest of the stats — pollen has the same rule).
-          let uvColor = '#fff';
-          if (uvR >= 8) uvColor = '#ff5050';       // very high / extreme — red
-          else if (uvR >= 6) uvColor = '#ff9b40';  // high — orange
-          uvEl.style.color = uvColor;
-        }
-      }
-    } catch (e) { console.error('UV display error:', e); }
-
-    document.getElementById('weatherHi').textContent = Math.round(data.daily.temperature_2m_max[0]);
-    document.getElementById('weatherLo').textContent = Math.round(data.daily.temperature_2m_min[0]);
-
-    // Precipitation: show umbrella if any hour in next 12 hours has >30% chance
-    const nowH = new Date().getHours();
-    const rainProbs = data.hourly.precipitation_probability || [];
-    let maxRain = 0;
-    for (let h = nowH; h < Math.min(nowH + 12, rainProbs.length); h++) {
-      if (rainProbs[h] > maxRain) maxRain = rainProbs[h];
-    }
-    const rainEl = document.getElementById('weatherRain');
-    if (maxRain >= 30) {
-      rainEl.style.display = 'flex';
-      document.getElementById('weatherRainPct').textContent = maxRain;
-    } else {
-      rainEl.style.display = 'none';
-    }
-
-    const nowHour = new Date().getHours();
-    const humidity = data.hourly.relativehumidity_2m
-      ? data.hourly.relativehumidity_2m[nowHour]
-      : (data.hourly.relative_humidity_2m ? data.hourly.relative_humidity_2m[nowHour] : '--');
-    document.getElementById('weatherHumidity').textContent = humidity;
-
-    // Pollen
-    try {
-      const pollenUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=40.744&longitude=-74.032'
-        + '&current=grass_pollen,birch_pollen,alder_pollen,ragweed_pollen,mugwort_pollen,olive_pollen';
-      const pollenRes = await fetchT(pollenUrl);
-      const pollenData = await pollenRes.json();
-      const pc = pollenData.current;
-      const vals = [pc.grass_pollen||0, pc.birch_pollen||0, pc.alder_pollen||0,
-                    pc.ragweed_pollen||0, pc.mugwort_pollen||0, pc.olive_pollen||0];
-      const peak = Math.max(...vals);
-      // Color rule: only highlight in red when pollen is High or worse. Low
-      // and Medium read as white (matches the surrounding details text) so
-      // they don't grab attention on a normal day.
-      let level, color;
-      if (peak < 20)       { level = 'Low';    color = '#fff';    }
-      else if (peak < 80)  { level = 'Med';    color = '#fff';    }
-      else if (peak < 200) { level = 'High';   color = '#f44336'; }
-      else                 { level = 'V.High'; color = '#f44336'; }
-      const el = document.getElementById('weatherPollen');
-      el.textContent = level;
-      el.style.color = color;
-    } catch (e) { console.error('Pollen error:', e); }
-
-    // Hourly forecast
-    const hourlyTemps = data.hourly.temperature_2m;
-    const hourlyCodes = data.hourly.weathercode;
-    const hourlyIsDay = data.hourly.is_day || [];
-    if (hourlyTemps && hourlyCodes) {
-      let fhtml = '';
-      let count = 0;
-      let h = nowHour + 2;
-      while (count < 7 && h < hourlyTemps.length) {
-        const t = Math.round(hourlyTemps[h]);
-        const ic = WMO_CODES[hourlyCodes[h]] || ['?', 'overcast'];
-        const displayH = h % 24;
-        const ampm = displayH >= 12 ? 'PM' : 'AM';
-        const h12 = displayH % 12 || 12;
-        const hourIsNight = !hourlyIsDay[h];
-        fhtml += `<div class="weather-hour"><span class="wh-time">${h12} ${ampm}</span><span class="wh-icon">${wIcon(ic[1], 14, hourIsNight)}</span><span class="wh-temp">${t}&deg;</span></div>`;
-        h += 2;
-        count++;
-      }
-      document.getElementById('weatherForecast').innerHTML = fhtml;
-    }
-  } catch (e) {
-    console.error('Weather error:', e);
-    if (!apiSucceeded) {
-      document.getElementById('weatherDesc').textContent = 'Error loading weather';
-      markFail('weather');
-    }
-  }
+function render(){
+  const out = dir === 'out';
+  document.getElementById('dirIcon').textContent = out ? '🚌' : '🏠';
+  document.getElementById('dirText').textContent = out ? 'To NYC' : 'To Hoboken';
+  if (manual) document.getElementById('dirSub').textContent = 'manual';
 }
 
-// ============================================================
-// TRANSIT HELPERS
-// ============================================================
-function timeToMinutes(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + m;
+async function refresh(){
+  if (document.hidden || dir === null) return;
+  try { await (dir === 'out' ? refreshOut() : refreshIn()); }
+  catch(e){ console.error(e); markHealth(null); }
 }
 
-function nowMinutes() {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
+document.getElementById('swapBtn').addEventListener('click', ()=>{
+  manual = true;
+  // Instant feedback: clear the old direction's data so the flip is visible
+  // immediately instead of after the next fetch completes.
+  setHdrEta(null);
+  document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+  setDir(dir === 'out' ? 'in' : 'out');
+});
+document.getElementById('autoBtn').addEventListener('click', (e)=>{
+  e.preventDefault(); manual = false;
+  document.getElementById('dirSub').textContent = 'detecting location';
+  detectDirection();
+});
+// The bias note is opt-in. The icon element is only ever updated via
+// textContent in render(), never replaced, so this listener survives redraws.
+const LATE_KEY = 'showLate';
+function applyLateVisibility(){
+  document.body.classList.toggle('show-late', localStorage.getItem(LATE_KEY) === '1');
 }
-
-function formatTime12(timeStr) {
-  const [h, m] = timeStr.split(':').map(Number);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-}
-
-function minutesUntil(timeStr) {
-  const target = timeToMinutes(timeStr);
-  const now = nowMinutes();
-  let diff = target - now;
-  // Late-night service (target before 3am) only wraps when viewer is also late evening
-  // (after 6pm). Prevents 00:05 bus from showing "23h59m" when checked at 00:10.
-  if (diff < -180 && target < 180 && now > 18 * 60) {
-    diff += 24 * 60;
-  }
-  return diff;
-}
-
-function countdownText(mins) {
-  const u = s => `<span class="cd-unit">${s}</span>`;
-  if (mins <= 0) return 'now';
-  if (mins < 60) return `${mins}${u('m')}`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m > 0 ? `${h}${u('h')}${m}${u('m')}` : `${h}${u('h')}`;
-}
-
-// Dates NJ Transit runs Sunday-level (holiday) service. Folded into the day-type
-// helpers below so the hardcoded schedule FALLBACK shows Sunday timetables — not
-// phantom full-weekday departures — on holidays. (When live NJT data is present
-// the dashboard trusts it regardless; this only governs the offline fallback.)
-// Refresh this list each year.
-const HOLIDAY_SERVICE = new Set([
-  '2026-01-01', '2026-05-25', '2026-07-04', '2026-09-07', '2026-11-26', '2026-12-25',
-  '2027-01-01', '2027-05-31', '2027-07-04', '2027-09-06', '2027-11-25', '2027-12-25',
-]);
-function isHolidayService() {
-  const d = new Date();
-  const key = d.getFullYear() + '-' +
-    String(d.getMonth() + 1).padStart(2, '0') + '-' +
-    String(d.getDate()).padStart(2, '0');
-  return HOLIDAY_SERVICE.has(key);
-}
-
-// NOTE: these fold holidays into weekend / Sunday SERVICE — they are used only to
-// pick which printed timetable to fall back to, so a holiday gets Sunday service.
-function isWeekend() {
-  const day = new Date().getDay();
-  return day === 0 || day === 6 || isHolidayService();
-}
-
-function isSunday() {
-  return new Date().getDay() === 0 || isHolidayService();
-}
-
-function getNextDepartures(times, count) {
-  const upcoming = times.filter(t => minutesUntil(t) >= 0);
-  upcoming.sort((a, b) => minutesUntil(a) - minutesUntil(b));
-  return upcoming.slice(0, count);
-}
-
-function renderDepartures(times, label) {
-  const next = getNextDepartures(times, 3);
-  // SVG glyphs for the intentional/fallback/error empty states.
-  const MOON_GLYPH = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>';
-  if (times.length === 0) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-asleep">${MOON_GLYPH}No service today</div></div>`;
-  }
-  if (next.length === 0) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-asleep">${MOON_GLYPH}Done for today</div></div>`;
-  }
-  let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
-  for (const t of next) {
-    const mins = minutesUntil(t);
-    const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-    html += `<div class="dep-chip"><span class="t">${formatTime12(t)}</span><span class="cd" style="color:${cdColor}">${countdownText(mins)}</span></div>`;
-  }
-  html += '</div></div>';
-  return html;
-}
-
-// ============================================================
-// BUS (static fallback)
-// ============================================================
-function get126WillowSchedule() {
-  let base;
-  if (isSunday()) base = BUS_126_SCHEDULE.sunday;
-  else if (isWeekend()) base = BUS_126_SCHEDULE.saturday;
-  else base = BUS_126_SCHEDULE.weekday;
-  return base.map(t => {
-    let mins = timeToMinutes(t) + 2;
-    if (mins >= 24 * 60) mins -= 24 * 60;
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  });
-}
-
-function get119Schedule() {
-  if (isWeekend()) return BUS_119_SCHEDULE.saturday;
-  return BUS_119_SCHEDULE.weekday;
-}
-
-// The printed timetable we carry is for 14th & Bloomfield, but this panel now
-// reports Washington & 13th — one stop SOUTH on the NY-bound 126, so the bus
-// gets there about 2 minutes earlier. Shift the whole table back rather than
-// re-sourcing it. Mirror image of get126WillowSchedule(), which shifts +2.
-function get126ThirteenthSchedule() {
-  let base;
-  if (isSunday()) base = BUS_126_SCHEDULE.sunday;
-  else if (isWeekend()) base = BUS_126_SCHEDULE.saturday;
-  else base = BUS_126_SCHEDULE.weekday;
-  return base.map(t => {
-    let mins = timeToMinutes(t) - 2;
-    if (mins < 0) mins += 24 * 60;   // 00:01 - 2min wraps to the previous day
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  });
-}
-
-function updateBusStatic() {
-  const container = document.getElementById('busContent');
-  let html = '';
-  html += renderDepartures(get126ThirteenthSchedule(), '126 @ 13th');
-  html += renderDepartures(get119Schedule(), '119 @ 15th');
-  container.innerHTML = html;
-}
-
-// ============================================================
-// PROXY FETCH
-// ============================================================
-// Displayed bus times use NJT's RAW countdown, matching the NJT app and the
-// phone commute page (Jeff, 2026-07-26). `countdown` carries the PREDICTION_BIAS
-// correction on top; it stays in the payload and is still used by the 119/126
-// de-duplication filter below (which compares like with like, so the constant
-// bias cancels out), but it must not drive anything the user reads.
-function njtRaw(p) {
-  const raw = p.raw_countdown;
-  return parseInt((raw !== null && raw !== undefined && raw !== '') ? raw : p.countdown, 10);
-}
-
-function renderLivePredictions(predictions, label) {
-  if (!predictions || predictions.error) {
-    return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>Reconnecting</div></div>`;
-  }
-  if (Array.isArray(predictions) && predictions.length > 0) {
-    let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
-    const items = predictions.slice(0, 3);
-    // Compute the absolute arrival time (Unix ms) for each prediction by using
-    // the proxy's fetched_at + the countdown that was true at that moment.
-    // Then derive mins from current time. Conservative (floor) so we don't show
-    // a longer countdown than reality and have the user miss the bus.
-    const fetchedAtMs = (window._transitFetchedAt || Math.floor(Date.now() / 1000)) * 1000;
-    // NJT seems to round their countdowns up, so shift the predicted arrival
-    // ~30s earlier than reported. Makes the displayed countdown feel right —
-    // not over-promising on time available.
-    const DISPLAY_SHIFT_MS = 30000;
-    for (const p of items) {
-      const reportedMins = njtRaw(p);
-      const arrivalMs = fetchedAtMs + reportedMins * 60000 - DISPLAY_SHIFT_MS;
-      const msUntil = arrivalMs - Date.now();
-      // Hide buses that are clearly more than 2 min past arrival.
-      if (msUntil < -120000) continue;
-      // Anything in (-2 min, +1 min) shows as "Due" so the imminent bus stays
-      // visible until it's actually departed.
-      const isDue = msUntil < 60000;
-      const mins = isDue ? 0 : Math.floor(msUntil / 60000);
-      const cdColor = mins <= 5 ? '#ff6b6b' : '#6bffb8';
-      let displayTime;
-      if (isDue) {
-        displayTime = 'Due';
-      } else {
-        const arrive = new Date(arrivalMs);
-        const hh = arrive.getHours();
-        const mm = String(arrive.getMinutes()).padStart(2, '0');
-        const ampm = hh >= 12 ? 'PM' : 'AM';
-        const h12 = hh % 12 || 12;
-        displayTime = `${h12}:${mm} ${ampm}`;
-      }
-      // Inferred (GPS-pace) ETAs are estimates, not live predictions. The proxy
-      // flags them is_inferred; mark the chip so a guessed time never looks like
-      // a real one — "~" on the countdown and "est" instead of a false-precise clock.
-      const est = !!p.is_inferred;
-      const cdText = (est ? '<span class="cd-unit">~</span>' : '') + countdownText(mins);
-      const subLine = est ? 'est' : displayTime;
-      html += `<div class="dep-chip"><span class="t">${subLine}</span><span class="cd" style="color:${cdColor}">${cdText}</span></div>`;
-    }
-    html += '</div></div>';
-    return html;
-  }
-  return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-fallback"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zM12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>Schedule only</div></div>`;
-}
-
-async function fetchProxy() {
-  if (!PROXY_URL) return;
-  if (document.hidden || isSleeping()) return;
-  try {
-    const res = await fetchT(PROXY_URL);
-    const data = await res.json();
-
-    // Detect structured errors that mean the data is stale/wrong even
-    // though the proxy returned 200. NJT auth-failed and per-stop "auth
-    // failed" both look like normal {error: ...} objects — the dashboard
-    // used to silently fall through to BUS_*_SCHEDULE static fallback
-    // without firing markFail, so the panel-stale dimmer never engaged.
-    const transitDegraded = (
-      (data.stops && Object.values(data.stops).some(s =>
-        s && s.predictions && s.predictions.error === 'NJT auth failed')) ||
-      (data.tunnel && data.tunnel.error && /auth/i.test(data.tunnel.error || ''))
-    );
-    if (transitDegraded) markFail('transit'); else markOk('transit');
-
-    // Stash fetched_at so renderLivePredictions can reconcile against current time
-    window._transitFetchedAt = data.fetched_at || Math.floor(Date.now() / 1000);
-    // Stash the whole response so updateCommuteEstimate() can derive the
-    // morning commute number even on its own clock-driven timer ticks.
-    window._lastProxyData = data;
-
-    if (data.tunnel && !data.tunnel.error) {
-      const t = data.tunnel;
-      const tt = parseInt(t.travelTime, 10);
-      const timeEl = document.getElementById('tunnelTime');
-      timeEl.textContent = isFinite(tt) ? tt : '--';
-      // Color tiers (research-confirmed thresholds; free-flow is 6-8 min):
-      //   < 10 min → Light    (green)
-      //   10-19 min → Moderate (yellow)
-      //   20-34 min → Heavy    (orange)
-      //   35+ min → Very Heavy (red)
-      let color = '#6bffb8';
-      if (isFinite(tt)) {
-        if      (tt >= 35) color = '#ff5050';
-        else if (tt >= 20) color = '#ff9b40';
-        else if (tt >= 10) color = '#e0c040';
-      }
-      timeEl.style.color = color;
-      const minEl = document.getElementById('tunnelMin');
-      if (minEl) minEl.style.color = color;
-      // PA's infomationalText ("USUAL TRAFFIC" etc.) is uninformative —
-      // hide the status row entirely; color of the number says it all.
-      const statusEl = document.getElementById('tunnelStatus');
-      statusEl.style.display = 'none';
-    } else if (data.tunnel && data.tunnel.error) {
-      // PA API errored — clear the stale time so a 4-min cached value
-      // doesn't persist through what's actually a 35-min jam. Grey out.
-      const timeEl = document.getElementById('tunnelTime');
-      timeEl.textContent = '--';
-      timeEl.style.color = '#666';
-      const minEl = document.getElementById('tunnelMin');
-      if (minEl) minEl.style.color = '#666';
-    }
-
-    if (data.stops) {
-      const container = document.getElementById('busContent');
-      let html = '';
-      let apiWorking = false;
-
-      const stop20514 = data.stops['20514'];
-      if (stop20514 && Array.isArray(stop20514.predictions) && stop20514.predictions.length > 0) {
-        html += renderLivePredictions(stop20514.predictions, '126 @ 13th');
-        // API is working if we got an array of predictions back (live or scheduled)
-        apiWorking = true;
-      } else {
-        let schedule;
-        schedule = get126ThirteenthSchedule();
-        html += renderDepartures(schedule, '126 @ 13th');
-      }
-
-      const stop20523 = data.stops['20523'];
-      if (stop20523 && Array.isArray(stop20523.predictions) && stop20523.predictions.length > 0) {
-        const preds13 = (stop20514 && Array.isArray(stop20514.predictions)) ? stop20514.predictions : [];
-        const etaMins13 = preds13.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
-        const filtered = stop20523.predictions.filter(p => {
-          if (p.route !== '126') return true;
-          const mins = parseInt(p.countdown, 10);
-          return !etaMins13.some(m13 => Math.abs(mins - m13) <= 3);
-        });
-        if (filtered.length > 0) {
-          html += renderLivePredictions(filtered, '119 @ 15th');
-          apiWorking = true;
-        } else {
-          html += renderDepartures(get119Schedule(), '119 @ 15th');
-        }
-      } else {
-        html += renderDepartures(get119Schedule(), '119 @ 15th');
-      }
-
-      container.innerHTML = html;
-
-      const hl1 = document.getElementById('busHL1');
-      const hl2 = document.getElementById('busHL2');
-      if (hl1 && hl2) {
-        // Detect inferred predictions: if the proxy fell back to
-        // vehicle-position inference for any stop (BUSDV2 had no trips
-        // there), those predictions carry is_inferred=true. Even a single
-        // inferred prediction means at least one data stream is degraded,
-        // so surface that as orange headlights — more honest than green.
-        const allPreds = [stop20514, stop20523]
-          .filter(s => s && Array.isArray(s.predictions))
-          .flatMap(s => s.predictions);
-        const anyInferred = allPreds.some(p => p.is_inferred);
-        const mode = !apiWorking ? 'schedule' : (anyInferred ? 'inferred' : 'live');
-        hl1.setAttribute('class', 'bus-headlight ' + mode);
-        hl2.setAttribute('class', 'bus-headlight ' + mode);
-      }
-    }
-
-    // Recompute the morning commute estimate with this fresh data.
-    updateCommuteEstimate();
-  } catch (e) {
-    console.error('Proxy fetch error:', e);
-    markFail('transit');
-  }
-}
-
-// ============================================================
-// FERRY
-// ============================================================
-function updateFerries() {
-  const container = document.getElementById('ferryContent');
-  const view = isWeekend() ? FERRY_VIEWS.weekend : FERRY_VIEWS.weekday;
-  const titleEl = document.getElementById('ferryTitle');
-  if (titleEl) titleEl.textContent = view.title;
-  let html = '';
-  let hasUpcoming = false;
-  for (const row of view.rows) {
-    if (getNextDepartures(row.times, 1).length > 0) hasUpcoming = true;
-    html += renderDepartures(row.times, row.label);
-  }
-  container.innerHTML = html;
-
-  // Animate wave only if ferries are running
-  const wave = document.getElementById('ferryWave');
-  if (wave) wave.setAttribute('class', 'ferry-wave' + (hasUpcoming ? ' active' : ''));
-}
-
-// ============================================================
-// HOBOKEN HOP
-// ============================================================
-function renderHopEtas(data) {
-  // Hop right panel mirrors the Lincoln Tunnel layout: big primary value +
-  // "min" suffix on top, smaller status text below. The status line shows
-  // the next 1–2 ETAs or a service note. Keeps bus and ferry cards visually
-  // symmetric — both right-side panels read the same way.
-  const timeEl = document.getElementById('hopTime');
-  const minEl = document.getElementById('hopMin');
-  const statusEl = document.getElementById('hopStatus');
-  if (!timeEl || !statusEl) return;
-
-  const setStatus = (text, color) => {
-    statusEl.textContent = text;
-    statusEl.style.color = color || '#9a9aa8';
-  };
-
-  // When the Hop isn't running, replace the "X min" line with a single
-  // "No service" message (hide the trailing "min" suffix entirely).
-  const showNoService = () => {
-    timeEl.textContent = 'No service';
-    timeEl.style.fontSize = '0.9rem';  // shrink so the words fit the chip
-    if (minEl) minEl.style.display = 'none';
-    setStatus('', '#666');
-  };
-  const showServiceMins = (n) => {
-    timeEl.textContent = String(n);
-    timeEl.style.fontSize = '';  // reset to the panel's default big number size
-    if (minEl) minEl.style.display = '';
-  };
-
-  if (!data || data.error) {
-    showNoService();
-    setStatus(data && data.error ? 'Error' : '', '#666');
-    return;
-  }
-  if (data.status === 'no vehicles' || !Array.isArray(data) || data.length === 0) {
-    showNoService();
-    return;
-  }
-
-  const mins = data.map(e => {
-    const m = (e.eta || '').match(/^(\d+)/);
-    return m ? parseInt(m[1], 10) + 1 : null;
-  }).filter(n => n !== null);
-
-  if (mins.length === 0) {
-    showNoService();
-    return;
-  }
-
-  showServiceMins(mins[0]);
-  if (mins.length > 1) {
-    setStatus('next ' + mins.slice(1, 3).join(', ') + ' min', '#6bffb8');
-  } else {
-    setStatus('Running', '#6bffb8');
-  }
-}
-
-async function fetchHop() {
-  if (document.hidden || isSleeping()) return;
-  try {
-    const resp = await fetchT('https://passiogo.com/mapGetData.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'json=' + encodeURIComponent(JSON.stringify({s0:'466',sA:1})) + '&eta=3&deviceId=web&stopIds=158942',
-    });
-    const data = await resp.json();
-
-    // ETAs
-    const etas = [];
-    for (const [key, entries] of Object.entries(data.ETAs || {})) {
-      for (const entry of entries) {
-        if (entry.eta && entry.eta !== 'no vehicles') {
-          etas.push({ eta: entry.eta });
-        }
-      }
-    }
-    if (etas.length > 0) {
-      renderHopEtas(etas);
-    } else {
-      renderHopEtas({ status: 'no vehicles' });
-    }
-
-    // Build a routeId → route name map (PassioGo returns "routes" alongside "buses")
-    const routeNameById = {};
-    const routesArr = data.routes || [];
-    if (Array.isArray(routesArr)) {
-      for (const r of routesArr) {
-        routeNameById[r.id || r.routeId] = (r.name || r.routeName || '').toString();
-      }
-    } else if (typeof routesArr === 'object') {
-      for (const k of Object.keys(routesArr)) {
-        routeNameById[k] = (routesArr[k].name || routesArr[k].routeName || '').toString();
-      }
-    }
-
-    // Live bus positions
-    const hopBuses = [];
-    const busesData = data.buses || {};
-    for (const routeId of Object.keys(busesData)) {
-      const arr = busesData[routeId];
-      if (!Array.isArray(arr)) continue;
-      const routeName = routeNameById[routeId] || '';
-      for (const b of arr) {
-        if (b.outOfService === '1' || b.outOfService === 1) continue;
-        const lat = parseFloat(b.latitude);
-        const lon = parseFloat(b.longitude);
-        if (!isFinite(lat) || !isFinite(lon)) continue;
-        // Determine color by route name (or bus name as fallback)
-        const probe = (routeName + ' ' + (b.busName || b.name || '')).toLowerCase();
-        let color = '#b070ff';  // generic purple fallback
-        if (probe.includes('red'))   color = '#ff5050';
-        if (probe.includes('green')) color = '#6bffb8';
-        const course = parseFloat(b.calculatedCourse || b.course);
-        hopBuses.push({
-          busId: b.busId || b.id || b.busName || b.name || '',
-          name: b.busName || b.name || 'Hop',
-          lat: lat,
-          lon: lon,
-          heading: isFinite(course) ? course : null,
-          route: routeName || 'Hop',
-          color: color,
-        });
-      }
-    }
-    renderHopBuses(hopBuses);
-    markOk('hop');
-  } catch (e) {
-    console.error('Hop fetch error:', e);
-    renderHopEtas({ error: e.message });
-    renderHopBuses([]);  // clear stale markers on error
-    markFail('hop');
-  }
-}
-
-let _hopMarkers = {};
-let _lastHopBuses = [];  // cached for personStatus()
-
-const HOP_BUS_SVG =
-  '<svg viewBox="0 0 24 24" width="100%" height="100%" style="display:block;">' +
-  '<path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-6H6V6h12v5z" fill="currentColor"/></svg>';
-
-function renderHopBuses(hopBuses) {
-  _lastHopBuses = hopBuses || [];
-  if (!_hobokenMap) return;
-  const seen = new Set();
-  for (const b of hopBuses) {
-    const key = 'hop_' + (b.busId || b.name || 'unknown');
-    seen.add(key);
-    // Hop markers stay upright — no rotation regardless of direction.
-    const icon = L.divIcon({
-      className: 'hop-marker',
-      html: '<div style="color:' + b.color + ';width:100%;height:100%;">' + HOP_BUS_SVG + '</div>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11],
-    });
-    if (_hopMarkers[key]) {
-      _hopMarkers[key].setIcon(icon);
-      _slideTo(key, _hopMarkers[key], b.lat, b.lon);
-    } else {
-      _hopMarkers[key] = L.marker([b.lat, b.lon], { icon: icon }).addTo(_hobokenMap);
-    }
-  }
-  for (const key of Object.keys(_hopMarkers)) {
-    if (!seen.has(key)) {
-      _hobokenMap.removeLayer(_hopMarkers[key]);
-      delete _hopMarkers[key];
-      delete _markerAnims[key];
-    }
-  }
-}
-
-let _hobokenMap = null;
-let _personMarkers = {};
-let _busMarkers = {};
-
-// Animation state for smooth bus/hop marker movement between polls.
-// Duration slightly exceeds the 15s poll cadence so the marker never visibly
-// "stops" between polls; cubic ease-in-out softens both ends of the slide.
-const MARKER_ANIM_MS = 15500;
-let _markerAnims = {};
-let _markerAnimFrame = null;
-
-// Cubic ease-in-out: gentle start and finish, near-linear in the middle.
-function _easeInOutCubic(t) {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function _animateMarkers() {
-  const now = performance.now();
-  let active = false;
-  for (const id of Object.keys(_markerAnims)) {
-    const a = _markerAnims[id];
-    if (!a.marker) { delete _markerAnims[id]; continue; }
-    const tRaw = Math.min((now - a.t0) / MARKER_ANIM_MS, 1);
-    const t = _easeInOutCubic(tRaw);
-    a.marker.setLatLng([
-      a.lat0 + (a.lat1 - a.lat0) * t,
-      a.lon0 + (a.lon1 - a.lon0) * t,
-    ]);
-    if (tRaw < 1) active = true;
-    else delete _markerAnims[id];
-  }
-  _markerAnimFrame = active ? requestAnimationFrame(_animateMarkers) : null;
-}
-
-function _slideTo(id, marker, lat, lon) {
-  const cur = marker.getLatLng();
-  if (Math.abs(cur.lat - lat) < 0.00001 && Math.abs(cur.lng - lon) < 0.00001) return;
-  // Pick up from the marker's current visible position (which may itself
-  // be mid-animation) so consecutive polls produce one continuous glide
-  // rather than a jump-reset.
-  _markerAnims[id] = {
-    marker,
-    lat0: cur.lat, lon0: cur.lng,
-    lat1: lat,     lon1: lon,
-    t0: performance.now(),
-  };
-  if (!_markerAnimFrame) _markerAnimFrame = requestAnimationFrame(_animateMarkers);
-}
-
-let _tileMarkers = {};
-let _homeMarker = null;
-let _lastBuses = [];  // cached for personStatus() narrative
-
-// Tile device display config — map the device name (as set in the Tile app)
-// to a display icon and label. Update once you have the devices set up.
-const TILE_DEVICES = {
-  // 'Buddy Collar':    { icon: '🐕', color: '#c87000' },
-  // 'Kid 1 Backpack':  { icon: 'S',  color: '#c870ff' },
-  // 'Kid 2 Backpack':  { icon: 'M',  color: '#70b8ff' },
-};
-
-// Home: 1227 Garden St, Hoboken — also used as the radius center for the auto-fit logic.
-// PLACEHOLDER ONLY — this file is in a PUBLIC repo, so the real house
-// coordinates must never be written here. This is the centre of Hoboken,
-// accurate to a few blocks. The true position arrives with every /locations
-// poll (token-gated) and replaces it via applyHomeFromProxy(). `let`, not
-// `const`, precisely so it can be replaced.
-let HOME = { lat: 40.7460, lon: -74.0300, name: 'Home' };
-let _homeCoordsFromProxy = false;
-
-// Adopt the real coordinates the proxy sends, once. Everything downstream
-// (distance-to-home, at-home clustering, auto-fit, approach detection) reads
-// HOME live, so they all correct themselves on the next render; only the home
-// marker and the initial view are already painted and need nudging.
-function applyHomeFromProxy(home) {
-  if (!home || _homeCoordsFromProxy) return;
-  const lat = parseFloat(home.lat), lon = parseFloat(home.lon);
-  if (!isFinite(lat) || !isFinite(lon)) return;
-  HOME = { lat: lat, lon: lon, name: 'Home' };
-  _homeCoordsFromProxy = true;
-  if (_homeMarker) _homeMarker.setLatLng([lat, lon]);
-  // No setView here: fetchLocations calls this immediately before
-  // renderLocations(), whose auto-fit re-centres using the corrected HOME in
-  // the same tick. Forcing a view here would fight that logic.
-}
-const HOME_RADIUS_MI = 0.014;     // ~75 ft — inside the house
-const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
-
-// A person counts as home if the proxy's payload says so ('place' comes from
-// Life360, whose geofence made the home/away call server-side) OR they're
-// inside the tight radius. Radius alone misclassified: Tile fixes jitter
-// 100-300 ft, so a kid on the couch showed "near home" (Jeff, 2026-07-26).
-function isAtHome(loc) {
-  if (loc && loc.place === 'Home') return true;
-  return distMi(HOME, loc) < HOME_RADIUS_MI;
-}
-// All of Hoboken — never zoom tighter than this. West edge ~ Jackson St.
-const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
-// People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
-const AUTO_FIT_RADIUS_MI = 5;
-
-// Mapping from Owntracks tracker ID (TID) to face image URL.
-const FACE_IMAGES = {
-  'HW':  'jeff.jpg',
-  'JHW': 'jeff.jpg',
-  'XW':  'jenny.jpg',
-  'JXW': 'jenny.jpg',
-  'JE':  'jenny.jpg',   // alt TID Jenny may have used in setup
-  'JN':  'jenny.jpg',   // alt
-  'SY':  'sydney.jpg',
-  'EL':  'elizabeth.jpg',
-  'JU':  'juno.jpg',
-};
-
-// Display name override per TID (overrides whatever username Owntracks reports)
-const PERSON_NAMES = {
-  'HW':  'Jeff',
-  'JHW': 'Jeff',
-  'XW':  'Jenny',
-  'JXW': 'Jenny',
-  'JE':  'Jenny',
-  'JN':  'Jenny',
-  'SY':  'Sydney',
-  'EL':  'Elizabeth',
-  'JU':  'Juno',
-};
-
-// Static home stubs — shown at home until real Tile data arrives.
-// When a Tile with matching TID comes online, the live position takes over.
-// Sydney / Elizabeth / Juno stubs removed — no working API path to their
-// Tile trackers (Life360 + Tile consolidation broke the only public route).
-// Re-add entries here if/when a working location source comes online.
-const HOME_STUBS = [];
-
-function displayName(loc) {
-  return PERSON_NAMES[loc.tid] || loc.name || loc.tid || '';
-}
-
-// Hudson River bounding box — anyone in this lon/lat strip is over the water,
-// so we assume they're on the ferry.
-function isOverWater(lat, lon) {
-  return lat >= 40.700 && lat <= 40.770 &&
-         lon >= -74.020 && lon <= -74.011;
-}
-
-// "On a bus/Hop" inference. You're only "on" a vehicle if you're MOVING WITH
-// it. Four guards stop a parked/stale/passing dot from being mislabeled — the
-// exact bug that pinned someone "on 126" because their frozen marker sat near
-// the route while successive 126 buses streamed by:
-//   1. FRESH FIX  — a stale fix (>2 min) can't be trusted against live bus
-//      positions; a frozen dot "matches" every bus that passes it.
-//   2. RECENT MOTION — you must have moved at vehicular pace (>6 mph) within the
-//      last 2 min; rules out standing at a stop or sitting at home by the route.
-//   3. SAME VEHICLE — must stay alongside the SAME vehicle (route + vehicle id),
-//      not just the same route, for 60s — not a flyby or a parade of buses.
-//   4. CO-TRAVEL — that vehicle must itself travel a real distance during the
-//      60s lock while you stay attached. That's the actual "moving with it"
-//      test: a bus idling at a light (with you parked beside it) never confirms.
-const _statusPersistence = {};  // tid → { candidate(key), since, busStartLat, busStartLon, lastLat, lastLon, lastFixT, lastMovedAt }
-const RIDE_NEAR_MI      = 0.05;    // person↔vehicle proximity to count as "on" it
-const RIDE_MIN_MPH      = 6;       // vehicular pace (incl. city stops) vs walking (~3)
-const RIDE_FIX_MAX_AGE  = 120;     // s — older fix is too stale to trust vs live buses
-const RIDE_MOVE_GRACE   = 120000;  // ms — keep "moving" through brief bus stops/lights
-const CO_TRAVEL_MIN     = 0.08;    // mi the matched vehicle must travel during the
-                                   // 60s lock (~5 mph avg) — proves co-movement
-
-function personStatus(loc) {
-  // Cold-stale (≥3h since last fix): coordinates are very likely lying.
-  // Don't claim "at home" or "2.3 mi away" — say "last seen X" so the
-  // family treats the dot as a memory, not a fact.
-  if (loc.received_at) {
-    const ageSec = Date.now() / 1000 - loc.received_at;
-    if (ageSec >= 10800) return 'last seen ' + agoText(loc.received_at * 1000);
-  }
-  const dHome = distMi(HOME, loc);
-  if (isAtHome(loc)) return 'at home';
-
-  const now = Date.now();
-  const tid = loc.tid || 'XX';
-  const p = _statusPersistence[tid] || (_statusPersistence[tid] = {});
-
-  // --- Movement tracking: speed between successive GPS fixes. ----------------
-  // Only advance state on a genuinely newer fix (received_at moved forward) so a
-  // re-render of the same fix doesn't read as zero-speed and clear motion.
-  const fixT = loc.received_at ? loc.received_at * 1000 : now;
-  if (p.lastFixT != null && fixT > p.lastFixT && p.lastLat != null) {
-    const moved = distMi({ lat: p.lastLat, lon: p.lastLon }, loc);
-    const hrs = (fixT - p.lastFixT) / 3600000;
-    if (hrs > 0 && moved / hrs >= RIDE_MIN_MPH) p.lastMovedAt = now;
-  }
-  if (fixT !== p.lastFixT) { p.lastLat = loc.lat; p.lastLon = loc.lon; p.lastFixT = fixT; }
-  const recentlyMoving = p.lastMovedAt != null && (now - p.lastMovedAt) < RIDE_MOVE_GRACE;
-  const fixFresh = (loc.received_at ? (now / 1000 - loc.received_at) : Infinity) <= RIDE_FIX_MAX_AGE;
-
-  // Distance-to-home history (8-min rolling window) for the "heading home"
-  // status. Appended only on genuinely newer fixes so re-renders don't dilute.
-  if (!p.distSamples) p.distSamples = [];
-  if (!p.distSamples.length || fixT > p.distSamples[p.distSamples.length - 1].t) {
-    p.distSamples.push({ t: fixT, d: dHome });
-    while (p.distSamples.length && fixT - p.distSamples[0].t > 8 * 60000) {
-      p.distSamples.shift();
-    }
-  }
-
-  // --- Match the nearest vehicle, but only when riding-eligible. -------------
-  let candidate = null, candidateKey = null, matchedVeh = null;
-  if (recentlyMoving && fixFresh) {
-    for (const b of _lastBuses) {
-      if (b.lat == null || b.lon == null) continue;
-      if (distMi(loc, { lat: b.lat, lon: b.lon }) < RIDE_NEAR_MI) {
-        candidate = 'on ' + b.route;
-        candidateKey = b.route + '#' + (b.vehicle_id || '?');
-        matchedVeh = b;
-        break;
-      }
-    }
-    if (!candidate) {
-      for (const b of _lastHopBuses) {
-        if (b.lat == null || b.lon == null) continue;
-        if (distMi(loc, { lat: b.lat, lon: b.lon }) < RIDE_NEAR_MI) {
-          const probe = (b.route || '').toLowerCase();
-          candidate = probe.includes('red')   ? 'on Red Hop' :
-                      probe.includes('green') ? 'on Green Hop' :
-                      'on Hop';
-          candidateKey = 'hop#' + (b.vehicle_id || b.route || '?');
-          matchedVeh = b;
-          break;
-        }
-      }
-    }
-  }
-
-  // Persistence: confirm only after 60s alongside the SAME vehicle AND only if
-  // that vehicle actually moved (co-travel). Anchoring busStart* to the vehicle
-  // position when the lock begins lets us measure how far it travelled during
-  // the lock — an idling bus next to a parked person never clears CO_TRAVEL_MIN.
-  if (candidateKey && matchedVeh) {
-    if (p.candidate !== candidateKey) {
-      p.candidate = candidateKey; p.since = now;
-      p.busStartLat = matchedVeh.lat; p.busStartLon = matchedVeh.lon;
-    }
-    const busTravelled = (p.busStartLat != null)
-      ? distMi({ lat: p.busStartLat, lon: p.busStartLon }, { lat: matchedVeh.lat, lon: matchedVeh.lon })
-      : 0;
-    if (now - p.since >= 60000 && busTravelled >= CO_TRAVEL_MIN) return candidate;
-  } else {
-    p.candidate = null; p.since = null; p.busStartLat = null; p.busStartLon = null;
-  }
-
-  // Over water → on ferry, but only on a FRESH fix. You can't be mid-Hudson
-  // except on a boat — but a STALE dot that happens to sit in the river bbox
-  // (or a waterfront walk at the box edge) shouldn't be asserted as "on ferry".
-  if (fixFresh && isOverWater(loc.lat, loc.lon)) return 'on ferry';
-
-  // Heading home: outside the neighborhood, fresh fix, and distance-to-home
-  // has fallen steadily for 2+ minutes → show an ETA. Covers the stretch the
-  // vehicle matcher can't (Lincoln Tunnel, Manhattan, driving) — the exact
-  // window when "is Jeff on his way?" gets asked.
-  if (fixFresh && dHome >= 0.5 && p.distSamples.length >= 2) {
-    const first = p.distSamples[0];
-    const last = p.distSamples[p.distSamples.length - 1];
-    const spanMin = (last.t - first.t) / 60000;
-    const closedMi = first.d - last.d;
-    if (spanMin >= 2 && closedMi >= 0.25) {
-      const rate = closedMi / spanMin;   // miles per minute toward home
-      if (rate >= 0.08) {                // sustained ≥ ~5 mph closing speed
-        let eta = Math.round(dHome / rate);
-        if (eta <= 90) {
-          if (eta > 10) eta = Math.round(eta / 5) * 5;  // coarse past 10 min
-          return 'heading home · ~' + Math.max(eta, 1) + ' min';
-        }
-      }
-    }
-  }
-
-  if (dHome < 0.5) return 'near home';
-  return dHome.toFixed(1) + ' mi away';
-}
-
-function distMi(a, b) {
-  const R = 3959; // miles
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lon - a.lon) * Math.PI / 180;
-  const lat1 = a.lat * Math.PI / 180;
-  const lat2 = b.lat * Math.PI / 180;
-  const x = Math.sin(dLat/2)**2 + Math.sin(dLng/2)**2 * Math.cos(lat1) * Math.cos(lat2);
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
-
-function initHobokenMap() {
-  if (_hobokenMap || typeof L === 'undefined') return;
-  const hasRotate = typeof L.Map.prototype.setBearing === 'function';
-  _hobokenMap = L.map('hobokenMap', Object.assign({
-    zoomControl: false,
-    attributionControl: false,
-    dragging: true,
-    scrollWheelZoom: false,
-  }, hasRotate ? {
-    rotate: true,
-    bearing: 0,
-    touchRotate: false,
-    rotateControl: { closeOnZeroBearing: false },
-  } : {}));
-  // Use setView with center+zoom (works better with rotation than fitBounds)
-  // Center: between Hoboken and Midtown Manhattan
-  _hobokenMap.setView([40.750, -74.003], 14);
-  // Jawg.Dark — clean dark theme, no road shield badges
-  L.tileLayer('https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq', {
-    maxZoom: 22,
-    subdomains: 'abcd',
-    attribution: '',
-  }).addTo(_hobokenMap);
-
-  // Home marker — small blue house. Reduced from 30→24px so the family
-  // bubbles (the actual answer to "where is everyone?") become the loudest
-  // thing on the map. When people are at home they orbit this badge in a ring.
-  const homeIcon = L.divIcon({
-    className: 'home-marker',
-    html:
-      '<svg viewBox="0 0 24 24" fill="#fff">' +
-      '<path d="M12 3 3 11h2v8h5v-5h4v5h5v-8h2z"/></svg>',
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  });
-  _homeMarker = L.marker([HOME.lat, HOME.lon], {
-    icon: homeIcon,
-    zIndexOffset: -500,  // home sits BEHIND people now (they're the answer)
-  }).addTo(_hobokenMap);
-
-  // Re-render bus markers when zoom changes so their size adjusts to the
-  // new view. At wide zooms (Hoboken + Manhattan visible) markers shrink so
-  // 40+ buses don't pile into a cluttered mess. _busIconScale() picks the
-  // factor; _lastBuses holds the last batch so we don't need a new fetch.
-  _hobokenMap.on('zoomend', function () {
-    if (typeof renderBuses === 'function' && _lastBuses) renderBuses(_lastBuses);
-  });
-
-  // Initial view: tight on home (will re-fit once locations arrive)
-  _hobokenMap.setView([HOME.lat, HOME.lon], 14);
-
-  // Remote-control zoom: channel-up / channel-down buttons zoom the map.
-  // Different TV platforms emit different key identifiers for these buttons,
-  // so we match all the common ones. D-pad arrows are left alone so they keep
-  // panning via Leaflet's default keyboard handler.
-  const ZOOM_IN_KEYS  = new Set(['ChannelUp',   'PageUp',   'MediaTrackNext']);
-  const ZOOM_OUT_KEYS = new Set(['ChannelDown', 'PageDown', 'MediaTrackPrevious']);
-  const ZOOM_IN_CODES  = new Set([427, 33]);   // 427 = VK_CHANNEL_UP, 33 = PageUp
-  const ZOOM_OUT_CODES = new Set([428, 34]);   // 428 = VK_CHANNEL_DOWN, 34 = PageDown
-  // Select / OK button in the center of the D-pad: typically Enter (13),
-  // sometimes 'Select' or the legacy 'Spacebar'. Cycles map view mode.
-  const SELECT_KEYS  = new Set(['Enter', 'Select', ' ', 'Spacebar', 'OK']);
-  const SELECT_CODES = new Set([13, 32, 23]);   // 23 = Android KEYCODE_DPAD_CENTER
-
-  // View-mode state machine (0..3):
-  //   0 = default                  (true north, no labels)
-  //   1 = rotated to street grid   (Hoboken streets point straight up)
-  //   2 = default + bus labels     (true north, permanent #s)
-  //   3 = street grid + bus labels (streets up, permanent #s)
-  const STREET_GRID_BEARING = -29;
-  // Restore the last view mode from prior session if available so a nightly
-  // reload (or Onn restart) lands the family back where they left off.
-  let _persistedMode = 0;
-  try {
-    const v = parseInt(localStorage.getItem('viewMode'), 10);
-    if (!isNaN(v) && v >= 0 && v <= 3) _persistedMode = v;
-  } catch (e) {}
-  window._viewMode = _persistedMode;
-  window._showBusLabels = false;
-  let _lastSelectTs = 0;
-  function applyViewMode() {
-    const m = window._viewMode | 0;
-    const wantStreetGrid = (m === 1 || m === 3);
-    const wantLabels     = (m === 2 || m === 3);
-    if (_hobokenMap && typeof _hobokenMap.setBearing === 'function') {
-      _hobokenMap.setBearing(wantStreetGrid ? STREET_GRID_BEARING : 0);
-    }
-    window._showBusLabels = wantLabels;
-    // Re-bind tooltips on existing bus markers so permanent flag matches.
-    for (const key of Object.keys(_busMarkers || {})) {
-      const mk = _busMarkers[key];
-      if (!mk) continue;
-      const content = mk.getTooltip() ? mk.getTooltip().getContent() : '';
-      mk.unbindTooltip();
-      mk.bindTooltip(content, {
-        direction: 'top',
-        offset: [0, -18],
-        className: 'bus-tip',
-        permanent: wantLabels,
-      });
-    }
-  }
-  applyViewMode();
-
-  // View-mode toast — 3s auto-fading label in the map's top-right whenever
-  // the mode CHANGES (not on initial load). The mode persists across reboots
-  // via localStorage, so without this an accidental OK press would leave the
-  // map silently reconfigured forever.
-  const VIEW_MODE_NAMES = [
-    'North up',
-    'Streets up',
-    'North up · bus #s',
-    'Streets up · bus #s',
-  ];
-  let _toastTimer = null;
-  function showViewModeToast() {
-    const mapCard = document.getElementById('mapCard');
-    if (!mapCard) return;
-    let el = document.getElementById('viewModeToast');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'viewModeToast';
-      mapCard.appendChild(el);
-    }
-    el.textContent = VIEW_MODE_NAMES[window._viewMode | 0] || '';
-    el.classList.add('show');
-    if (_toastTimer) clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3000);
-  }
-
-  // On-screen key debug — shows the last key event so we can identify what
-  // the remote actually emits. Toggle by appending ?keydebug to the URL.
-  let _keyDebugEl = null;
-  if (location.search.includes('keydebug')) {
-    _keyDebugEl = document.createElement('div');
-    _keyDebugEl.style.cssText =
-      'position:fixed;bottom:8px;right:8px;z-index:9999;background:#000;color:#0f0;' +
-      'font:13px monospace;padding:6px 10px;border:1px solid #0f0;border-radius:4px;';
-    _keyDebugEl.textContent = 'keydebug ready';
-    document.body.appendChild(_keyDebugEl);
-  }
-  window.addEventListener('keydown', function (e) {
-    if (_keyDebugEl) {
-      _keyDebugEl.textContent = 'key=' + e.key + ' code=' + e.code + ' kc=' + e.keyCode;
-    }
-    // Silently ignore the remote when the screen is asleep — otherwise the
-    // family wakes up to a randomly-cycled view mode.
-    if (typeof isSleeping === 'function' && isSleeping()) return;
-    if (!_hobokenMap) return;
-    const k = e.key || '';
-    if (ZOOM_IN_KEYS.has(k) || ZOOM_IN_CODES.has(e.keyCode)) {
-      _hobokenMap.zoomIn(1);
-      e.preventDefault(); e.stopPropagation();
-    } else if (ZOOM_OUT_KEYS.has(k) || ZOOM_OUT_CODES.has(e.keyCode)) {
-      _hobokenMap.zoomOut(1);
-      e.preventDefault(); e.stopPropagation();
-    } else if (SELECT_KEYS.has(k) || SELECT_CODES.has(e.keyCode)) {
-      // Debounce — Onn remote auto-repeats; 150ms keeps the cycle predictable.
-      const now = performance.now();
-      if (now - _lastSelectTs < 150) {
-        e.preventDefault(); e.stopPropagation();
-        return;
-      }
-      _lastSelectTs = now;
-      window._viewMode = ((window._viewMode | 0) + 1) % 4;
-      try { localStorage.setItem('viewMode', String(window._viewMode)); } catch (_) {}
-      applyViewMode();
-      showViewModeToast();
-      e.preventDefault(); e.stopPropagation();
-    }
-  }, true);
-
-  // Seed home stubs so face bubbles appear before first network fetch
-  renderLocations(HOME_STUBS);
-}
-
-// Approach-mode: when anyone is inside Hoboken AND moving toward home, we
-// want fresher data — bump the location poll cadence so the family knows
-// who's almost-arrived. Tracks per-TID last-known distance to home so we
-// can detect "decreasing distance" between polls.
-const HOBOKEN_BBOX = { latMin: 40.733, latMax: 40.768, lonMin: -74.040, lonMax: -74.018 };
-const APPROACH_POLL_MS = 7000;   // when someone's approaching, poll every 7s
-const DEFAULT_POLL_MS = 15000;   // otherwise the normal 15s
-let _prevDistToHome = {};        // tid → last-known distance (miles)
-
-function _inHoboken(loc) {
-  return loc.lat >= HOBOKEN_BBOX.latMin && loc.lat <= HOBOKEN_BBOX.latMax &&
-         loc.lon >= HOBOKEN_BBOX.lonMin && loc.lon <= HOBOKEN_BBOX.lonMax;
-}
-
-function _someoneApproachingHome(locs) {
-  // True if at least one person is inside Hoboken bbox, outside the at-home
-  // radius (so they're meaningfully en route), and closer to home than the
-  // previous reading by at least 0.01 mi (~50 ft, filters GPS jitter).
-  for (const l of locs) {
-    if (!l.received_at || !l.lat || !l.lon) continue;
-    if (!_inHoboken(l)) continue;
-    const d = distMi(HOME, l);
-    if (isAtHome(l)) continue;               // already home
-    if (d > 1.5) continue;                   // too far to care yet
-    const prev = _prevDistToHome[l.tid];
-    if (prev != null && (prev - d) >= 0.01) return true;
-  }
-  return false;
-}
-
-// Remembers whether the *previous* poll detected someone approaching, so
-// we send fast=1 on the NEXT proxy request. The flag mirrors the cadence
-// state — if we're polling at 7s, we ask the proxy to tighten its Life360
-// cache to 15s too.
-let _approachMode = false;
-
-async function fetchLocations() {
-  if (!PROXY_URL) return;
-  if (document.hidden || isSleeping()) return;
-  const token = localStorage.getItem('calToken') || '';
-  try {
-    const url = PROXY_URL + '?mode=locations' + (_approachMode ? '&fast=1' : '');
-    const res = await fetchT(url, { headers: { 'X-Cal-Token': token } });
-    if (!res.ok) { markFail('locations'); return; }
-    const data = await res.json();
-    markOk('locations');
-    applyHomeFromProxy(data.home);     // real coords before anything measures distance
-    renderBuses(data.buses || []);     // first so _lastBuses is populated
-    const liveLocs = data.locations || [];
-    const liveTids = new Set(liveLocs.map(l => l.tid));
-    const stubs = HOME_STUBS.filter(s => !liveTids.has(s.tid));
-    renderLocations([...stubs, ...liveLocs]);
-    renderTiles(data.tiles || []);
-
-    // Approach detection: compare each person's current distance-to-home
-    // against last poll's. If anyone's actively closing the gap inside
-    // Hoboken, schedule the next poll on the fast cadence + signal the
-    // proxy to tighten its Life360 cache.
-    const approaching = _someoneApproachingHome(liveLocs);
-    for (const l of liveLocs) {
-      if (l.lat != null && l.lon != null) _prevDistToHome[l.tid] = distMi(HOME, l);
-    }
-    _approachMode = approaching;
-    _scheduleLocationsPoll(approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS);
-  } catch (e) {
-    console.error('Locations fetch error:', e);
-    markFail('locations');
-    _scheduleLocationsPoll(DEFAULT_POLL_MS);
-  }
-}
-
-let _locationsPollTimer = null;
-function _scheduleLocationsPoll(ms) {
-  if (_locationsPollTimer) clearTimeout(_locationsPollTimer);
-  _locationsPollTimer = setTimeout(fetchLocations, ms);
-}
-
-function renderTiles(tiles) {
-  if (!_hobokenMap) return;
-  const seen = new Set();
-  for (const t of tiles) {
-    const key = t.uuid;
-    seen.add(key);
-    const latlng = [t.lat, t.lon];
-    const cfg = TILE_DEVICES[t.name] || {};
-    const label = cfg.icon || (t.name || '?').substring(0, 2).toUpperCase();
-    const style = cfg.color ? ('background:' + cfg.color + ';') : '';
-    const icon = L.divIcon({
-      className: 'tile-marker',
-      html: '<div style="' + style + 'width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;">' + label + '</div>',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
-    });
-    if (_tileMarkers[key]) {
-      _tileMarkers[key].setLatLng(latlng);
-      _tileMarkers[key].setIcon(icon);
-    } else {
-      _tileMarkers[key] = L.marker(latlng, { icon: icon, zIndexOffset: 9000 }).addTo(_hobokenMap);
-    }
-  }
-  for (const key of Object.keys(_tileMarkers)) {
-    if (!seen.has(key)) {
-      _hobokenMap.removeLayer(_tileMarkers[key]);
-      delete _tileMarkers[key];
-    }
-  }
-}
-
-function busLoadColor(passload) {
-  const p = (passload || '').toUpperCase();
-  if (p === 'EMPTY')                      return '#44ee44';
-  if (p === 'LIGHT')                      return '#a0e060';
-  if (p === 'MEDIUM')                     return '#e0c040';
-  if (p === 'HEAVY')                      return '#ff9b40';
-  if (p === 'FULL' || p === 'OVERLOADED') return '#ff5050';
-  return '#7090a0';
-}
-
-function _busSvg(arrowColor, toNYC, scale) {
-  // NJT bus marker: NJTbus.png logo as the body, with a colored direction
-  // arrow stacked above (NY-bound) or below (return). Arrow color encodes
-  // passenger load (see busLoadColor). All sizes are written inline so the
-  // marker scales with map zoom — _busIconScale() returns the factor (1.0
-  // at zoom 15+, dropping to 0.4 at zoom <= 11).
-  scale = scale || 1;
-  const W  = Math.round(26 * scale);   // marker width & body height (body is square)
-  const AH = Math.round(14 * scale);   // arrow height
-  const pts = toNYC ? '13,1 1,13 25,13' : '13,13 1,1 25,1';
-  const arrow =
-    '<svg class="nbm-arrow" width="' + W + '" height="' + AH + '" viewBox="0 0 26 14">' +
-      '<polygon points="' + pts + '" fill="' + arrowColor + '"' +
-        ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>' +
-    '</svg>';
-  const img = '<img src="NJTbus.png" class="nbm-body" alt=""' +
-              ' style="width:' + W + 'px;height:' + W + 'px;">';
-  return '<div class="nbm-wrap" style="width:' + W + 'px;height:' + (W + AH) + 'px;">' +
-         (toNYC ? arrow + img : img + arrow) + '</div>';
-}
-
-// Bus icon size scales with map zoom — at the close-in Hoboken view (zoom
-// 15+) the 26×40 marker is right-sized, but zoomed out to show Lower
-// Manhattan (zoom 12-13) those same markers crowd into a cluttered mess of
-// 40+ overlapping buses. Drop to ~50% size at zoom 12 so they still convey
-// "bus density" without obscuring the map underneath.
-function _busIconScale() {
-  if (!_hobokenMap) return 1;
-  const z = _hobokenMap.getZoom();
-  if (z >= 15) return 1.0;
-  if (z >= 14) return 0.85;
-  if (z >= 13) return 0.65;
-  if (z >= 12) return 0.5;
-  return 0.4;
-}
-
-function renderBuses(buses) {
-  _lastBuses = buses || [];
-  if (!_hobokenMap) return;
-  const scale = _busIconScale();
-  const W = Math.round(26 * scale);
-  const AH = Math.round(14 * scale);
-  const H = W + AH;  // body W + arrow AH — match what _busSvg builds
-  const seen = new Set();
-  for (const b of buses) {
-    const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
-    seen.add(key);
-    const toNYC = (b.destination || '').toUpperCase().includes('NEW YORK');
-    const arrowColor = busLoadColor(b.passload);
-    const icon = L.divIcon({
-      className: 'bus-marker',
-      html: _busSvg(arrowColor, toNYC, scale),
-      iconSize: [W, H],
-      iconAnchor: [Math.round(W / 2), Math.round(H / 2)],
-    });
-    const label = (b.route ? b.route : 'Bus') + (b.vehicle_id ? ' · #' + b.vehicle_id : '');
-    if (_busMarkers[key]) {
-      _busMarkers[key].setIcon(icon);
-      _busMarkers[key].setTooltipContent(label);
-      _slideTo(key, _busMarkers[key], b.lat, b.lon);
-    } else {
-      _busMarkers[key] = L.marker([b.lat, b.lon], { icon: icon })
-        .bindTooltip(label, {
-          direction: 'top',
-          offset: [0, -18],
-          className: 'bus-tip',
-          permanent: !!window._showBusLabels,
-        })
-        .addTo(_hobokenMap);
-    }
-  }
-  for (const key of Object.keys(_busMarkers)) {
-    if (!seen.has(key)) {
-      _hobokenMap.removeLayer(_busMarkers[key]);
-      delete _busMarkers[key];
-      delete _markerAnims[key];
-    }
-  }
-}
-
-var _lastZoomKey = null;
-function _smoothZoomTo(center, zoom) {
-  var key = center[0].toFixed(5) + ',' + center[1].toFixed(5) + ',' + zoom;
-  if (_lastZoomKey === key) return;
-  _lastZoomKey = key;
-  _hobokenMap.flyTo(center, zoom, { duration: 1.2 });
-}
-function _smoothZoomBounds(bounds, opts) {
-  var key = bounds[0][0].toFixed(5) + ',' + bounds[0][1].toFixed(5) + ',' +
-            bounds[1][0].toFixed(5) + ',' + bounds[1][1].toFixed(5) + ',' + (opts.maxZoom || '');
-  if (_lastZoomKey === key) return;
-  _lastZoomKey = key;
-  _hobokenMap.flyToBounds(bounds, Object.assign({ duration: 1.2 }, opts));
-}
-
-function renderLocations(locations) {
-  if (!_hobokenMap) return;
-  const OVERLAP_MI = 0.05;        // ~265 ft for clustering non-home people
-  const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
-
-  // Split into at-home vs elsewhere
-  const atHome = locations.filter(function (l) { return isAtHome(l); });
-  const elsewhere = locations.filter(function (l) { return !isAtHome(l); });
-
-  // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
-  // from home). Smaller icon so they look like satellites orbiting the home badge.
-  const HOME_FACE_SIZE = 28;
-  const HOME_ORBIT_RADIUS = 22; // px from home center to face center
-  const homeIconConfig = {};
-  atHome.forEach(function (l, idx) {
-    const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
-    const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
-    const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
-    // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
-    // the icon's visual center by (dx, dy), we offset the anchor by (-dx, -dy)
-    // from the icon's natural center (size/2).
-    homeIconConfig[l.tid] = {
-      latlng: [HOME.lat, HOME.lon],
-      iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
-      iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
-      className: 'person-marker small',
-    };
-  });
-
-  // Cluster elsewhere people who happen to be near each other
-  const positions = {};
-  for (const loc of elsewhere) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
-  const handled = new Set();
-  for (let i = 0; i < elsewhere.length; i++) {
-    if (handled.has(elsewhere[i].tid)) continue;
-    const cluster = [elsewhere[i]];
-    handled.add(elsewhere[i].tid);
-    for (let j = i + 1; j < elsewhere.length; j++) {
-      if (handled.has(elsewhere[j].tid)) continue;
-      if (distMi(elsewhere[i], elsewhere[j]) < OVERLAP_MI) {
-        cluster.push(elsewhere[j]);
-        handled.add(elsewhere[j].tid);
-      }
-    }
-    if (cluster.length > 1) {
-      const cx = cluster.reduce(function (s, c) { return s + c.lat; }, 0) / cluster.length;
-      const cy = cluster.reduce(function (s, c) { return s + c.lon; }, 0) / cluster.length;
-      cluster.forEach(function (c, idx) {
-        const angle = (idx / cluster.length) * 2 * Math.PI + 0.5;
-        positions[c.tid].lat = cx + RING_RADIUS_DEG * Math.cos(angle);
-        positions[c.tid].lon = cy + RING_RADIUS_DEG * Math.sin(angle);
-      });
-    }
-  }
-
-  // Render markers
-  const seen = new Set();
-  for (const loc of locations) {
-    seen.add(loc.tid);
-    const faceUrl = FACE_IMAGES[loc.tid];
-    // onerror: photos live only on the Beelink now (pulled from the public
-    // repo 2026-07-26) — on the Pages fallback the jpgs 404, so degrade to
-    // the same initials treatment as an unmapped TID.
-    const html = faceUrl
-      ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
-        '" onerror="this.replaceWith(this.alt.slice(0,2).toUpperCase())"/>'
-      : (displayName(loc) || '?').substring(0, 2).toUpperCase();
-
-    // Freshness ladder (drives marker visual decay + pill copy below).
-    // fresh < 3m, recent < 30m, stale < 3h, cold ≥ 3h.
-    const ageSec = loc.received_at ? (Date.now() / 1000 - loc.received_at) : 0;
-    let staleClass = '';
-    if (!loc.received_at || ageSec >= 10800)      staleClass = ' stale-cold';
-    else if (ageSec >= 1800)                       staleClass = ' stale-warm';
-    else if (ageSec >= 180)                        staleClass = ' stale-recent';
-
-    let latlng, iconSize, iconAnchor, className;
-    if (homeIconConfig[loc.tid]) {
-      const cfg = homeIconConfig[loc.tid];
-      latlng = cfg.latlng;
-      iconSize = cfg.iconSize;
-      iconAnchor = cfg.iconAnchor;
-      className = cfg.className + staleClass;
-    } else {
-      const pos = positions[loc.tid] || { lat: loc.lat, lon: loc.lon };
-      latlng = [pos.lat, pos.lon];
-      // Enlarged from 36→44 so faces dominate the map hierarchy.
-      iconSize = [44, 44];
-      iconAnchor = [22, 22];
-      className = 'person-marker' + staleClass;
-    }
-
-    const icon = L.divIcon({
-      className: className,
-      html: html,
-      iconSize: iconSize,
-      iconAnchor: iconAnchor,
-    });
-    if (_personMarkers[loc.tid]) {
-      _personMarkers[loc.tid].setLatLng(latlng);
-      _personMarkers[loc.tid].setIcon(icon);
-    } else {
-      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon, zIndexOffset: 10000 }).addTo(_hobokenMap);
-    }
-  }
-  // Remove markers for people no longer in the list
-  for (const tid of Object.keys(_personMarkers)) {
-    if (!seen.has(tid)) {
-      _hobokenMap.removeLayer(_personMarkers[tid]);
-      delete _personMarkers[tid];
-    }
-  }
-  // Update overlay — one semi-transparent pill per person, left-aligned
-  const overlay = document.getElementById('mapStatusOverlay');
-  if (overlay) {
-    if (locations.length === 0) {
-      // A family display with no family reads as broken — say why instead.
-      overlay.innerHTML =
-        '<span class="ms-pill ms-pill--cold"><span class="ms-status">Location sharing offline</span></span>';
-    } else if (elsewhere.length === 0) {
-      // Everyone home = the boring steady state, and the faces orbiting the
-      // house badge already say it. The strip earns its place only when
-      // someone is out (Jeff, 2026-07-26).
-      overlay.innerHTML = '';
-    } else {
-      // Someone is out: away pills carry the full story (where + how fresh);
-      // at-home pills compress to a bare name so all five fit one line on
-      // the 930px wall display.
-      overlay.innerHTML = locations.map(function (l) {
-        const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
-        let cls = '';
-        if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
-        else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
-        if (isAtHome(l)) {
-          return '<span class="ms-pill' + cls + '"><span class="ms-name">' +
-            displayName(l) + '</span></span>';
-        }
-        const status = personStatus(l);
-        const ago = agoText(l.received_at * 1000);
-        return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
-          '</span><span class="ms-status">' + status +
-          '</span><span class="ms-ago">' + ago + '</span></span>';
-      }).join('');
-    }
-  }
-
-  // Auto-fit: include home + any person within 5mi. If none in range, default Hoboken view.
-  const inRange = locations.filter(function (l) {
-    return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
-  });
-  var anyApproaching = inRange.some(function (l) {
-    var d = distMi(HOME, l);
-    return !isAtHome(l) && d <= NEAR_HOME_RADIUS_MI;
-  });
-  if (inRange.length === 0) {
-    _smoothZoomTo([HOME.lat, HOME.lon], 14);
-  } else if (locations.length > 0 && inRange.length === locations.length &&
-             inRange.every(function (l) { return isAtHome(l); })) {
-    _smoothZoomTo([HOME.lat, HOME.lon], 15);
-  } else if (anyApproaching) {
-    var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
-    // Also include any approaching NY-bound bus that's within ~3 mi of home
-    // so the map auto-frames "Jeff + the bus he's about to catch" together.
-    var nearbyBuses = (_lastBuses || []).filter(function (b) {
-      return b && b.lat && b.lon && distMi(HOME, b) <= NEAR_HOME_RADIUS_MI;
-    });
-    var pts = approaching.concat(nearbyBuses);
-    var lats = [HOME.lat].concat(pts.map(function (p) { return p.lat; }));
-    var lngs = [HOME.lon].concat(pts.map(function (p) { return p.lon; }));
-    _smoothZoomBounds(
-      [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
-       [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
-      { padding: [30, 30], maxZoom: 16 }
-    );
-  } else {
-    var lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
-    var lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
-    var minLat = Math.min.apply(null, lats);
-    var maxLat = Math.max.apply(null, lats);
-    var minLng = Math.min.apply(null, lngs);
-    var maxLng = Math.max.apply(null, lngs);
-    _smoothZoomBounds([[minLat, minLng], [maxLat, maxLng]], {
-      padding: [20, 20],
-      maxZoom: 15,
-    });
-  }
-}
-
-// ============================================================
-// ALERTS
-// ============================================================
-async function fetchAlerts() {
-  if (!PROXY_URL) return;
-  if (document.hidden || isSleeping()) return;
-  try {
-    const res = await fetchT(PROXY_URL + '?mode=alerts');
-    const data = await res.json();
-    markOk('alerts');
-    const container = document.getElementById('alertsList');
-    let items = [];
-
-    // Only NJT alerts that mention routes/services the family rides (126, 119, ferry).
-    // Nixle and broader NJT system-wide noise are filtered out by default.
-    const RELEVANT_KEYWORDS = /\b(126|119|ferry|hoboken|all bus|systemwide)\b/i;
-    // Long-running advisories (months-long detours) sit in the RSS feed
-    // forever — after 2 days they're wallpaper, not news (Jeff, 2026-07-26).
-    // An unparseable/missing pubDate keeps the alert (fail-open: better a
-    // stale alert than a silently dropped fresh one).
-    const MAX_ALERT_AGE_MS = 2 * 24 * 3600 * 1000;
-    if (Array.isArray(data.njt_alerts)) {
-      for (const a of data.njt_alerts) {
-        if (a.error) continue;
-        const posted = Date.parse(a.pubDate || '');
-        if (isFinite(posted) && Date.now() - posted > MAX_ALERT_AGE_MS) continue;
-        const text = a.description || a.title || '';
-        if (!RELEVANT_KEYWORDS.test(text)) continue;
-        items.push({ text: text, badge: 'njt', badgeText: 'NJT', isAlert: true });
-      }
-    }
-
-    // Alerts only — no news, no stocks
-    const divider = document.querySelector('.cal-alert-divider');
-    if (items.length === 0) {
-      container.innerHTML = '';
-      container.style.display = 'none';
-      if (divider) divider.style.display = 'none';
-    } else {
-      container.style.display = 'flex';
-      if (divider) divider.style.display = 'block';
-      let html = '';
-      for (const item of items) {
-        html += `<div class="alert-item is-alert">`;
-        html += `<span class="alert-badge ${item.badge}">${item.badgeText}</span>`;
-        html += item.text;
-        html += '</div>';
-      }
-      container.innerHTML = html;
-      requestAnimationFrame(() => trimOverflow(container));
-    }
-  } catch (e) {
-    console.error('Alerts fetch error:', e);
-    markFail('alerts');
-  }
-}
-
-// ============================================================
-// CALENDAR (private ICS feed via proxy, token stored per-device)
-// ============================================================
-function initCalAuth() {
-  watchCalendarResize();
-  if (IS_LOCAL) {
-    // Caddy injects the token — never prompt on local origins.
-    document.getElementById('calSigninPrompt').style.display = 'none';
-    fetchCalEvents();
-    return;
-  }
-  const token = localStorage.getItem('calToken');
-  if (!token) {
-    showCalTokenPrompt();
-    return;
-  }
-  document.getElementById('calSigninPrompt').style.display = 'none';
-  fetchCalEvents();
-}
-
-function showCalTokenPrompt() {
-  const c = document.getElementById('calContent');
-  c.innerHTML =
-    '<div class="cal-signin-prompt">' +
-    '<div style="margin-bottom:10px;">Enter calendar token:</div>' +
-    '<input id="calTokenInput" type="password" autocomplete="off" ' +
-    'style="background:#1a1a2a;border:0.5px solid #2a2a35;border-radius:6px;' +
-    'color:#fff;padding:8px 12px;font-size:var(--fs-body);width:80%;outline:none;" />' +
-    '<div><button class="cal-signin-btn" onclick="saveCalToken()">Save</button></div>' +
-    '</div>';
-  setTimeout(function () {
-    const inp = document.getElementById('calTokenInput');
-    if (inp) inp.focus();
-  }, 100);
-}
-
-function saveCalToken() {
-  const inp = document.getElementById('calTokenInput');
-  if (!inp || !inp.value.trim()) return;
-  localStorage.setItem('calToken', inp.value.trim());
-  initCalAuth();
-}
-
-function resetCalendarChoice() {
-  // Triggered by double-click on calendar title — clear the saved token so the user
-  // can re-enter it. To actually switch to a different calendar's ICS feed,
-  // update the CALENDAR_ICS_URL env var on Cloud Run.
-  if (confirm('Reset calendar token? You will need to re-enter it.')) {
-    localStorage.removeItem('calToken');
-    initCalAuth();
-  }
-}
-
-async function fetchCalEvents() {
-  if (document.hidden || isSleeping()) return;
-  const token = localStorage.getItem('calToken') || '';
-  try {
-    // Token via header (not query string) to avoid URL logging
-    const res = await fetchT(PROXY_URL + '?mode=calendar',
-      { headers: { 'X-Cal-Token': token } });
-    if (res.status === 403) {
-      if (IS_LOCAL) {
-        // Local origins never use a typed token — a 403 here means Caddy's
-        // CAL_TOKEN env is broken or this browser isn't on the /proxy
-        // allowlist (TV stick + tailnet). Prompting would be misleading.
-        markFail('calendar');
-        document.getElementById('calEvents').innerHTML =
-          '<div class="cal-empty">Calendar blocked (proxy auth)</div>';
-        return;
-      }
-      // Bad token — re-prompt
-      localStorage.removeItem('calToken');
-      showCalTokenPrompt();
-      return;
-    }
-    const data = await res.json();
-    if (data.events && Array.isArray(data.events)) {
-      markOk('calendar');
-      renderCalEvents(data.events);
-    } else if (data.events && data.events.error) {
-      markFail('calendar');
-      document.getElementById('calEvents').innerHTML =
-        '<div class="cal-empty">Calendar error</div>';
-      console.error('Calendar error:', data.events.error);
-    }
-  } catch (e) {
-    markFail('calendar');
-    console.error('Calendar fetch error:', e);
-  }
-}
-
-function renderCalEvents(events) {
-  const container = document.getElementById('calEvents');
-  if (!events || events.length === 0) {
-    container.innerHTML = '<div class="cal-empty">No upcoming events</div>';
-    return;
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(today.getDate() + 1);
-
-  // Today as YYYY-MM-DD for cross-day comparisons
-  const todayStr = today.getFullYear() + '-' +
-    String(today.getMonth() + 1).padStart(2, '0') + '-' +
-    String(today.getDate()).padStart(2, '0');
-
-  function fmtMonthDay(dateStr) {
-    // dateStr is YYYY-MM-DD; render as "May 25"
-    const d = new Date(dateStr + 'T12:00:00');
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  function daysBetween(a, b) {
-    return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
-  }
-
-  // Normalize ICS-feed format. Preserve start, end, allDay.
-  // Compute display anchor date: if a multi-day event is happening today,
-  // anchor to today instead of its original start.
-  events = events.map(function (e) {
-    const isAllDay = !!e.allDay || /^\d{4}-\d{2}-\d{2}$/.test(e.start || '');
-    const startStr = e.start || '';
-    const endStr = e.end || '';
-    let anchorDate;
-    if (isAllDay) {
-      // ICS DTEND is exclusive — a multi-day all-day event runs [start, end)
-      const isMultiDay = endStr && daysBetween(startStr, endStr) > 1;
-      const lastDayInclusive = isMultiDay
-        ? new Date(new Date(endStr + 'T00:00:00').getTime() - 86400000)
-            .toISOString().substring(0, 10)
-        : startStr;
-      // If today falls within [start, lastDayInclusive], anchor to today
-      if (startStr <= todayStr && todayStr <= lastDayInclusive) {
-        anchorDate = todayStr;
-      } else {
-        anchorDate = startStr;
-      }
-      return {
-        summary: e.summary,
-        location: e.location || '',
-        start: { date: startStr },
-        end: { date: endStr },
-        isMultiDay: isMultiDay,
-        lastDay: lastDayInclusive,
-        anchorDate: anchorDate,
-        _calendarColor: '#6bffb8',
-      };
-    } else {
-      const d = new Date(e.start);
-      const startDay = d.getFullYear() + '-' +
-        String(d.getMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getDate()).padStart(2, '0');
-      let lastDay = startDay;
-      if (e.end) {
-        const de = new Date(e.end);
-        lastDay = de.getFullYear() + '-' +
-          String(de.getMonth() + 1).padStart(2, '0') + '-' +
-          String(de.getDate()).padStart(2, '0');
-      }
-      // A timed event that started before today but is still ongoing (the
-      // proxy only sends events overlapping now→+30d) must anchor to today,
-      // or its past start date sorts a day group above the TODAY header.
-      anchorDate = (startDay < todayStr) ? todayStr : startDay;
-      return {
-        summary: e.summary,
-        location: e.location || '',
-        start: { dateTime: e.start },
-        end: e.end ? { dateTime: e.end } : null,
-        isMultiDay: lastDay > startDay,
-        startDay: startDay,
-        lastDay: lastDay,
-        anchorDate: anchorDate,
-        _calendarColor: '#6bffb8',
-      };
-    }
-  });
-
-  // Group by anchor date
-  const byDate = {};
-  for (const ev of events) {
-    if (!ev.anchorDate) continue;
-    if (!byDate[ev.anchorDate]) byDate[ev.anchorDate] = [];
-    byDate[ev.anchorDate].push(ev);
-  }
-
-  // Always render the TODAY header (with the live clock + commute line),
-  // even if there are no events today.
-  if (!byDate[todayStr]) byDate[todayStr] = [];
-
-  const dateKeys = Object.keys(byDate).sort();
-  let html = '';
-  for (const dateKey of dateKeys) {
-    const date = new Date(dateKey + 'T12:00:00');
-    const isToday = date.toDateString() === today.toDateString();
-    const isTomorrow = date.toDateString() === tomorrow.toDateString();
-
-    let dayLabel;
-    let cls = 'is-future';
-    if (isToday) {
-      // Start with the long form. _autoFitTodayHeader() runs after paint
-      // and progressively shrinks (long → short weekday → short month) if
-      // the label overflows the clock. So most days you see the big
-      // "WEDNESDAY, MAY 27" — only the longest cases (e.g.
-      // "WEDNESDAY, DECEMBER 31") fall back to short forms.
-      dayLabel = date.toLocaleDateString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric'
-      }).toUpperCase();
-      cls = 'is-today';
-    }
-    else if (isTomorrow) dayLabel = 'TOMORROW';
-    else dayLabel = date.toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric'
-    }).toUpperCase();
-
-    let timeHtml = '';
-    if (isToday) {
-      const now = new Date();
-      const h = now.getHours();
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      timeHtml = '<span class="cal-header-time">' + h12 + ':' + m + ' ' + ampm + '</span>';
-    }
-    html += '<div class="cal-day-header ' + cls + '">' + dayLabel + timeHtml + '</div>';
-
-    // Morning commute estimates sit as child lines under the TODAY header
-    // (one per family commuter). updateCommuteEstimate() populates this
-    // container with one .cal-commute div per person each tick. Outside
-    // the Mon-Fri 7:00-10:30 AM window, container stays empty.
-    if (isToday) {
-      html += '<div id="commuteContainer"></div>';
-    }
-
-    for (const ev of byDate[dateKey]) {
-      let timeLabel = '';
-      let evCls = 'cal-event';
-      if (ev.start.date) {
-        evCls += ' all-day';
-        // Only show a label if it's a multi-day event (date range). Single-day
-        // all-day events don't need "(All day)" — the day header above implies it.
-        if (ev.isMultiDay) {
-          timeLabel = fmtMonthDay(ev.start.date) + ' - ' + fmtMonthDay(ev.lastDay);
-        }
-      } else if (ev.startDay && ev.startDay < ev.anchorDate) {
-        // Ongoing timed event that started before today — its start time is
-        // stale under the TODAY header, so show the date range instead.
-        timeLabel = fmtMonthDay(ev.startDay) + ' - ' + fmtMonthDay(ev.lastDay);
-      } else {
-        const startDate = new Date(ev.start.dateTime);
-        const h = startDate.getHours();
-        const m = String(startDate.getMinutes()).padStart(2, '0');
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        const h12 = h % 12 || 12;
-        timeLabel = h12 + ':' + m + ' ' + ampm;
-      }
-      const title = (ev.summary || '(no title)').replace(/</g, '&lt;');
-      const timeHtml = timeLabel ? '<span class="cal-event-time">(' + timeLabel + ')</span>' : '';
-
-      // "Leave by X" only for timed events with a location, within the next 24h.
-      let leaveHtml = '';
-      if (ev.location && ev.start.dateTime) {
-        const eventMs = new Date(ev.start.dateTime).getTime();
-        const hrsUntil = (eventMs - Date.now()) / 3600000;
-        if (hrsUntil > 0 && hrsUntil < 24) {
-          // Heuristic mode: city (NYC) → bus; otherwise drive
-          const isNYC = /\b(NY|NYC|New York|Manhattan)\b/i.test(ev.location);
-          const travelMin = isNYC ? 45 : 20;
-          // "transit" not "126/119": this is a rough fixed-time estimate, not a
-          // checked live departure — don't name a route that may not be running
-          // (e.g. a weekend/holiday/late-night event).
-          const mode = isNYC ? 'transit' : 'drive';
-          const leaveMs = eventMs - travelMin * 60000;
-          const leaveDate = new Date(leaveMs);
-          const lh = leaveDate.getHours();
-          const lm = String(leaveDate.getMinutes()).padStart(2, '0');
-          const lampm = lh >= 12 ? 'PM' : 'AM';
-          const lh12 = lh % 12 || 12;
-          const leaveStr = lh12 + ':' + lm + ' ' + lampm;
-          leaveHtml = '<div class="cal-leave-by">Leave ~' + leaveStr +
-            ' <span class="cal-leave-mode">(' + mode + ')</span></div>';
-        }
-      }
-      html += '<div class="' + evCls + '">' + title + timeHtml + leaveHtml + '</div>';
-    }
-  }
-  container.innerHTML = html;
-  // The commute line is rendered hidden inline; reveal/update immediately so
-  // there's no 1s flicker waiting for the next clock tick.
-  if (typeof updateCommuteEstimate === 'function') updateCommuteEstimate();
-  // After paint, trim trailing items / orphan day headers until everything fits cleanly.
-  // Use double-rAF + setTimeout to make sure layout has settled before measuring.
-  requestAnimationFrame(function () {
-    requestAnimationFrame(function () {
-      _autoFitTodayHeader();
-      setTimeout(trimCalendarOverflow, 30);
-    });
-  });
-}
-
-// Today's day-header tries long forms first (WEDNESDAY, DECEMBER 31). If
-// the label + clock overflow the calendar's width, shrink in steps:
-// long-weekday→short-weekday→short-month. Keeps the big text when it fits,
-// gracefully degrades when it doesn't.
-function _autoFitTodayHeader() {
-  const header = document.querySelector('#calContent .cal-day-header.is-today');
-  if (!header) return;
-  const timeSpan = header.querySelector('.cal-header-time');
-  const timeHtml = timeSpan ? timeSpan.outerHTML : '';
-  const today = new Date();
-  const FORMATS = [
-    { weekday: 'long',  month: 'long',  day: 'numeric' }, // WEDNESDAY, DECEMBER 31
-    { weekday: 'short', month: 'long',  day: 'numeric' }, // WED, DECEMBER 31
-    { weekday: 'short', month: 'short', day: 'numeric' }, // WED, DEC 31
-  ];
-  for (const fmt of FORMATS) {
-    const label = today.toLocaleDateString('en-US', fmt).toUpperCase();
-    header.innerHTML = label + timeHtml;
-    // 1px slack for sub-pixel rounding. scrollWidth > clientWidth means
-    // content overflowed the header's content box even with nowrap.
-    if (header.scrollWidth <= header.clientWidth + 1) return;
-  }
-  // All formats overflow (unlikely) — last one (shortest) stays applied.
-}
-
-function trimCalendarOverflow() {
-  const container = document.getElementById('calEvents');
-  const scrollParent = document.getElementById('calContent');
-  if (!container || !scrollParent) return;
-  let safety = 300;
-  while (safety-- > 0 && container.lastElementChild) {
-    const overflow = scrollParent.scrollHeight > scrollParent.clientHeight + 1;
-    const lastIsHeader = container.lastElementChild.classList.contains('cal-day-header');
-    if (!overflow && !lastIsHeader) break;
-    container.removeChild(container.lastElementChild);
-  }
-}
-
-// Re-trim the calendar whenever its container resizes (e.g. when alerts panel
-// grows below it and reduces available height).
-let _calResizeObserver = null;
-function watchCalendarResize() {
-  if (_calResizeObserver || typeof ResizeObserver === 'undefined') return;
-  const target = document.getElementById('calContent');
-  if (!target) return;
-  let _lastCalHeight = target.clientHeight;
-  _calResizeObserver = new ResizeObserver(function () {
-    const h = target.clientHeight;
-    if (h < _lastCalHeight - 4) {
-      // Panel shrank — trim trailing events that no longer fit
-      trimCalendarOverflow();
-    } else if (h > _lastCalHeight + 20) {
-      // Panel grew significantly — re-render so we use the new space
-      fetchCalEvents();
-    }
-    _lastCalHeight = h;
-  });
-  _calResizeObserver.observe(target);
-}
-
-// ============================================================
-// INIT
-// ============================================================
-function updateTransit() {
-  if (PROXY_URL) {
-    fetchProxy();
-  } else {
-    updateBusStatic();
-  }
-  updateFerries();
-  fetchHop();
-}
-
-// ============================================================
-// SLEEP MODE — black screen midnight to 7am (also pauses animations + polls)
-// ============================================================
-function isSleeping() {
-  const h = new Date().getHours();
-  return h >= 1 && h < 7;
-}
-
-// When the TV turns off, the streaming stick suspends the browser tab; when
-// it turns back on, JS resumes but the next scheduled poll could be up to
-// 15s away (or longer for transit/weather). Without this handler the family
-// stares at the last-rendered frame from before the suspension — Jenny at
-// home even though she's actually at work.
-//
-// Force a one-shot refresh of every data source the moment the tab regains
-// visibility. Throttled to once per 3s so multiple visibility events in
-// quick succession (TV flicker, dev tools docking, etc.) don't hammer the
-// proxy.
-let _lastVisibilityRefresh = 0;
-function _forceFullRefresh() {
-  const now = Date.now();
-  if (now - _lastVisibilityRefresh < 3000) return;
-  _lastVisibilityRefresh = now;
-  try { updateTransit    && updateTransit();    } catch (e) {}
-  try { updateWeather    && updateWeather();    } catch (e) {}
-  try { fetchAlerts      && fetchAlerts();      } catch (e) {}
-  try { fetchLocations   && fetchLocations();   } catch (e) {}
-  try { updateFerries    && updateFerries();    } catch (e) {}
-  try { fetchHop         && fetchHop();         } catch (e) {}
-  try { fetchCalEvents   && fetchCalEvents();   } catch (e) {}
-}
-
-document.addEventListener('visibilitychange', function () {
-  if (document.visibilityState === 'visible' && !isSleeping()) {
-    _forceFullRefresh();
+document.getElementById('dirIcon').addEventListener('click', ()=>{
+  localStorage.setItem(LATE_KEY, localStorage.getItem(LATE_KEY) === '1' ? '0' : '1');
+  applyLateVisibility();
+});
+applyLateVisibility();
+
+document.getElementById('refreshBtn').addEventListener('click', async (e)=>{
+  const b = e.currentTarget;
+  if (b.disabled) return;
+  // Spin for at least a beat even if the proxy answers from cache in ~90ms —
+  // an instant no-op button reads as broken.
+  b.disabled = true; b.classList.add('spin');
+  const started = Date.now();
+  try { await refresh(); }
+  finally {
+    setTimeout(()=>{ b.classList.remove('spin'); b.disabled = false; },
+               Math.max(0, 450 - (Date.now() - started)));
   }
 });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh(); });
 
-// pageshow with persisted=true fires when the page is restored from the
-// back-forward cache (bfcache) — common on Android TV / Onn / Fire TV when
-// the streaming stick resumes a suspended browser session.
-window.addEventListener('pageshow', function (e) {
-  if (e.persisted && !isSleeping()) _forceFullRefresh();
-});
+detectDirection();
+timer = setInterval(refresh, POLL_MS);
 
-// window focus is a backstop for the rare case where visibilitychange
-// doesn't fire (some embedded browsers).
-window.addEventListener('focus', function () {
-  if (!document.hidden && !isSleeping()) _forceFullRefresh();
-});
+// Legacy iOS standalone flag (covers cases the display-mode media query misses).
+if (navigator.standalone) document.body.classList.add('standalone');
 
-let _wasSleeping = false;
-function checkSleepMode() {
-  const sleeping = isSleeping();
-  document.body.style.visibility = sleeping ? 'hidden' : 'visible';
-  document.body.style.background = sleeping ? '#000' : '#0a0a0f';
-  document.body.classList.toggle('sleeping', sleeping);
-  // Sleep → wake transition: force a one-shot refresh of every feed so the
-  // family doesn't see stale "last night" data for up to 15s after 7 AM.
-  // Fade-in via opacity so the screen doesn't pop on.
-  if (_wasSleeping && !sleeping) {
-    try { updateTransit && updateTransit(); } catch (e) {}
-    try { updateWeather && updateWeather(); } catch (e) {}
-    try { fetchAlerts && fetchAlerts(); } catch (e) {}
-    try { fetchLocations && fetchLocations(); } catch (e) {}
-    try { updateFerries && updateFerries(); } catch (e) {}
-    try { fetchHop && fetchHop(); } catch (e) {}
-    document.body.style.opacity = '0';
-    requestAnimationFrame(function () {
-      document.body.style.transition = 'opacity 600ms ease';
-      document.body.style.opacity = '1';
-    });
-  }
-  _wasSleeping = sleeping;
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('commute-sw.js').catch(e => console.warn('SW reg failed', e));
+  });
 }
-
-// LATE MODE — hide bus + ferry, expand map to full height.
-// Weekdays after 5pm, weekends after 9pm.
-function isLateMode() {
-  const now = new Date();
-  const day = now.getDay();   // 0=Sun, 6=Sat
-  const hour = now.getHours();
-  // Always considered "late" before 5 AM — panels reappear at 5 AM.
-  if (hour < 5) return true;
-  // Weekday evenings: hide from 5 PM onward.
-  if (day >= 1 && day <= 5) return hour >= 17;
-  // Weekend evenings: hide from 9 PM onward.
-  return hour >= 21;
-}
-function applyLateMode() {
-  document.body.classList.toggle('late-mode', isLateMode());
-  if (_hobokenMap) _hobokenMap.invalidateSize();
-}
-
-updateClock();
-updateTransit();
-updateWeather();
-fetchAlerts();
-checkSleepMode();
-applyLateMode();
-setInterval(applyLateMode, 60000);
-initCalAuth();
-setInterval(fetchCalEvents, 5 * 60 * 1000); // refresh calendar every 5 min
-setInterval(updateClock, 1000);
-setInterval(checkSleepMode, 60000);
-setInterval(updateStatusBar, 10000);
-updateStatusBar();
-setInterval(updateTransit, 15000);
-setInterval(updateWeather, 600000);
-setInterval(fetchAlerts,   300000);
-
-// --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
-let camImgTimer = null, camObjUrl = null;
-function startCamImg(){
-  if (camImgTimer) return;
-  const img = document.getElementById('camImg');
-  const tok = localStorage.getItem('calToken') || '';
-  camImgTimer = setInterval(async function(){          // fetch WITH auth header, show as blob
-    try{
-      const r = await fetch(PROXY_URL + '?mode=camera_img&t=' + Date.now(), {headers:{'X-Cal-Token':tok}});
-      if (!r.ok) return;
-      const u = URL.createObjectURL(await r.blob());
-      img.onload = function(){ if (camObjUrl) URL.revokeObjectURL(camObjUrl); camObjUrl = u; };
-      img.src = u;
-    }catch(e){}
-  }, 250);
-}
-function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; } }
-async function pollCameraState(){
-  try{
-    const tok = localStorage.getItem('calToken') || '';
-    const r = await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}});
-    const st = await r.json();
-    const ov = document.getElementById('camOverlay');
-    if (st.active){
-      document.getElementById('camLabel').textContent = st.label || 'Camera';
-      ov.style.display = 'block'; startCamImg();
-    } else { ov.style.display = 'none'; stopCamImg(); }
-  }catch(e){}
-}
-setInterval(pollCameraState, 1000);
-pollCameraState();
-// fetchLocations reschedules itself dynamically (7s when someone is
-// approaching home inside Hoboken, otherwise 15s). Just kick off the
-// first fetch — the loop runs from there.
-setTimeout(function () { initHobokenMap(); fetchLocations(); }, 1500);
 </script>
 </body>
 </html>
