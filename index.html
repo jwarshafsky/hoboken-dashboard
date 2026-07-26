@@ -2236,6 +2236,15 @@ function applyHomeFromProxy(home) {
 }
 const HOME_RADIUS_MI = 0.014;     // ~75 ft — inside the house
 const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
+
+// A person counts as home if the proxy's payload says so ('place' comes from
+// Life360, whose geofence made the home/away call server-side) OR they're
+// inside the tight radius. Radius alone misclassified: Tile fixes jitter
+// 100-300 ft, so a kid on the couch showed "near home" (Jeff, 2026-07-26).
+function isAtHome(loc) {
+  if (loc && loc.place === 'Home') return true;
+  return distMi(HOME, loc) < HOME_RADIUS_MI;
+}
 // All of Hoboken — never zoom tighter than this. West edge ~ Jackson St.
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
@@ -2315,7 +2324,7 @@ function personStatus(loc) {
     if (ageSec >= 10800) return 'last seen ' + agoText(loc.received_at * 1000);
   }
   const dHome = distMi(HOME, loc);
-  if (dHome < HOME_RADIUS_MI) return 'at home';
+  if (isAtHome(loc)) return 'at home';
 
   const now = Date.now();
   const tid = loc.tid || 'XX';
@@ -2627,7 +2636,7 @@ function _someoneApproachingHome(locs) {
     if (!l.received_at || !l.lat || !l.lon) continue;
     if (!_inHoboken(l)) continue;
     const d = distMi(HOME, l);
-    if (d < HOME_RADIUS_MI) continue;        // already home
+    if (isAtHome(l)) continue;               // already home
     if (d > 1.5) continue;                   // too far to care yet
     const prev = _prevDistToHome[l.tid];
     if (prev != null && (prev - d) >= 0.01) return true;
@@ -2824,8 +2833,8 @@ function renderLocations(locations) {
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
   // Split into at-home vs elsewhere
-  const atHome = locations.filter(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; });
-  const elsewhere = locations.filter(function (l) { return distMi(HOME, l) >= HOME_RADIUS_MI; });
+  const atHome = locations.filter(function (l) { return isAtHome(l); });
+  const elsewhere = locations.filter(function (l) { return !isAtHome(l); });
 
   // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
   // from home). Smaller icon so they look like satellites orbiting the home badge.
@@ -2951,7 +2960,7 @@ function renderLocations(locations) {
         let cls = '';
         if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
         else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
-        if (distMi(HOME, l) < HOME_RADIUS_MI) {
+        if (isAtHome(l)) {
           return '<span class="ms-pill' + cls + '"><span class="ms-name">' +
             displayName(l) + '</span></span>';
         }
@@ -2970,12 +2979,12 @@ function renderLocations(locations) {
   });
   var anyApproaching = inRange.some(function (l) {
     var d = distMi(HOME, l);
-    return d >= HOME_RADIUS_MI && d <= NEAR_HOME_RADIUS_MI;
+    return !isAtHome(l) && d <= NEAR_HOME_RADIUS_MI;
   });
   if (inRange.length === 0) {
     _smoothZoomTo([HOME.lat, HOME.lon], 14);
   } else if (locations.length > 0 && inRange.length === locations.length &&
-             inRange.every(function (l) { return distMi(HOME, l) < HOME_RADIUS_MI; })) {
+             inRange.every(function (l) { return isAtHome(l); })) {
     _smoothZoomTo([HOME.lat, HOME.lon], 15);
   } else if (anyApproaching) {
     var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
