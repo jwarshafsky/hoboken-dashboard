@@ -378,8 +378,13 @@ async function refreshIn(){
 
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
   let total = null;
-  if (supported && preds.length){
-    const next = liveMins(njtCountdown(preds[0]), lastFetchedAt) || 0;
+  // realPreds, NOT preds — the header total must use the same phantom-filtered
+  // list as the board below it, or it can be built from a departure with no bus
+  // behind it. (The proxy also strips phantoms server-side; this is the belt to
+  // that braces.) `?? 0` not `|| 0`: liveMins returns null for an unparseable
+  // countdown, and `||` silently turned that into "due now".
+  if (supported && realPreds.length){
+    const next = liveMins(njtCountdown(realPreds[0]), lastFetchedAt) ?? 0;
     const tt = tunnel && !tunnel.error ? parseInt(tunnel.travelTime,10) : NaN;
     const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
     total = next + RIDE_BASE_MIN + delay + WALK_MIN;
