@@ -145,7 +145,10 @@ const NYC  = {lat: 40.7570, lon: -73.9903};          // Port Authority Bus Termi
 // Ride model for the inbound "ETA home": free-flow PABT->Hoboken minutes + walk.
 const RIDE_BASE_MIN = 18;     // 126 PABT -> Hoboken stop, light traffic
 const TUNNEL_FREEFLOW = 8;    // min; anything over this is added delay
-const WALK_MIN = 5;
+const WALK_MIN = 5;         // inbound: Hoboken stop -> home
+const WALK_TO_STOP_MIN = 3; // outbound: home -> Washington & 13th, so the
+                            // headline total is "leave now" rather than
+                            // "assuming you're already standing at the stop"
 
 let dir = null;               // 'out' (to NYC) | 'in' (to Hoboken)
 let manual = false;           // user flipped/overrode auto
@@ -328,14 +331,16 @@ async function refreshOut(){
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
 
-  // Total: next bus at Washington & 13th only + tunnel-adjusted ride to PABT.
+  // Total: walk to the stop + next bus at Washington & 13th + tunnel-adjusted
+  // ride to PABT. No walk is added at the far end — the office is at PABT.
   const waits = [s3]
     .map(s => s && Array.isArray(s.predictions) && s.predictions.length
       ? liveMins(njtCountdown(s.predictions[0]), lastFetchedAt) : null)
     .filter(v => v !== null);
   const tt = data.tunnel && !data.tunnel.error ? parseInt(data.tunnel.travelTime,10) : NaN;
   const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
-  setHdrEta(waits.length ? Math.min(...waits) + RIDE_BASE_MIN + delay : null);
+  setHdrEta(waits.length
+    ? Math.min(...waits) + RIDE_BASE_MIN + delay + WALK_TO_STOP_MIN : null);
   markHealth(data);
 }
 
