@@ -1727,16 +1727,28 @@ function get119Schedule() {
   return BUS_119_SCHEDULE.weekday;
 }
 
-function get126BloomfieldSchedule() {
-  if (isSunday()) return BUS_126_SCHEDULE.sunday;
-  if (isWeekend()) return BUS_126_SCHEDULE.saturday;
-  return BUS_126_SCHEDULE.weekday;
+// The printed timetable we carry is for 14th & Bloomfield, but this panel now
+// reports Washington & 13th — one stop SOUTH on the NY-bound 126, so the bus
+// gets there about 2 minutes earlier. Shift the whole table back rather than
+// re-sourcing it. Mirror image of get126WillowSchedule(), which shifts +2.
+function get126ThirteenthSchedule() {
+  let base;
+  if (isSunday()) base = BUS_126_SCHEDULE.sunday;
+  else if (isWeekend()) base = BUS_126_SCHEDULE.saturday;
+  else base = BUS_126_SCHEDULE.weekday;
+  return base.map(t => {
+    let mins = timeToMinutes(t) - 2;
+    if (mins < 0) mins += 24 * 60;   // 00:01 - 2min wraps to the previous day
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  });
 }
 
 function updateBusStatic() {
   const container = document.getElementById('busContent');
   let html = '';
-  html += renderDepartures(get126BloomfieldSchedule(), '126 @ 13th');
+  html += renderDepartures(get126ThirteenthSchedule(), '126 @ 13th');
   html += renderDepartures(get119Schedule(), '119 @ 15th');
   container.innerHTML = html;
 }
@@ -1866,9 +1878,7 @@ async function fetchProxy() {
         apiWorking = true;
       } else {
         let schedule;
-        if (isSunday()) schedule = BUS_126_SCHEDULE.sunday;
-        else if (isWeekend()) schedule = BUS_126_SCHEDULE.saturday;
-        else schedule = BUS_126_SCHEDULE.weekday;
+        schedule = get126ThirteenthSchedule();
         html += renderDepartures(schedule, '126 @ 13th');
       }
 
