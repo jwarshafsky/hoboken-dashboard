@@ -69,7 +69,14 @@
   .mins{font-size:28px; font-weight:800; line-height:1; min-width:70px}
   .mins small{font-size:13px; font-weight:600; color:var(--dim); margin-left:3px}
   .meta{margin-left:auto; text-align:right; font-size:12px; color:var(--dim)}
-  .late{display:block; font-size:11px; font-weight:600; color:var(--warn); white-space:nowrap}
+  /* "runs ~N late" is the statistical bias correction for this route and
+     hour, NOT a measurement of this particular bus. Off by default; tap the
+     bus/house icon to reveal. Always rendered and toggled purely in CSS, so
+     flipping it is instant and needs no re-fetch. */
+  .late{display:none; font-size:11px; font-weight:600; color:var(--warn); white-space:nowrap}
+  body.show-late .late{display:block}
+  #dirIcon{cursor:pointer; user-select:none; -webkit-user-select:none}
+  body.show-late #dirIcon{filter:drop-shadow(0 0 6px var(--warn))}
   .load{display:inline-flex; align-items:flex-end; gap:2px}
   .load i{display:block; width:5px; border-radius:2px}
   .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
@@ -102,7 +109,7 @@
 <body>
   <div class="top">
     <div class="dir" id="dirLabel">
-      <span id="dirIcon">🚌</span>
+      <span id="dirIcon" role="button" tabindex="0" title="Show/hide the &quot;runs ~N late&quot; bias correction">🚌</span>
       <span>
         <span id="dirText">Loading…</span>
         <span class="sub" id="dirSub">detecting location</span>
@@ -416,6 +423,18 @@ document.getElementById('autoBtn').addEventListener('click', (e)=>{
   document.getElementById('dirSub').textContent = 'detecting location';
   detectDirection();
 });
+// The bias note is opt-in. The icon element is only ever updated via
+// textContent in render(), never replaced, so this listener survives redraws.
+const LATE_KEY = 'showLate';
+function applyLateVisibility(){
+  document.body.classList.toggle('show-late', localStorage.getItem(LATE_KEY) === '1');
+}
+document.getElementById('dirIcon').addEventListener('click', ()=>{
+  localStorage.setItem(LATE_KEY, localStorage.getItem(LATE_KEY) === '1' ? '0' : '1');
+  applyLateVisibility();
+});
+applyLateVisibility();
+
 document.getElementById('refreshBtn').addEventListener('click', async (e)=>{
   const b = e.currentTarget;
   if (b.disabled) return;
