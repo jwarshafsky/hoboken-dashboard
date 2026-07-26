@@ -73,6 +73,8 @@
   .load{display:inline-flex; align-items:flex-end; gap:2px}
   .load i{display:block; width:5px; border-radius:2px}
   .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
+  .tag{font-size:10px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin-top:2px}
+  .tag.est{color:var(--warn)}
   /* Route number, tucked under the fullness bars. */
   .rt{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:3px}
   .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
@@ -229,15 +231,25 @@ function predRow(p, fetchedAt, compact){
   const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
-  const est = p.is_inferred ? '<div>est</div>' : '';
+  const tag = p.is_inferred ? '<div class="tag est">est</div>' : '';
   // Fleet number of the actual bus (e.g. 20541), under the fullness bars.
   // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
   // so render nothing rather than an empty line in that case.
   const rt = p.vehicle_id ? `<span class="rt">#${p.vehicle_id}</span>` : '';
   return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
     <span class="mins">${label}${unit}</span>
-    <span class="meta">${lateNote(p)}${load}${rt}${est}</span>
+    <span class="meta">${lateNote(p)}${load}${rt}${tag}</span>
   </div>`;
+}
+
+// Drop "phantom" departures: entries NJT emits from its printed timetable with
+// no bus actually broadcasting for them (is_live false, and not one of our
+// GPS-inferred estimates). They count down like a real bus, carry no fleet
+// number, never appear in the NJT app, and evaporate the moment NJT's feed
+// blips — so they're worse than showing nothing. Non-arrays (the {error:...}
+// object) pass through untouched so the error branch still fires.
+function realBuses(preds){
+  return Array.isArray(preds) ? preds.filter(p => p.is_live || p.is_inferred) : preds;
 }
 
 function renderStop(name, preds, fetchedAt){
@@ -291,6 +303,10 @@ async function refreshOut(){
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
+  // Strip phantoms first, so neither the board nor the header ETA below can be
+  // built from a timetable entry with no bus behind it.
+  if (s2) s2.predictions = realBuses(s2.predictions);
+  if (s3) s3.predictions = realBuses(s3.predictions);
   // 15th & Willow is the 119 stop (the 126 is covered at Washington & 13th) —
   // show only 119s there. Applies to the header ETA below too.
   if (s2 && Array.isArray(s2.predictions))
@@ -341,12 +357,14 @@ async function refreshIn(){
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
   // Two columns: 126 departures left, 119 right (both get home; 126 runs up
   // Washington, 119 up Willow).
-  const p126 = (preds || []).filter(p => p.route === '126').slice(0,MAX_PER_STOP);
-  const p119 = (preds || []).filter(p => p.route === '119').slice(0,MAX_PER_STOP);
+  const realPreds = realBuses(preds) || [];
+  const p126 = realPreds.filter(p => p.route === '126').slice(0,MAX_PER_STOP);
+  const p119 = realPreds.filter(p => p.route === '119').slice(0,MAX_PER_STOP);
   const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
     list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
                 : '<div class="empty">none soon</div>'}</div></div>`;
-  const mode = (preds && preds.some(p => p.is_live)) ? 'live' : 'sched';
+  const mode = realPreds.some(p => p.is_inferred) ? 'inferred'
+             : (realPreds.some(p => p.is_live) ? 'live' : 'sched');
   html += `<div class="card"><h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>Home from Port Authority</h2>`;
   html += `<div class="twocol">${col('126', p126)}${col('119', p119)}</div></div>`;
   html += tunnelCard(tunnel);
