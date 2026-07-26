@@ -1394,7 +1394,7 @@ const COMMUTES = [
           if (s && Array.isArray(s.predictions)) allPreds.push(...s.predictions);
         }
         for (const p of allPreds) {
-          const reported = parseInt(p.countdown, 10);
+          const reported = njtRaw(p);
           if (!isFinite(reported)) continue;
           const arrivalMs = fetchedAtSec * 1000 + reported * 60000;
           const mins = Math.max(0, Math.round((arrivalMs - Date.now()) / 60000));
@@ -1763,6 +1763,16 @@ function updateBusStatic() {
 // ============================================================
 // PROXY FETCH
 // ============================================================
+// Displayed bus times use NJT's RAW countdown, matching the NJT app and the
+// phone commute page (Jeff, 2026-07-26). `countdown` carries the PREDICTION_BIAS
+// correction on top; it stays in the payload and is still used by the 119/126
+// de-duplication filter below (which compares like with like, so the constant
+// bias cancels out), but it must not drive anything the user reads.
+function njtRaw(p) {
+  const raw = p.raw_countdown;
+  return parseInt((raw !== null && raw !== undefined && raw !== '') ? raw : p.countdown, 10);
+}
+
 function renderLivePredictions(predictions, label) {
   if (!predictions || predictions.error) {
     return `<div class="route-group"><div class="route-label">${label}:</div><div class="no-service is-error"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 1 21h22z M11 9h2v6h-2z M11 17h2v2h-2z"/></svg>Reconnecting</div></div>`;
@@ -1780,7 +1790,7 @@ function renderLivePredictions(predictions, label) {
     // not over-promising on time available.
     const DISPLAY_SHIFT_MS = 30000;
     for (const p of items) {
-      const reportedMins = parseInt(p.countdown, 10);
+      const reportedMins = njtRaw(p);
       const arrivalMs = fetchedAtMs + reportedMins * 60000 - DISPLAY_SHIFT_MS;
       const msUntil = arrivalMs - Date.now();
       // Hide buses that are clearly more than 2 min past arrival.
