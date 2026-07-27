@@ -52,6 +52,13 @@
   .swap.icon.spin{color:var(--accent)}
   .swap.icon.spin span{display:inline-block; animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
+  /* Bus | Ferry tabs. A full-width segmented control under the header — the
+     old single cycling button hid what the other mode was. */
+  .tabs{display:flex; gap:4px; background:var(--card2); border:1px solid var(--line);
+    border-radius:13px; padding:4px; margin-bottom:14px}
+  .tab{flex:1; background:none; border:0; border-radius:10px; color:var(--dim);
+    font:inherit; font-size:14px; font-weight:700; padding:10px 0; cursor:pointer}
+  .tab[aria-selected="true"]{background:var(--accent); color:#06121f}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:16px; margin-bottom:14px}
   .card h2{margin:0 0 12px; font-size:13px; font-weight:600; letter-spacing:.8px;
@@ -122,6 +129,11 @@
     </div>
   </div>
 
+  <div class="tabs" role="tablist" aria-label="Travel mode">
+    <button class="tab" id="tabBus" role="tab" aria-selected="false">🚌 Bus</button>
+    <button class="tab" id="tabFerry" role="tab" aria-selected="false">⛴️ Ferry</button>
+  </div>
+
   <div id="content"></div>
 
   <div class="foot">
@@ -152,6 +164,77 @@ const WALK_TO_STOP_MIN = 3; // outbound: home -> Washington & 13th, so the
 
 let dir = null;               // 'out' (to NYC) | 'in' (to Hoboken)
 let manual = false;           // user flipped/overrode auto
+
+// ---------------------------------------------------------------------------
+// FERRY
+// NY Waterway has no API, so these are hardcoded — same as the wall dashboard's
+// FERRY_VIEWS. A reissued timetable needs editing in BOTH places.
+//
+// Weekdays are the Wall St commuter route (Jenny's office end); weekends that
+// route doesn't run at all, so the weekend pair is 14th St <-> Midtown.
+// ---------------------------------------------------------------------------
+// Ferry terminals, used for direction detection in ferry mode (see the anchor
+// note in detectDirection).
+const FERRY_HOBOKEN = {lat: 40.7568, lon: -74.0246};   // Hoboken 14th St terminal
+const FERRY_PIER11  = {lat: 40.7033, lon: -74.0070};   // Pier 11 / Wall St
+const FERRY_MIDTOWN = {lat: 40.7627, lon: -73.9995};   // Midtown / W 39th St
+
+const FERRY = {
+  weekday: {
+    out: {label:'Hoboken 14th → Pier 11 / Wall St', times:[
+      "06:28","07:08","07:33","07:58","08:28","08:53","09:18","09:48",
+      "16:10","16:40","17:05","17:30","17:55","18:20","18:50"]},
+    in:  {label:'Pier 11 / Wall St → Hoboken 14th', times:[
+      "06:46","07:26","07:51","08:16","08:46","09:11",
+      "15:50","16:20","16:45","17:10","17:35","18:00","18:30","19:00","19:30"]},
+  },
+  weekend: {
+    out: {label:'Hoboken 14th → Midtown / W 39th', times:[
+      "10:02","10:22","10:42","11:02","11:22","11:42","12:02","12:22","12:42",
+      "13:02","13:22","13:42","14:02","14:22","14:42","15:02","15:22","15:42",
+      "16:02","16:22","16:42","17:02","17:22","17:42","18:02","18:22","18:42",
+      "19:02","19:22","19:42","20:02","20:22","20:42","21:02","21:22"]},
+    // Mirrors the outbound list: each sailing is 8 min after its Hoboken
+    // counterpart (10:02 -> 10:10), 35 each way.
+    in:  {label:'Midtown / W 39th → Hoboken 14th', times:[
+      "10:10","10:30","10:50","11:10","11:30","11:50","12:10","12:30","12:50",
+      "13:10","13:30","13:50","14:10","14:30","14:50","15:10","15:30","15:50",
+      "16:10","16:30","16:50","17:10","17:30","17:50","18:10","18:30","18:50",
+      "19:10","19:30","19:50","20:10","20:30","20:50","21:10","21:30"]},
+  },
+};
+
+// 'bus' | 'ferry'. Default follows who the device belongs to when we can tell:
+// inside the launcher this page is same-origin with it, so `launcherMe` is
+// readable and Jenny's phone opens on the ferry. Standalone on
+// commute.jwarshafsky.com there's no such value, so it falls back to whatever
+// was last chosen on that device, then to bus.
+const MODE_KEY = 'commuteTravelMode';
+let travelMode = 'bus';
+try {
+  const saved = localStorage.getItem(MODE_KEY);
+  if (saved === 'bus' || saved === 'ferry') travelMode = saved;
+  else if (localStorage.getItem('launcherMe') === 'jenny') travelMode = 'ferry';
+} catch(e){}
+
+function isWeekendNow(){ const d = new Date().getDay(); return d === 0 || d === 6; }
+
+// Next departures with clock label + minutes away. The weekday Wall St service
+// runs a morning block and an afternoon block with a long midday gap, so cap the
+// horizon — a "410 min" countdown is noise — but always keep the real next boat.
+function nextFerries(times, n){
+  if (!Array.isArray(times)) return null;
+  const now = new Date(), nowMin = now.getHours()*60 + now.getMinutes();
+  return times.map(t => { const p = t.split(':'); return {min:(+p[0])*60 + (+p[1])}; })
+    .filter(x => x.min >= nowMin)
+    .map(x => {
+      const h = Math.floor(x.min/60), m = x.min % 60, h12 = ((h+11)%12)+1;
+      return {label:h12 + ':' + String(m).padStart(2,'0') + (h < 12 ? 'am' : 'pm'),
+              wait:x.min - nowMin};
+    })
+    .filter((x,i) => i === 0 || x.wait <= 150)
+    .slice(0, n);
+}
 let lastFetchedAt = 0;
 let timer = null;
 
@@ -170,7 +253,14 @@ function detectDirection(){
       // A late fix must never undo a manual flip made while geo was resolving.
       if (manual) return;
       const me = {lat: pos.coords.latitude, lon: pos.coords.longitude};
-      setDir(haversine(me, NYC) < haversine(me, HOME) ? 'in' : 'out', true);
+      // Anchor pair depends on the mode. PABT is the right NYC anchor for the
+      // bus, but it's WRONG for the ferry: Pier 11 in the Financial District is
+      // actually closer to central Hoboken than to PABT, so a ferry rider at
+      // Wall St was told "To NYC" when they wanted the boat home.
+      const nyc = travelMode === 'ferry'
+        ? (isWeekendNow() ? FERRY_MIDTOWN : FERRY_PIER11) : NYC;
+      const hob = travelMode === 'ferry' ? FERRY_HOBOKEN : HOME;
+      setDir(haversine(me, nyc) < haversine(me, hob) ? 'in' : 'out', true);
     },
     () => { if (!manual && dir === null) setDir('out'); },   // denied/failed → default outbound
     {enableHighAccuracy:false, timeout:8000, maximumAge:60000}
@@ -407,15 +497,51 @@ function markHealth(data){
     'updated ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
 }
 
+// Ferry board. No network at all — the timetable is local, so this also works
+// with the proxy down.
+function refreshFerry(){
+  const leg = FERRY[isWeekendNow() ? 'weekend' : 'weekday'][dir === 'out' ? 'out' : 'in'];
+  const list = nextFerries(leg.times, 4);
+  let rows;
+  if (list === null){
+    rows = `<div class="empty">Weekend ${dir === 'out' ? 'outbound' : 'return'}
+      times aren't loaded yet.</div>`;
+  } else if (!list.length){
+    rows = `<div class="empty">No more ferries today on this route.</div>`;
+  } else {
+    // Same .mins/.meta shape as predRow so a ferry row reads identically to a
+    // bus row -- countdown on the left, detail on the right.
+    rows = list.map(f =>
+      `<div class="row">
+        <span class="mins">${f.wait <= 0 ? 'DUE' : f.wait}${f.wait > 0 ? '<small>min</small>' : ''}</span>
+        <span class="meta">⛴️ ${f.label}</span>
+      </div>`).join('');
+  }
+  document.getElementById('content').innerHTML =
+    `<div class="card"><h2>${leg.label}</h2><div class="rows">${rows}</div>
+      <div class="note" style="margin-top:10px">Scheduled times — NY Waterway
+      publishes no live feed.</div></div>`;
+  setHdrEta(list && list.length ? list[0].wait : null);
+  // Nothing was fetched, so don't claim a live upstream; the schedule is always
+  // "as good as it gets" though, so show it as healthy rather than degraded.
+  const d = document.getElementById('healthDot');
+  d.className = 'dot live';
+  document.getElementById('updated').textContent = 'schedule';
+}
+
 function render(){
   const out = dir === 'out';
-  document.getElementById('dirIcon').textContent = out ? '🚌' : '🏠';
+  const ferry = travelMode === 'ferry';
+  document.getElementById('dirIcon').textContent = ferry ? '⛴️' : (out ? '🚌' : '🏠');
   document.getElementById('dirText').textContent = out ? 'To NYC' : 'To Hoboken';
   if (manual) document.getElementById('dirSub').textContent = 'manual';
+  document.getElementById('tabBus').setAttribute('aria-selected', String(!ferry));
+  document.getElementById('tabFerry').setAttribute('aria-selected', String(ferry));
 }
 
 async function refresh(){
   if (document.hidden || dir === null) return;
+  if (travelMode === 'ferry'){ try { refreshFerry(); } catch(e){ console.error(e); } return; }
   try { await (dir === 'out' ? refreshOut() : refreshIn()); }
   catch(e){ console.error(e); markHealth(null); }
 }
@@ -458,6 +584,18 @@ document.getElementById('refreshBtn').addEventListener('click', async (e)=>{
                Math.max(0, 450 - (Date.now() - started)));
   }
 });
+function setMode(m){
+  if (m === travelMode) return;
+  travelMode = m;
+  try { localStorage.setItem(MODE_KEY, travelMode); } catch(e){}
+  // The right direction anchors differ per mode (PABT vs the ferry terminals),
+  // so an auto-detected direction is re-derived for the new mode.
+  render();
+  if (manual) refresh(); else detectDirection();
+  refresh();
+}
+document.getElementById('tabBus').addEventListener('click', ()=>setMode('bus'));
+document.getElementById('tabFerry').addEventListener('click', ()=>setMode('ferry'));
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh(); });
 
 detectDirection();
