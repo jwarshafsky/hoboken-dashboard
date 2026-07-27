@@ -331,6 +331,24 @@
     grid-column: 3;
   }
 
+  /* Artwork fills the map's slot rather than taking a slot of its own, so the
+     3x3 grid and late-mode's re-spanning stay exactly as they were. */
+  #artPanel {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    background: var(--c-card, #12161c); gap: 10px; padding: 14px;
+  }
+  body.show-art #artPanel { display: flex; }
+  body.show-art #hobokenMap,
+  body.show-art #mapStatusOverlay { display: none; }
+  #artPanel img {
+    max-width: 100%; max-height: 100%; min-height: 0; flex: 1 1 auto;
+    object-fit: contain; border-radius: 10px;
+  }
+  #artCaption { font-size: var(--fs-small, 15px); color: var(--c-mute, #8ea0b5); flex: 0 0 auto; }
+  /* A panel switched off from the phone. */
+  body .card.panel-off { display: none !important; }
+
   #mapCard { position: relative; }
   #mapCard #hobokenMap { width: 100%; height: 100%; }
 
@@ -999,6 +1017,10 @@
 <!-- Row 1-2: Map (middle, always visible, fills its panel) -->
 <div class="card" id="mapCard">
   <div id="hobokenMap"></div>
+  <div id="artPanel">
+    <img id="artImg" alt="">
+    <div id="artCaption"></div>
+  </div>
   <div id="mapStatusOverlay"></div>
   <div id="wallMsg" hidden>
     <div class="wm-text" id="wallMsgText"></div>
@@ -2889,6 +2911,13 @@ function _smoothZoomBounds(bounds, opts) {
 }
 
 function renderLocations(locations) {
+  // Feeds the automatic panel rule. Kids' trackers count: "everyone home"
+  // means the whole household, which is exactly when the map is redundant.
+  try {
+    const list = locations || [];
+    _everyoneHome = list.length > 0 && list.every(function (l) { return l.place === 'Home'; });
+    if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
+  } catch (e) {}
   if (!_hobokenMap) return;
   const OVERLAP_MI = 0.05;        // ~265 ft for clustering non-home people
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
@@ -3649,6 +3678,96 @@ function fetchWallMessage() {
 }
 fetchWallMessage();
 setInterval(fetchWallMessage, 20000);
+
+// ============================================================
+// PANEL LAYOUT — automatic, overridable from the phone
+// ============================================================
+// Two inputs decide what the wall shows:
+//   1. `/api/wall-config` — what the phone last set. `main:"auto"` hands the
+//      decision back to the rules below; "map"/"art" pin it.
+//   2. The rules: when EVERYONE is home and it is not a commute window, the
+//      map is telling you nothing you don't already know, so the slot becomes
+//      the kids' artwork instead.
+// LOCAL ONLY, like the wall message — the Pages fallback has neither endpoint.
+let _wallCfg = {main: 'auto', hidden: []};
+let _everyoneHome = false;      // set by renderLocations()
+let _artIds = [], _artIdx = 0, _artFetchedAt = 0;
+
+function inCommuteWindow(){
+  const d = new Date(), day = d.getDay();
+  if (day === 0 || day === 6) return false;
+  const m = d.getHours() * 60 + d.getMinutes();
+  return (m >= 7*60 && m <= 10*60+30) || (m >= 16*60+30 && m <= 20*60);
+}
+
+// The rule, in one place so it is easy to argue with later.
+function autoWantsArt(){
+  return _everyoneHome && !inCommuteWindow();
+}
+
+function applyWallConfig(){
+  const want = _wallCfg.main === 'art' ? true
+             : _wallCfg.main === 'map' ? false
+             : autoWantsArt();
+  document.body.classList.toggle('show-art', !!want);
+  if (want) ensureArt();
+  (_wallCfg.panels || ['mapCard','calCard','weatherCard','busCard','ferryCard'])
+    .forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('panel-off', (_wallCfg.hidden || []).indexOf(id) !== -1);
+    });
+}
+
+function ensureArt(){
+  // Refresh the roster at most every 10 min; rotate through it every 30s.
+  if (Date.now() - _artFetchedAt > 600000) {
+    _artFetchedAt = Date.now();
+    fetch('/api/artworks', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        const list = (d && (d.artworks || d)) || [];
+        _artIds = list.filter(function (a) { return a && a.status === 'ready' && a.urls; })
+                      .map(function (a) { return {url: a.urls.web, kid: a.kid, title: a.title}; });
+        showArt();
+      })
+      .catch(function () { /* fail soft: the map simply stays */ });
+  } else showArt();
+}
+
+function showArt(){
+  const img = document.getElementById('artImg');
+  const cap = document.getElementById('artCaption');
+  if (!img) return;
+  if (!_artIds.length) {
+    cap.textContent = 'No artwork yet';
+    img.removeAttribute('src');
+    return;
+  }
+  const a = _artIds[_artIdx % _artIds.length];
+  _artIdx++;
+  img.src = a.url;
+  img.alt = a.title || 'Artwork';
+  const who = a.kid ? a.kid.charAt(0).toUpperCase() + a.kid.slice(1) : '';
+  cap.textContent = [a.title, who].filter(Boolean).join(' — ');
+}
+
+function fetchWallConfig(){
+  if (!IS_LOCAL) return;
+  if (document.hidden || isSleeping()) return;
+  fetch('/api/wall-config', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (c) { if (c) { _wallCfg = c; applyWallConfig(); } })
+    .catch(function () { /* keep whatever we last applied */ });
+}
+fetchWallConfig();
+setInterval(fetchWallConfig, 20000);
+// Re-evaluate the automatic rule on its own clock: "everyone home" and the
+// commute window both change without the config changing.
+setInterval(function(){ if (IS_LOCAL) applyWallConfig(); }, 60000);
+// Rotate the picture while it is showing.
+setInterval(function(){
+  if (document.body.classList.contains('show-art') && !document.hidden && !isSleeping()) showArt();
+}, 30000);
 
 // --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
 let camImgTimer = null, camObjUrl = null;
