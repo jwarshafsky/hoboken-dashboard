@@ -1255,6 +1255,19 @@ const FERRY_VIEWS = {
     ],
   },
 };
+// Canonical timetable is ferry.json on the Beelink origin (shared with the
+// launcher). The hardcoded lists above stay as the fallback — the GitHub Pages
+// copy has no ferry.json and must keep working — so failures are silent.
+fetch('ferry.json', {cache:'no-store'})
+  .then(res => res.ok ? res.json() : null)
+  .then(j => {
+    if (!j) return;
+    const w = j.weekday || {}, we = j.weekend || {};
+    const set = (row, times) => { if (row && Array.isArray(times)) row.times = times; };
+    set(FERRY_VIEWS.weekday.rows.find(x => x.label === '14th St'),  w.h14_to_pier11);
+    set(FERRY_VIEWS.weekday.rows.find(x => x.label === 'Downtown'), w.downtown_to_wallst);
+    set(FERRY_VIEWS.weekend.rows.find(x => x.label === 'Midtown'),  we.h14_to_midtown);
+  }).catch(()=>{});
 
 // ============================================================
 // BUS 126 SCHEDULE
