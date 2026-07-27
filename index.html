@@ -449,9 +449,12 @@ async function refreshIn(){
   const tunnel = supported ? (homeData.tunnel || null) : null;   // ToNJ / homebound
 
   let html = '';
+  // Only reachable if the proxy answers without a `predictions` key, i.e. it is
+  // genuinely broken or mid-deploy. Says what the user can do, not what the
+  // developer was mid-way through shipping.
   if (!supported){
-    html += `<div class="note">Inbound bus times and the homebound tunnel turn on
-      once the proxy update (Port Authority → Hoboken) is deployed.</div>`;
+    html += `<div class="note">Inbound times aren’t available right now.
+      They’ll come back on their own.</div>`;
   }
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
   // Two columns: 126 departures left, 119 right (both get home; 126 runs up
@@ -515,9 +518,7 @@ function refreshFerry(){
       </div>`).join('');
   }
   document.getElementById('content').innerHTML =
-    `<div class="card"><h2>${leg.label}</h2><div class="rows">${rows}</div>
-      <div class="note" style="margin-top:10px">Scheduled times — NY Waterway
-      publishes no live feed.</div></div>`;
+    `<div class="card"><h2>${leg.label}</h2><div class="rows">${rows}</div></div>`;
   setHdrEta(list && list.length ? list[0].wait : null);
   // Nothing was fetched, so don't claim a live upstream; the schedule is always
   // "as good as it gets" though, so show it as healthy rather than degraded.
