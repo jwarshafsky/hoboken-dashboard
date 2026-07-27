@@ -646,6 +646,10 @@ timer = setInterval(refresh, POLL_MS);
 
 // Legacy iOS standalone flag (covers cases the display-mode media query misses).
 if (navigator.standalone) document.body.classList.add('standalone');
+// The body.embedded rule above existed but nothing ever applied the class, so
+// inside the launcher this page kept the full standalone notch inset and its
+// title sat ~40px below every other app's.
+if (window.self !== window.top) document.body.classList.add('embedded');
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
