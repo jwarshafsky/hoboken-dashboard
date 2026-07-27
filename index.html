@@ -125,7 +125,7 @@
   .foot{display:flex; justify-content:space-between; align-items:center;
     color:var(--dim); font-size:12px; margin-top:6px}
   .foot .stat{display:flex; align-items:center; gap:6px}
-  .stale{opacity:.5}
+  body.stale #content{opacity:.5}
   a.reset{color:var(--accent); text-decoration:none}
 </style>
 </head>
@@ -507,12 +507,24 @@ async function refreshIn(){
   markHealth(supported ? homeData : null);
 }
 
+let lastOkAt = 0;
 function markHealth(data){
   const dot = document.getElementById('healthDot');
   const ok = !!data;
-  dot.className = 'dot ' + (ok ? 'live' : 'inferred');
-  document.getElementById('updated').textContent =
-    'updated ' + new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  dot.className = 'dot ' + (ok ? 'live' : 'sched');
+  const fmt = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+  if (ok) {
+    lastOkAt = Date.now();
+    document.getElementById('updated').textContent = 'updated ' + fmt(lastOkAt);
+    document.body.classList.remove('stale');
+  } else {
+    // Stamping "updated <now>" on a FAILED fetch was the worst kind of lie —
+    // frozen countdowns under a fresh timestamp, at a bus stop.
+    document.getElementById('updated').textContent = lastOkAt
+      ? 'last updated ' + fmt(lastOkAt) + ' · not updating'
+      : 'can’t reach the bus feed';
+    document.body.classList.add('stale');
+  }
 }
 
 // Ferry board. No network at all — the timetable is local, so this also works
@@ -582,7 +594,10 @@ document.getElementById('autoBtn').addEventListener('click', (e)=>{
 // setting simply keeps whatever value that device last had (default off).
 const LATE_KEY = 'showLate';
 function applyLateVisibility(){
-  document.body.classList.toggle('show-late', localStorage.getItem(LATE_KEY) === '1');
+  // Unguarded localStorage here would abort the rest of this script on a
+  // SecurityError, leaving the page inert at "Loading…" with no listeners bound.
+  let v = null; try { v = localStorage.getItem(LATE_KEY); } catch(e){}
+  document.body.classList.toggle('show-late', v === '1');
 }
 applyLateVisibility();
 addEventListener('storage', e => {
@@ -615,6 +630,11 @@ function setMode(m){
 document.getElementById('tabBus').addEventListener('click', ()=>setMode('bus'));
 document.getElementById('tabFerry').addEventListener('click', ()=>setMode('ferry'));
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh(); });
+// The launcher keeps this page alive in a background iframe, where
+// `document.hidden` follows the TOP-level document and so never fires here.
+addEventListener('message', e => {
+  if (e.origin === location.origin && e.data && e.data.type === 'shown') refresh();
+});
 
 detectDirection();
 timer = setInterval(refresh, POLL_MS);
