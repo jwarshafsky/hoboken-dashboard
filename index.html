@@ -46,7 +46,7 @@
      already paid the inset — the two stacked to ~104px of dead space above the
      departures. `embedded` is set from JS and must outrank both. */
   body.embedded{padding-top:14px !important}
-  .top{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; position:relative}
+  .top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; position:relative}
   .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
     font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
   .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
@@ -159,7 +159,6 @@
        to automatic direction after you have flipped it by hand. -->
   <div class="foot">
     <span class="stat" id="staleMsg" hidden></span>
-    <a class="reset" id="autoBtn" href="#" hidden>Use my location</a>
   </div>
 
 <script>
@@ -288,9 +287,6 @@ function detectDirection(){
   );
 }
 
-function showAutoLink(){
-  document.getElementById('autoBtn').hidden = !manual;
-}
 function setDir(d, fromGeo){
   const changed = d !== dir;
   dir = d;
@@ -569,7 +565,6 @@ function render(){
   const ferry = travelMode === 'ferry';
   document.getElementById('dirText').textContent = out ? 'To NYC' : 'To Hoboken';
   if (manual) document.getElementById('dirSub').textContent = 'manual';
-  showAutoLink();
   document.getElementById('tabBus').setAttribute('aria-selected', String(!ferry));
   document.getElementById('tabFerry').setAttribute('aria-selected', String(ferry));
 }
@@ -583,18 +578,11 @@ async function refresh(){
 
 document.getElementById('swapBtn').addEventListener('click', ()=>{
   manual = true;
-  showAutoLink();
   // Instant feedback: clear the old direction's data so the flip is visible
   // immediately instead of after the next fetch completes.
   setHdrEta(null);
   document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
   setDir(dir === 'out' ? 'in' : 'out');
-});
-document.getElementById('autoBtn').addEventListener('click', (e)=>{
-  e.preventDefault(); manual = false;
-  showAutoLink();
-  document.getElementById('dirSub').textContent = 'detecting location';
-  detectDirection();
 });
 // The bias note is opt-in, toggled from the launcher's Settings ("Bus Predict
 // Delays") rather than here — a bare emoji in the header gave no hint it was a
@@ -643,7 +631,14 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 // The launcher keeps this page alive in a background iframe, where
 // `document.hidden` follows the TOP-level document and so never fires here.
 addEventListener('message', e => {
-  if (e.origin === location.origin && e.data && e.data.type === 'shown') refresh();
+  if (e.origin !== location.origin || !e.data || e.data.type !== 'shown') return;
+  // Coming back to the tab re-detects direction: Flip is a temporary override
+  // for the trip you're on, not a setting to undo later. This is why there is
+  // no "use my location" link — automatic IS the default, always.
+  manual = false;
+  document.getElementById('dirSub').textContent = 'detecting location';
+  detectDirection();
+  refresh();
 });
 
 detectDirection();
