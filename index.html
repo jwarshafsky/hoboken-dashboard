@@ -50,7 +50,10 @@
   .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
     font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
   .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
-  .dir{font-size:clamp(17px,5.6vw,22px); font-weight:700; letter-spacing:.2px; display:flex; align-items:center; gap:8px}
+  /* Fixed 20px/800 to match every other app page; vw units resolved against
+     the iframe width and made this title smaller inside the launcher. */
+  .dir{font-size:20px; font-weight:800; line-height:1.4; letter-spacing:.2px;
+    display:flex; align-items:center; gap:8px}
   .dir .sub{font-size:12px; font-weight:500; color:var(--dim); display:block}
   .btns{display:flex; align-items:center; gap:8px; flex:none}
   .swap{background:var(--card2); border:1px solid var(--line); color:var(--txt);
@@ -123,7 +126,8 @@
   .note{background:var(--notebg); border:1px dashed var(--line); border-radius:12px;
     padding:12px 14px; color:var(--dim); font-size:13px; margin-bottom:14px}
   .foot{display:flex; justify-content:space-between; align-items:center;
-    color:var(--dim); font-size:12px; margin-top:6px}
+    gap:10px; color:var(--warn); font-size:12px; margin-top:10px}
+  .foot:empty{display:none}
   .foot .stat{display:flex; align-items:center; gap:6px}
   body.stale #content{opacity:.5}
   a.reset{color:var(--accent); text-decoration:none}
@@ -151,9 +155,11 @@
 
   <div id="content"></div>
 
+  <!-- Empty unless something needs saying: a staleness warning, or the way back
+       to automatic direction after you have flipped it by hand. -->
   <div class="foot">
-    <span class="stat"><span class="dot" id="healthDot"></span><span id="updated">—</span></span>
-    <a class="reset" id="autoBtn" href="#">Use my location</a>
+    <span class="stat" id="staleMsg" hidden></span>
+    <a class="reset" id="autoBtn" href="#" hidden>Use my location</a>
   </div>
 
 <script>
@@ -282,6 +288,9 @@ function detectDirection(){
   );
 }
 
+function showAutoLink(){
+  document.getElementById('autoBtn').hidden = !manual;
+}
 function setDir(d, fromGeo){
   const changed = d !== dir;
   dir = d;
@@ -509,20 +518,20 @@ async function refreshIn(){
 
 let lastOkAt = 0;
 function markHealth(data){
-  const dot = document.getElementById('healthDot');
   const ok = !!data;
-  dot.className = 'dot ' + (ok ? 'live' : 'sched');
+  const el = document.getElementById('staleMsg');
   const fmt = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   if (ok) {
     lastOkAt = Date.now();
-    document.getElementById('updated').textContent = 'updated ' + fmt(lastOkAt);
+    el.hidden = true; el.textContent = '';
     document.body.classList.remove('stale');
   } else {
-    // Stamping "updated <now>" on a FAILED fetch was the worst kind of lie —
-    // frozen countdowns under a fresh timestamp, at a bus stop.
-    document.getElementById('updated').textContent = lastOkAt
-      ? 'last updated ' + fmt(lastOkAt) + ' · not updating'
-      : 'can’t reach the bus feed';
+    // The one thing the board above genuinely cannot tell you: it has stopped
+    // updating. Frozen countdowns look exactly like live ones.
+    el.hidden = false;
+    el.textContent = lastOkAt
+      ? 'Not updating — times are from ' + fmt(lastOkAt)
+      : 'Can’t reach the bus feed';
     document.body.classList.add('stale');
   }
 }
@@ -550,11 +559,9 @@ function refreshFerry(){
   document.getElementById('content').innerHTML =
     `<div class="card"><h2>${leg.label}</h2><div class="rows">${rows}</div></div>`;
   setHdrEta(list && list.length ? list[0].wait : null);
-  // Nothing was fetched, so don't claim a live upstream; the schedule is always
-  // "as good as it gets" though, so show it as healthy rather than degraded.
-  const d = document.getElementById('healthDot');
-  d.className = 'dot live';
-  document.getElementById('updated').textContent = 'schedule';
+  // The ferry board is a local timetable — nothing was fetched, so there is no
+  // upstream that can go stale and nothing for the footer to warn about.
+  markHealth({});
 }
 
 function render(){
@@ -562,6 +569,7 @@ function render(){
   const ferry = travelMode === 'ferry';
   document.getElementById('dirText').textContent = out ? 'To NYC' : 'To Hoboken';
   if (manual) document.getElementById('dirSub').textContent = 'manual';
+  showAutoLink();
   document.getElementById('tabBus').setAttribute('aria-selected', String(!ferry));
   document.getElementById('tabFerry').setAttribute('aria-selected', String(ferry));
 }
@@ -575,6 +583,7 @@ async function refresh(){
 
 document.getElementById('swapBtn').addEventListener('click', ()=>{
   manual = true;
+  showAutoLink();
   // Instant feedback: clear the old direction's data so the flip is visible
   // immediately instead of after the next fetch completes.
   setHdrEta(null);
@@ -583,6 +592,7 @@ document.getElementById('swapBtn').addEventListener('click', ()=>{
 });
 document.getElementById('autoBtn').addEventListener('click', (e)=>{
   e.preventDefault(); manual = false;
+  showAutoLink();
   document.getElementById('dirSub').textContent = 'detecting location';
   detectDirection();
 });
