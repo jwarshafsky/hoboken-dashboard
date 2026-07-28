@@ -602,7 +602,11 @@ function renderIn(homeData, live){
   // (213 and 214) -> one column per gate; off-peak there's a single gate (often a
   // different number entirely). Group by the gate the feed actually reports so
   // the headers stay correct when NJT moves the stop -- never hardcode 213/214.
-  const realPreds = upcoming(realBuses(preds), lastFetchedAt) || [];
+  // NOTE: no realBuses() here (unlike the outbound stops). PABT is an origin
+  // terminal, so a scheduled departure with no live vehicle yet is a real bus
+  // about to leave — stripping "phantoms" hid most of the rush-hour board. Just
+  // drop buses that have already gone.
+  const realPreds = upcoming(preds, lastFetchedAt) || [];
   // "213-1" -> "213": drop the sub-lane suffix. Blank gate => no header number.
   const gateOf = p => ((p.gate || '').split(/[-\s]/)[0] || '').trim();
   const gateKeys = [];
