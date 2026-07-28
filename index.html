@@ -494,6 +494,7 @@ async function refreshOut(){
   // Flipped while this was in flight — the board on screen is the other
   // direction's now, and painting this over it would be simply wrong.
   if (dir !== 'out') return;
+  cancelSnap();                   // fresh data won the race
   renderOut(data);
 }
 
@@ -554,6 +555,7 @@ async function refreshIn(){
   // Only snapshot a real inbound response — see the `supported` gate below.
   if (homeData && Array.isArray(homeData.predictions)) saveSnap('in', homeData);
   if (dir !== 'in') return;   // flipped mid-fetch; see refreshOut
+  cancelSnap();               // fresh data won the race
   renderIn(homeData);
 }
 
@@ -673,13 +675,33 @@ function paintSnap(data){
   catch(e){ console.error(e); return false; }
 }
 
+// The stored board is a fallback for a slow network, NOT the default view.
+// Painting it immediately meant every open showed old times that you then had
+// to watch correct themselves — which reads as "slow to update" even though it
+// was the opposite. Since the proxy answers a warm cache in ~0.1s, holding the
+// snapshot back for a beat means the fresh board almost always wins the race
+// and the stale one is never seen; on a genuinely slow or cold fetch it still
+// appears fast enough to beat a blank screen.
+const SNAP_PAINT_DELAY_MS = 600;
+let snapTimer = null;
+function scheduleSnap(d){
+  const snap = loadSnap(d);
+  if (!snap) return;
+  clearTimeout(snapTimer);
+  snapTimer = setTimeout(() => {
+    snapTimer = null;
+    if (dir === d) paintSnap(snap);   // still the same direction, still waiting
+  }, SNAP_PAINT_DELAY_MS);
+}
+// Real data landed — drop any snapshot still queued behind it.
+function cancelSnap(){ clearTimeout(snapTimer); snapTimer = null; }
+
 // Entering a direction: show its last-good board immediately if there is one,
 // instead of blanking to "Loading…" for however long NJT takes to answer.
 function paintOrClear(){
-  const snap = loadSnap(dir);
-  if (snap && paintSnap(snap)) return;
   setHdrEta(null);
   document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+  scheduleSnap(dir);   // only lands if the fetch is slower than the delay
 }
 
 // Ferry board. No network at all — the timetable is local, so this also works
@@ -815,7 +837,7 @@ function primeFromSnapshot(){
   dir = d;                       // provisional — detectDirection() confirms it
   render();
   document.getElementById('dirSub').textContent = 'detecting location';
-  paintSnap(snap);
+  scheduleSnap(d);               // shown only if the fetch below is slow
   // Not just for speed: if location is denied, detectDirection()'s fallback
   // only fires while `dir` is still null, so this is the fetch that happens.
   refresh();
