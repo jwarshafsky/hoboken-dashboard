@@ -131,6 +131,17 @@
      Lighter than .stale — this is "a moment behind", not "not updating". */
   body.pending #content{opacity:.66; transition:opacity .15s}
   a.reset{color:var(--accent); text-decoration:none}
+  /* ---- Pull to refresh (custom — native PTR is dead in an installed iOS PWA) ---- */
+  .ptr{position:fixed; top:-36px; left:50%; transform:translateX(-50%);
+    width:34px; height:34px; border-radius:50%; background:var(--card);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center;
+    z-index:60; opacity:0; pointer-events:none; box-shadow:0 3px 12px rgba(0,0,0,.28);
+    transition:opacity .15s ease}
+  .ptr-spin{width:16px; height:16px; border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--dim)}
+  .ptr.ready .ptr-spin{border-top-color:var(--accent)}
+  .ptr.spinning .ptr-spin{border-top-color:var(--accent); animation:ptrspin .7s linear infinite}
+  @keyframes ptrspin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -143,7 +154,6 @@
     </div>
     <div class="hdr-eta" id="hdrEta"></div>
     <div class="btns">
-      <button class="swap icon" id="refreshBtn" aria-label="Refresh"><span>↻</span></button>
       <button class="swap" id="swapBtn">⇄ Flip</button>
     </div>
   </div>
@@ -804,19 +814,54 @@ addEventListener('storage', e => {
   if (!e.key || e.key === LATE_KEY) applyLateVisibility();
 });
 
-document.getElementById('refreshBtn').addEventListener('click', async (e)=>{
-  const b = e.currentTarget;
-  if (b.disabled) return;
-  // Spin for at least a beat even if the proxy answers from cache in ~90ms —
-  // an instant no-op button reads as broken.
-  b.disabled = true; b.classList.add('spin');
-  const started = Date.now();
-  try { await refresh(); }
-  finally {
-    setTimeout(()=>{ b.classList.remove('spin'); b.disabled = false; },
-               Math.max(0, 450 - (Date.now() - started)));
-  }
-});
+// Pull down at the top of the board to refresh — replaces the old ↻ button.
+// Native PTR does not fire in an installed iOS PWA, so this is a custom gesture;
+// onRefresh returns refresh()'s promise so the spinner tracks the real fetch.
+function attachPullToRefresh(scroller, onRefresh, canStart){
+  const usePage = scroller === document.scrollingElement
+    || scroller === document.documentElement || scroller === document.body;
+  const target = usePage ? window : scroller;
+  const topOf = () => usePage
+    ? (window.scrollY || document.documentElement.scrollTop || 0) : scroller.scrollTop;
+  const THRESH = 68, MAX = 100, MIN_SPIN = 600;
+  const ind = document.createElement('div');
+  ind.className = 'ptr'; ind.innerHTML = '<div class="ptr-spin"></div>';
+  document.body.appendChild(ind);
+  let startY = 0, active = false, dist = 0, busy = false;
+  const set = (d, ready, spin) => {
+    ind.style.transform = 'translateX(-50%) translateY(' + d + 'px)';
+    ind.style.opacity = d > 4 ? '1' : '0';
+    ind.classList.toggle('ready', !!ready);
+    ind.classList.toggle('spinning', !!spin);
+  };
+  target.addEventListener('touchstart', e => {
+    if (busy || e.touches.length !== 1){ active = false; return; }
+    active = topOf() <= 0 && (!canStart || canStart());
+    startY = e.touches[0].clientY; dist = 0;
+  }, {passive:true});
+  target.addEventListener('touchmove', e => {
+    if (!active || busy) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0 || topOf() > 0){ active = false; if (dist) set(0,false); dist = 0; return; }
+    e.preventDefault();
+    dist = Math.min(MAX, dy * 0.5);
+    set(dist, dist >= THRESH);
+  }, {passive:false});
+  const finish = () => {
+    if (busy) return;
+    if (active && dist >= THRESH){
+      busy = true; active = false; set(THRESH, true, true);
+      const t0 = Date.now();
+      Promise.resolve().then(onRefresh).catch(()=>{}).then(() => {
+        setTimeout(() => { busy = false; dist = 0; set(0,false); },
+                   Math.max(0, MIN_SPIN - (Date.now() - t0)));
+      });
+    } else { active = false; dist = 0; set(0,false); }
+  };
+  target.addEventListener('touchend', finish, {passive:true});
+  target.addEventListener('touchcancel', finish, {passive:true});
+}
+attachPullToRefresh(document.scrollingElement, refresh);
 function setMode(m){
   if (m === travelMode) return;
   travelMode = m;
