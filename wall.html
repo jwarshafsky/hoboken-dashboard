@@ -2507,6 +2507,16 @@ function personStatus(loc) {
     }
   }
 
+  // Where they actually are. This sits BELOW the dynamic states above on
+  // purpose: "on 126" / "heading home · ~15 min" answer the question the wall
+  // is usually asked, and a static place name would be a downgrade from them.
+  // But it outranks bare distance — "at Bright Horizons" beats "1.2 mi away",
+  // and "near home" is uselessly vague when we can name Trader Joe's.
+  // `place` comes from the geofence list, `city` from the proxy's box/OSM
+  // resolution; both may be absent, hence the distance fallback below.
+  if (loc.place) return 'at ' + loc.place;
+  if (loc.city)  return 'in ' + loc.city;
+
   if (dHome < 0.5) return 'near home';
   return dHome.toFixed(1) + ' mi away';
 }
