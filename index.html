@@ -130,6 +130,9 @@
   .foot:empty{display:none}
   .foot .stat{display:flex; align-items:center; gap:6px}
   body.stale #content{opacity:.5}
+  /* Painted from the last-good board while a fresh fetch is still in flight.
+     Lighter than .stale — this is "a moment behind", not "not updating". */
+  body.pending #content{opacity:.66; transition:opacity .15s}
   a.reset{color:var(--accent); text-decoration:none}
 </style>
 </head>
@@ -258,6 +261,38 @@ function nextFerries(times, n){
 let lastFetchedAt = 0;
 let timer = null;
 
+// ── Last-good board, kept in localStorage ────────────────────────────────
+// Nothing polls the proxy's /commute_home between one open of this page and
+// the next, so its server-side cache is always cold when you arrive and the
+// first fetch blocks on NJT — measured 4.6-12s, against 2-4ms for every later
+// request in the same session. Painting the last board immediately turns that
+// dead time into a readable page that refreshes underneath you.
+const SNAP_PREFIX = 'commuteSnap.v1.';
+const LAST_DIR_KEY = 'commuteLastDir';
+// 12 min. Past the proxy's own 10-minute carry-forward window the countdowns
+// are no longer anchored to anything real, so a snapshot older than this is
+// worse than an honest "Loading…".
+const SNAP_MAX_AGE_S = 720;
+// A payload older than this gets the dimmed "updating…" treatment, whether it
+// came from localStorage or from the proxy's stale-while-revalidate window.
+const PENDING_AGE_S = 90;
+
+function snapAge(data){
+  const t = data && data.fetched_at;
+  return t ? (Date.now()/1000 - t) : Infinity;
+}
+function saveSnap(d, data){
+  if (!d || !data || !data.fetched_at) return;
+  try { localStorage.setItem(SNAP_PREFIX + d, JSON.stringify(data)); } catch(e){}
+}
+function loadSnap(d){
+  let raw = null; try { raw = localStorage.getItem(SNAP_PREFIX + d); } catch(e){}
+  if (!raw) return null;
+  let data = null; try { data = JSON.parse(raw); } catch(e){ return null; }
+  const age = snapAge(data);
+  return (age >= 0 && age < SNAP_MAX_AGE_S) ? data : null;
+}
+
 function haversine(a, b){
   const R=3958.8, toR=x=>x*Math.PI/180;
   const dLat=toR(b.lat-a.lat), dLon=toR(b.lon-a.lon);
@@ -290,8 +325,14 @@ function detectDirection(){
 function setDir(d, fromGeo){
   const changed = d !== dir;
   dir = d;
+  // Which board to paint on sight next time, before geolocation has answered.
+  try { localStorage.setItem(LAST_DIR_KEY, d); } catch(e){}
   if (fromGeo) document.getElementById('dirSub').textContent = 'from your location';
-  if (changed || fromGeo){ render(); refresh(); }
+  if (changed || fromGeo){
+    render();
+    if (changed) paintOrClear();
+    refresh();
+  }
 }
 
 function fetchT(url){
@@ -372,6 +413,20 @@ function realBuses(preds){
   return Array.isArray(preds) ? preds.filter(p => p.is_live || p.is_inferred) : preds;
 }
 
+// Drop departures whose bus has already gone. On fresh data this is a no-op,
+// but a board painted from a snapshot (or from the proxy's stale window) is
+// minutes behind, and liveMins() clamps at 0 — so a bus that left ten minutes
+// ago would sit at "DUE" forever, which is the one thing worse than a blank
+// board. One minute of grace, because a genuine "DUE" is still catchable.
+function upcoming(preds, fetchedAt){
+  if (!Array.isArray(preds)) return preds;
+  const drift = fetchedAt ? (Date.now()/1000 - fetchedAt) / 60 : 0;
+  return preds.filter(p => {
+    const m = parseInt(njtCountdown(p), 10);
+    return !isFinite(m) || (m - drift) > -1;
+  });
+}
+
 function renderStop(name, preds, fetchedAt){
   let mode = 'sched', rows = '';
   if (Array.isArray(preds) && preds.length){
@@ -420,13 +475,26 @@ function setHdrEta(mins){
 async function refreshOut(){
   const res = await fetchT(PROXY_URL);
   const data = await res.json();
+  saveSnap('out', data);          // before renderOut, which filters in place
+  // Flipped while this was in flight — the board on screen is the other
+  // direction's now, and painting this over it would be simply wrong.
+  if (dir !== 'out') return;
+  renderOut(data);
+}
+
+// Rendering is split from fetching so the same board can be drawn from a
+// localStorage snapshot on open, seconds before the network answers.
+// `live` false = painted from a snapshot: don't let it reset the health footer,
+// which is tracking the real fetch behind it.
+function renderOut(data, live){
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
   // Strip phantoms first, so neither the board nor the header ETA below can be
-  // built from a timetable entry with no bus behind it.
-  if (s2) s2.predictions = realBuses(s2.predictions);
-  if (s3) s3.predictions = realBuses(s3.predictions);
+  // built from a timetable entry with no bus behind it. Then drop anything that
+  // has already left, which only bites when this data is a few minutes old.
+  if (s2) s2.predictions = upcoming(realBuses(s2.predictions), lastFetchedAt);
+  if (s3) s3.predictions = upcoming(realBuses(s3.predictions), lastFetchedAt);
   // 15th & Willow is the 119 stop (the 126 is covered at Washington & 13th) —
   // show only 119s there. Applies to the header ETA below too.
   if (s2 && Array.isArray(s2.predictions))
@@ -451,7 +519,8 @@ async function refreshOut(){
   const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
   setHdrEta(waits.length
     ? Math.min(...waits) + RIDE_BASE_MIN + delay + WALK_TO_STOP_MIN : null);
-  markHealth(data);
+  if (live !== false) markHealth(data);
+  markFreshness(data);
 }
 
 // Inbound: to Hoboken. Uses proxy `?mode=commute_home` (Hoboken-bound 126 from PABT).
@@ -462,7 +531,15 @@ async function refreshIn(){
     const r = await fetchT(PROXY_URL + '?mode=commute_home');
     homeData = await r.json();
   } catch(e){ homeData = {error:'unavailable'}; }
+  // Only snapshot a real inbound response — see the `supported` gate below.
+  if (homeData && Array.isArray(homeData.predictions)) saveSnap('in', homeData);
+  if (dir !== 'in') return;   // flipped mid-fetch; see refreshOut
+  renderIn(homeData);
+}
 
+// Split from the fetch for the same reason as renderOut: this is what paints a
+// stored board the instant the page opens.
+function renderIn(homeData, live){
   // Only trust data from the real commute_home mode. Before the proxy ships it,
   // `?mode=commute_home` falls through to the default (outbound) response, whose
   // `tunnel` is the ToNY crossing — wrong direction for the ride home. Gate on
@@ -484,7 +561,7 @@ async function refreshIn(){
   // (213 and 214) -> one column per gate; off-peak there's a single gate (often a
   // different number entirely). Group by the gate the feed actually reports so
   // the headers stay correct when NJT moves the stop -- never hardcode 213/214.
-  const realPreds = realBuses(preds) || [];
+  const realPreds = upcoming(realBuses(preds), lastFetchedAt) || [];
   // "213-1" -> "213": drop the sub-lane suffix. Blank gate => no header number.
   const gateOf = p => ((p.gate || '').split(/[-\s]/)[0] || '').trim();
   const gateKeys = [];
@@ -530,7 +607,8 @@ async function refreshIn(){
   }
   document.getElementById('content').innerHTML = html;
   setHdrEta(total);
-  markHealth(supported ? homeData : null);
+  if (live !== false) markHealth(supported ? homeData : null);
+  markFreshness(homeData);
 }
 
 let lastOkAt = 0;
@@ -551,6 +629,45 @@ function markHealth(data){
       : 'Can’t reach the bus feed';
     document.body.classList.add('stale');
   }
+}
+
+// How old the times on screen actually are — a separate question from whether
+// the last fetch worked. A payload can be perfectly healthy and still be
+// minutes behind: served out of the proxy's stale-while-revalidate window, or
+// painted from localStorage before the network answered. Say so and dim it
+// rather than passing it off as live. When the feed is genuinely down,
+// markHealth owns the footer and the dimming, so leave both alone.
+function markFreshness(data){
+  if (document.body.classList.contains('stale')) return;
+  const el = document.getElementById('staleMsg');
+  const age = snapAge(data);
+  const behind = isFinite(age) && age > PENDING_AGE_S;
+  document.body.classList.toggle('pending', behind);
+  if (behind){
+    const fmt = t => new Date(t*1000).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+    el.hidden = false;
+    el.textContent = 'Times from ' + fmt(data.fetched_at) + ' — updating…';
+  } else {
+    el.hidden = true;
+    el.textContent = '';
+  }
+}
+
+// Draw the stored board for the current direction right now, ahead of any
+// network call. `false` = not live, so it can't touch the health footer that
+// the real fetch behind it is still deciding.
+function paintSnap(data){
+  try { (dir === 'in' ? renderIn : renderOut)(data, false); return true; }
+  catch(e){ console.error(e); return false; }
+}
+
+// Entering a direction: show its last-good board immediately if there is one,
+// instead of blanking to "Loading…" for however long NJT takes to answer.
+function paintOrClear(){
+  const snap = loadSnap(dir);
+  if (snap && paintSnap(snap)) return;
+  setHdrEta(null);
+  document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
 }
 
 // Ferry board. No network at all — the timetable is local, so this also works
@@ -590,19 +707,29 @@ function render(){
   document.getElementById('tabFerry').setAttribute('aria-selected', String(ferry));
 }
 
-async function refresh(){
-  if (document.hidden || dir === null) return;
-  if (travelMode === 'ferry'){ try { refreshFerry(); } catch(e){ console.error(e); } return; }
-  try { await (dir === 'out' ? refreshOut() : refreshIn()); }
-  catch(e){ console.error(e); markHealth(null); }
+let inFlight = null, inFlightDir = null;
+function refresh(){
+  if (document.hidden || dir === null) return Promise.resolve();
+  if (travelMode === 'ferry'){
+    try { refreshFerry(); } catch(e){ console.error(e); }
+    return Promise.resolve();
+  }
+  // Coalesce. Opening the page fires a fetch straight away and geolocation
+  // resolving fires another a beat later; without this both go out, and the
+  // first one is the slow uncached one we're trying to hide.
+  if (inFlight && inFlightDir === dir) return inFlight;
+  inFlightDir = dir;
+  inFlight = (dir === 'out' ? refreshOut() : refreshIn())
+    .catch(e => { console.error(e); markHealth(null); })
+    .finally(() => { inFlight = null; });
+  return inFlight;
 }
 
 document.getElementById('swapBtn').addEventListener('click', ()=>{
   manual = true;
-  // Instant feedback: clear the old direction's data so the flip is visible
-  // immediately instead of after the next fetch completes.
-  setHdrEta(null);
-  document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+  // Instant feedback: setDir paints the new direction's last-good board right
+  // away (or "Loading…" if there isn't one), so the flip is visible now rather
+  // than after the next fetch completes.
   setDir(dir === 'out' ? 'in' : 'out');
 });
 // The bias note is opt-in, toggled from the launcher's Settings ("Bus Predict
@@ -662,6 +789,27 @@ addEventListener('message', e => {
   refresh();
 });
 
+// Before geolocation resolves there is no direction, so nothing can be drawn —
+// and getCurrentPosition is allowed up to 8s. Assume the direction this device
+// last used, paint its stored board, and start the real fetch immediately;
+// detectDirection() corrects both a moment later if the guess was wrong. Bus
+// mode only — the ferry board is a local timetable and already renders instantly.
+function primeFromSnapshot(){
+  if (travelMode !== 'bus' || dir !== null) return;
+  let d = null; try { d = localStorage.getItem(LAST_DIR_KEY); } catch(e){}
+  if (d !== 'in' && d !== 'out') return;
+  const snap = loadSnap(d);
+  if (!snap) return;
+  dir = d;                       // provisional — detectDirection() confirms it
+  render();
+  document.getElementById('dirSub').textContent = 'detecting location';
+  paintSnap(snap);
+  // Not just for speed: if location is denied, detectDirection()'s fallback
+  // only fires while `dir` is still null, so this is the fetch that happens.
+  refresh();
+}
+
+primeFromSnapshot();
 detectDirection();
 timer = setInterval(refresh, POLL_MS);
 
