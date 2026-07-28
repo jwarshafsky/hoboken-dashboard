@@ -621,8 +621,9 @@ function renderIn(homeData, live){
     ? gateKeys.map(g => ({head: g ? ('Gate ' + g) : '126',
                           rows: colRows(byGate[g], lastFetchedAt)}))
     : [{head: '126', rows: colRows([], lastFetchedAt)}];
+  // Stacked (gates sorted ascending -> 213 on top, 214 below), not side by side.
   html += boardCard('Home from Port Authority', boardMode(realPreds), cols,
-                    feedError(homeData));
+                    feedError(homeData), true);
   html += tunnelCard(tunnel);
 
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
