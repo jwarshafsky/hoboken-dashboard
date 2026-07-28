@@ -475,10 +475,9 @@ function tunnelCard(tunnel){
   }
   const tt = parseInt(tunnel.travelTime, 10);
   const c = tunnelColor(tt);
-  const sub = dir === 'in' ? 'affects your ride' : 'crossing to NYC';
   return `<div class="card"><div class="tunnel">${name}
     <span class="big" style="color:${c}">${isFinite(tt)?tt:'--'}</span>
-    <span class="lbl">min · ${sub}</span></div></div>`;
+    <span class="lbl">min</span></div></div>`;
 }
 
 // Header ETA — total door-to-door minutes, centered at the top of the page.
