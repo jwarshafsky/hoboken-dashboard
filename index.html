@@ -480,18 +480,39 @@ async function refreshIn(){
       They’ll come back on their own.</div>`;
   }
   lastFetchedAt = (homeData && homeData.fetched_at) || Math.floor(Date.now()/1000);
-  // Two columns: 126 departures left, 119 right (both get home; 126 runs up
-  // Washington, 119 up Willow).
+  // The 126 is the only bus home. During rush hour it leaves from two PABT gates
+  // (213 and 214) -> one column per gate; off-peak there's a single gate (often a
+  // different number entirely). Group by the gate the feed actually reports so
+  // the headers stay correct when NJT moves the stop -- never hardcode 213/214.
   const realPreds = realBuses(preds) || [];
-  const p126 = realPreds.filter(p => p.route === '126').slice(0,MAX_PER_STOP);
-  const p119 = realPreds.filter(p => p.route === '119').slice(0,MAX_PER_STOP);
+  // "213-1" -> "213": drop the sub-lane suffix. Blank gate => no header number.
+  const gateOf = p => ((p.gate || '').split(/[-\s]/)[0] || '').trim();
+  const gateKeys = [];
+  const byGate = {};
+  for (const p of realPreds){
+    const g = gateOf(p);
+    if (!(g in byGate)){ byGate[g] = []; gateKeys.push(g); }
+    byGate[g].push(p);
+  }
+  // Ascending gate order (213 left, 214 right); a blank/unknown gate sorts last.
+  gateKeys.sort((a,b) => (a === '') - (b === '')
+    || (parseInt(a,10) || 0) - (parseInt(b,10) || 0)
+    || a.localeCompare(b));
   const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
     list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
                 : '<div class="empty">none soon</div>'}</div></div>`;
   const mode = realPreds.some(p => p.is_inferred) ? 'inferred'
              : (realPreds.some(p => p.is_live) ? 'live' : 'sched');
   html += `<div class="card"><h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>Home from Port Authority</h2>`;
-  html += `<div class="twocol">${col('126', p126)}${col('119', p119)}</div></div>`;
+  if (!gateKeys.length){
+    // No buses at all -- keep one empty column so the card isn't blank.
+    html += `<div class="twocol" style="grid-template-columns:1fr">${col('126', [])}</div>`;
+  } else {
+    const cols = gateKeys.map(g =>
+      col(g ? ('Gate ' + g) : '126', byGate[g].slice(0,MAX_PER_STOP))).join('');
+    html += `<div class="twocol" style="grid-template-columns:repeat(${gateKeys.length},1fr)">${cols}</div>`;
+  }
+  html += `</div>`;
   html += tunnelCard(tunnel);
 
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
