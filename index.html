@@ -429,20 +429,25 @@ function upcoming(preds, fetchedAt){
 // Both directions render through this so they cannot drift apart visually —
 // only what heads each column differs: PABT gate numbers on the way home, stop
 // names on the way out.
-function boardCard(title, mode, cols, note){
+function boardCard(title, mode, cols, note, stack){
   const inner = cols.map(c =>
     `<div><div class="colhead">${c.head}</div><div class="rows">${c.rows}</div></div>`).join('');
+  // `stack` forces a single column so the entries sit one above the other. The
+  // outbound board uses it: two Hoboken stops side by side are too narrow to
+  // read, so 13th stacks on top of 15th instead.
+  const gt = stack ? '1fr' : `repeat(${cols.length || 1},1fr)`;
   return `<div class="card">
     <h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>${title}</h2>
     ${note || ''}
-    <div class="twocol" style="grid-template-columns:repeat(${cols.length || 1},1fr)">${inner}</div>
+    <div class="twocol" style="grid-template-columns:${gt}">${inner}</div>
   </div>`;
 }
 
-// Rows for one column: the departures, or a quiet "none soon".
-function colRows(preds, fetchedAt){
+// Rows for one column: the departures, or a quiet "none soon". `max` caps how
+// many show (defaults to MAX_PER_STOP).
+function colRows(preds, fetchedAt, max){
   return (Array.isArray(preds) && preds.length)
-    ? preds.slice(0, MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('')
+    ? preds.slice(0, max || MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('')
     : '<div class="empty">none soon</div>';
 }
 
@@ -523,11 +528,13 @@ function renderOut(data, live){
   // Washington & 13th always holds its column — it's the stop you actually walk
   // to. 15th & Willow only earns one when a 119 is genuinely coming; an empty
   // column for a bus that runs a few times an hour is just dead space.
-  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt)}];
-  if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt)});
+  // Stacked, not side by side: 13th on top with up to 4 departures, 15th below
+  // with up to 3. 15th only earns its block when a 119 is genuinely coming.
+  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt, 4)}];
+  if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt, 3)});
 
   let html = boardCard('To Port Authority', boardMode(p3.concat(p2)), cols,
-                       feedError(s3 && s3.predictions, s2 && s2.predictions));
+                       feedError(s3 && s3.predictions, s2 && s2.predictions), true);
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
 
