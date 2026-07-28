@@ -84,9 +84,6 @@
     padding:16px; margin-bottom:14px}
   .card h2{margin:0 0 12px; font-size:13px; font-weight:600; letter-spacing:.8px;
     text-transform:uppercase; color:var(--dim)}
-  .stop{margin-bottom:16px}
-  .stop:last-child{margin-bottom:0}
-  .stop .name{font-size:15px; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px}
   .dot{width:9px; height:9px; border-radius:50%; background:var(--dim); flex:none}
   .dot.live{background:var(--live); box-shadow:0 0 8px var(--live)}
   .dot.inferred{background:var(--warn)}
@@ -114,12 +111,12 @@
   .colhead{font-size:13px; font-weight:800; text-align:center; color:var(--accent);
     background:var(--colhead); border:1px solid var(--line); border-radius:8px;
     padding:5px 0; margin-bottom:8px}
-  .tunnel{display:flex; align-items:baseline; gap:10px}
-  .tunnel .big{font-size:40px; font-weight:800; line-height:1}
-  .tunnel .lbl{font-size:13px; color:var(--dim)}
-  .eta{display:flex; align-items:baseline; gap:10px; margin-top:4px}
-  .eta .big{font-size:34px; font-weight:800; color:var(--live)}
-  .eta .lbl{font-size:13px; color:var(--dim)}
+  /* One line straight across: name left, minutes right. */
+  .tunnel{display:flex; align-items:baseline; gap:7px}
+  .tunnel .tname{font-size:13px; font-weight:600; letter-spacing:.8px;
+    text-transform:uppercase; color:var(--dim); margin-right:auto; white-space:nowrap}
+  .tunnel .big{font-size:22px; font-weight:800; line-height:1}
+  .tunnel .lbl{font-size:13px; color:var(--dim); white-space:nowrap}
   .empty{color:var(--dim); font-size:14px; padding:8px 2px}
   /* Upstream failure reads amber — distinct from quiet emptiness. */
   .empty.err{color:var(--warn)}
@@ -427,42 +424,61 @@ function upcoming(preds, fetchedAt){
   });
 }
 
-function renderStop(name, preds, fetchedAt){
-  let mode = 'sched', rows = '';
-  if (Array.isArray(preds) && preds.length){
-    const any = preds.some(p=>p.is_live), inf = preds.some(p=>p.is_inferred);
-    mode = inf ? 'inferred' : (any ? 'live' : 'sched');
-    rows = preds.slice(0,MAX_PER_STOP).map(p=>predRow(p, fetchedAt)).join('');
-  } else if (preds && preds.error) {
-    // An upstream failure is NOT the same as "no buses are coming", and saying
-    // the latter sent us hunting for a bug in this page when NJT's prediction
-    // API was simply timing out. Say which it is.
-    const auth = /auth/i.test(preds.error);
-    rows = `<div class="empty err">` +
-      (auth ? 'NJT authentication failed.'
-            : 'NJT feed unreachable right now.') +
-      `<br><span style="opacity:.75">Times will return on their own.</span></div>`;
-    mode = 'sched';
-  } else {
-    rows = `<div class="empty">No upcoming buses in the feed right now.</div>`;
-  }
-  return `<div class="stop">
-    <div class="name"><span class="dot ${mode}"></span>${name}</div>
-    <div class="rows">${rows}</div>
+// ── The board, shared by both directions ─────────────────────────────────
+// One card, a status dot beside the title, and a row of columns underneath.
+// Both directions render through this so they cannot drift apart visually —
+// only what heads each column differs: PABT gate numbers on the way home, stop
+// names on the way out.
+function boardCard(title, mode, cols, note){
+  const inner = cols.map(c =>
+    `<div><div class="colhead">${c.head}</div><div class="rows">${c.rows}</div></div>`).join('');
+  return `<div class="card">
+    <h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>${title}</h2>
+    ${note || ''}
+    <div class="twocol" style="grid-template-columns:repeat(${cols.length || 1},1fr)">${inner}</div>
   </div>`;
 }
 
+// Rows for one column: the departures, or a quiet "none soon".
+function colRows(preds, fetchedAt){
+  return (Array.isArray(preds) && preds.length)
+    ? preds.slice(0, MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('')
+    : '<div class="empty">none soon</div>';
+}
+
+// Which dot the card gets, from whatever predictions it ended up with.
+function boardMode(preds){
+  return preds.some(p => p.is_inferred) ? 'inferred'
+       : (preds.some(p => p.is_live) ? 'live' : 'sched');
+}
+
+// An upstream failure is NOT the same as "no buses are coming", and saying the
+// latter once sent us hunting for a bug in this page when NJT's prediction API
+// was simply timing out. Say which it is — once, above the columns, rather than
+// repeated inside every one of them.
+function feedError(...sources){
+  const err = sources.map(s => s && s.error).find(Boolean);
+  if (!err) return '';
+  return `<div class="empty err">` +
+    (/auth/i.test(err) ? 'NJT authentication failed.' : 'NJT feed unreachable right now.') +
+    `<br><span style="opacity:.75">Times will return on their own.</span></div>`;
+}
+
+// One line straight across: name on the left, the crossing time on the right.
+// It used to be a stacked card with a 40px figure, which spent a third of the
+// screen on a single number that is only ever context for the bus times above.
 function tunnelCard(tunnel){
+  const name = `<span class="tname">Lincoln Tunnel</span>`;
   if (!tunnel || tunnel.error){
-    return `<div class="card"><h2>Lincoln Tunnel</h2>
-      <div class="empty">Tunnel time unavailable.</div></div>`;
+    return `<div class="card"><div class="tunnel">${name}
+      <span class="lbl">unavailable</span></div></div>`;
   }
   const tt = parseInt(tunnel.travelTime, 10);
   const c = tunnelColor(tt);
-  const sub = dir === 'in' ? 'affects your bus ride' : 'crossing to NYC';
-  return `<div class="card"><h2>Lincoln Tunnel</h2>
-    <div class="tunnel"><span class="big" style="color:${c}">${isFinite(tt)?tt:'--'}</span>
-      <span class="lbl">min · ${sub}</span></div></div>`;
+  const sub = dir === 'in' ? 'affects your ride' : 'crossing to NYC';
+  return `<div class="card"><div class="tunnel">${name}
+    <span class="big" style="color:${c}">${isFinite(tt)?tt:'--'}</span>
+    <span class="lbl">min · ${sub}</span></div></div>`;
 }
 
 // Header ETA — total door-to-door minutes, centered at the top of the page.
@@ -499,13 +515,18 @@ function renderOut(data, live){
   // show only 119s there. Applies to the header ETA below too.
   if (s2 && Array.isArray(s2.predictions))
     s2.predictions = s2.predictions.filter(p => p.route === '119');
-  // No card header here: each row now carries its own route number, and each
-  // stop carries its own name, so a "126 / 119 to Port Authority" title only
-  // repeated what the rows already say.
-  let html = `<div class="card">`;
-  html += renderStop('Washington & 13th', s3 && s3.predictions, lastFetchedAt);
-  html += renderStop('15th & Willow', s2 && s2.predictions, lastFetchedAt);
-  html += `</div>`;
+
+  const p3 = Array.isArray(s3 && s3.predictions) ? s3.predictions : [];
+  const p2 = Array.isArray(s2 && s2.predictions) ? s2.predictions : [];
+  // Same shape as the ride home, with the stop name where the gate number goes.
+  // Washington & 13th always holds its column — it's the stop you actually walk
+  // to. 15th & Willow only earns one when a 119 is genuinely coming; an empty
+  // column for a bus that runs a few times an hour is just dead space.
+  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt)}];
+  if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt)});
+
+  let html = boardCard('To Port Authority', boardMode(p3.concat(p2)), cols,
+                       feedError(s3 && s3.predictions, s2 && s2.predictions));
   html += tunnelCard(data.tunnel);
   document.getElementById('content').innerHTML = html;
 
@@ -575,21 +596,13 @@ function renderIn(homeData, live){
   gateKeys.sort((a,b) => (a === '') - (b === '')
     || (parseInt(a,10) || 0) - (parseInt(b,10) || 0)
     || a.localeCompare(b));
-  const col = (title, list) => `<div><div class="colhead">${title}</div><div class="rows">${
-    list.length ? list.map(p => predRow(p, lastFetchedAt, true)).join('')
-                : '<div class="empty">none soon</div>'}</div></div>`;
-  const mode = realPreds.some(p => p.is_inferred) ? 'inferred'
-             : (realPreds.some(p => p.is_live) ? 'live' : 'sched');
-  html += `<div class="card"><h2><span class="dot ${mode}" style="display:inline-block;vertical-align:middle;margin-right:7px"></span>Home from Port Authority</h2>`;
-  if (!gateKeys.length){
-    // No buses at all -- keep one empty column so the card isn't blank.
-    html += `<div class="twocol" style="grid-template-columns:1fr">${col('126', [])}</div>`;
-  } else {
-    const cols = gateKeys.map(g =>
-      col(g ? ('Gate ' + g) : '126', byGate[g].slice(0,MAX_PER_STOP))).join('');
-    html += `<div class="twocol" style="grid-template-columns:repeat(${gateKeys.length},1fr)">${cols}</div>`;
-  }
-  html += `</div>`;
+  // No buses at all -> keep one empty column so the card isn't blank.
+  const cols = gateKeys.length
+    ? gateKeys.map(g => ({head: g ? ('Gate ' + g) : '126',
+                          rows: colRows(byGate[g], lastFetchedAt)}))
+    : [{head: '126', rows: colRows([], lastFetchedAt)}];
+  html += boardCard('Home from Port Authority', boardMode(realPreds), cols,
+                    feedError(homeData));
   html += tunnelCard(tunnel);
 
   // ETA home (shown in the header): next departure + tunnel-adjusted ride + walk.
