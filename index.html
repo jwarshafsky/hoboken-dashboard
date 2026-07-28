@@ -917,6 +917,34 @@ primeFromSnapshot();
 detectDirection();
 timer = setInterval(refresh, POLL_MS);
 
+// ---- Self-report position ------------------------------------------------
+// Life360's fixes lag minutes, so the family ETAs can call you a "walk" while
+// you're actually on the bus. While this page is open INSIDE THE LAUNCHER
+// (where a same-origin POST to /api/locations gets the family token injected by
+// Caddy), report the phone's live GPS + speed so those ETAs reflect where you
+// really are. Standalone commute.jwarshafsky.com has no token path, so it stays
+// quiet there.
+const TID_BY_ME = {jeff:'HW', jenny:'XW'};
+function myTid(){ try { return TID_BY_ME[localStorage.getItem('launcherMe')] || ''; } catch(e){ return ''; } }
+function reportPosition(){
+  if (window.self === window.top || document.hidden) return;   // standalone/hidden: skip
+  const tid = myTid();
+  if (!tid || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos => {
+    const c = pos.coords;
+    try {
+      fetch('/api/locations', {method:'POST', cache:'no-store',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({tid: tid, lat: c.latitude, lon: c.longitude,
+          acc: c.accuracy,
+          speed: (c.speed != null && c.speed >= 0) ? c.speed : null})});
+    } catch(e){}
+  }, () => {}, {enableHighAccuracy: true, maximumAge: 15000, timeout: 8000});
+}
+reportPosition();
+setInterval(reportPosition, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) reportPosition(); });
+
 // Legacy iOS standalone flag (covers cases the display-mode media query misses).
 if (navigator.standalone) document.body.classList.add('standalone');
 // The body.embedded rule above existed but nothing ever applied the class, so
