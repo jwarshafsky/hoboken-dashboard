@@ -495,6 +495,7 @@ async function refreshOut(){
   // direction's now, and painting this over it would be simply wrong.
   if (dir !== 'out') return;
   cancelSnap();                   // fresh data won the race
+  everLoaded = true;
   renderOut(data);
 }
 
@@ -556,6 +557,7 @@ async function refreshIn(){
   if (homeData && Array.isArray(homeData.predictions)) saveSnap('in', homeData);
   if (dir !== 'in') return;   // flipped mid-fetch; see refreshOut
   cancelSnap();               // fresh data won the race
+  everLoaded = true;
   renderIn(homeData);
 }
 
@@ -742,8 +744,19 @@ function render(){
 }
 
 let inFlight = null, inFlightDir = null;
+// Set once real data has rendered. Until then this page has nothing to show
+// but a stored board, so it fetches regardless of visibility — see below.
+let everLoaded = false;
 function refresh(){
-  if (document.hidden || dir === null) return Promise.resolve();
+  if (dir === null) return Promise.resolve();
+  // `document.hidden` keeps a BACKGROUNDED tab from polling, because every poll
+  // is a billable request on the proxy. But a freshly launched iOS PWA reports
+  // hidden for its first seconds, and bailing out there meant the very first
+  // fetch never went out: the stored board sat under "Times from … — updating…"
+  // until visibilitychange or the 15s poll finally fired. Measured with the tab
+  // hidden: board painted, zero requests attempted. So the guard applies to
+  // POLLING, never to the first load.
+  if (document.hidden && everLoaded) return Promise.resolve();
   if (travelMode === 'ferry'){
     try { refreshFerry(); } catch(e){ console.error(e); }
     return Promise.resolve();
