@@ -3702,6 +3702,10 @@ setInterval(fetchWallMessage, 20000);
 let _wallCfg = {main: 'auto', hidden: []};
 let _everyoneHome = false;      // set by renderLocations()
 let _artIds = [], _artIdx = 0, _artFetchedAt = 0;
+// Jeff (2026-07-29): every picture gets a full 12 seconds on screen.
+const ART_DWELL_MS = 12000;
+const ART_ROSTER_MS = 60000;    // how often to look for newly uploaded pictures
+let _artTimer = null;
 
 function inCommuteWindow(){
   const d = new Date(), day = d.getDay();
@@ -3719,8 +3723,14 @@ function applyWallConfig(){
   const want = _wallCfg.main === 'art' ? true
              : _wallCfg.main === 'map' ? false
              : autoWantsArt();
+  const wasShowing = document.body.classList.contains('show-art');
   document.body.classList.toggle('show-art', !!want);
-  if (want) ensureArt();
+  if (want) {
+    ensureArt();
+    // Turning art ON restarts the dwell clock, so the first picture gets its
+    // full turn instead of inheriting whatever was left of the last timer.
+    if (!wasShowing) armArtTimer();
+  }
   (_wallCfg.panels || ['mapCard','calCard','weatherCard','busCard','ferryCard'])
     .forEach(function (id) {
       const el = document.getElementById(id);
@@ -3729,22 +3739,50 @@ function applyWallConfig(){
 }
 
 function ensureArt(){
-  // Refresh the roster at most every 10 min; rotate through it every 30s.
-  if (Date.now() - _artFetchedAt > 600000) {
+  // Roster refresh every 60s (was 10 min, which is why a just-uploaded picture
+  // seemed never to arrive). /api/artworks is local — Caddy to artwork-api on
+  // this box — so this is cheap. Rotation itself is armArtTimer's job.
+  if (Date.now() - _artFetchedAt > ART_ROSTER_MS) {
     _artFetchedAt = Date.now();
     fetch('/api/artworks', { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         const list = (d && (d.artworks || d)) || [];
+        const prev = _artIds.map(function (x) { return x.url; });
+        const curUrl = _artIds.length ? _artIds[_artIdx % _artIds.length].url : null;
         _artIds = list.filter(function (a) { return a && a.status === 'ready' && a.urls; })
                       .map(function (a) { return {url: a.urls.web, kid: a.kid, title: a.title}; });
-        showArt();
+        // The list is newest-first, so ANY upload shifts every index. Left alone,
+        // _artIdx would silently point at a different picture and the one on
+        // screen would jump mid-turn.
+        const fresh = prev.length
+          ? _artIds.findIndex(function (x) { return prev.indexOf(x.url) === -1; })
+          : -1;
+        if (fresh >= 0) {
+          // Something new was just added — put it up now and give it a full turn,
+          // rather than making Jeff wait out the rest of the cycle.
+          _artIdx = fresh;
+          renderArt();
+          armArtTimer();
+        } else {
+          if (curUrl) {
+            const at = _artIds.findIndex(function (x) { return x.url === curUrl; });
+            _artIdx = at >= 0 ? at : 0;
+          }
+          renderArt();
+        }
       })
       .catch(function () { /* fail soft: the map simply stays */ });
-  } else showArt();
+  } else renderArt();
 }
 
-function showArt(){
+// Paint the CURRENT picture. Deliberately does not advance and does not touch
+// the dwell timer. This split is the whole fix: applyWallConfig() runs from
+// renderLocations() on every locations poll (15s, tightening to 7s when someone
+// nears home), from the config poll (20s) and from the rule re-check (60s). When
+// one function both painted AND advanced, those three callers raced the rotation
+// timer and pictures flipped after a few seconds instead of getting a full turn.
+function renderArt(){
   const img = document.getElementById('artImg');
   const cap = document.getElementById('artCaption');
   if (!img) return;
@@ -3754,11 +3792,34 @@ function showArt(){
     return;
   }
   const a = _artIds[_artIdx % _artIds.length];
-  _artIdx++;
+  // Only touch the DOM when the picture actually changes. This runs every 7-15s
+  // off the locations poll, and reassigning the same src makes the stick's
+  // WebView re-decode the image — a visible flicker on the wall for no reason.
+  if (img.getAttribute('src') === a.url) return;
   img.src = a.url;
   img.alt = a.title || 'Artwork';
   const who = a.kid ? a.kid.charAt(0).toUpperCase() + a.kid.slice(1) : '';
   cap.textContent = [a.title, who].filter(Boolean).join(' — ');
+}
+
+// Advance one picture and restart the dwell clock.
+function nextArt(){
+  if (!_artIds.length) return;
+  _artIdx = (_artIdx + 1) % _artIds.length;
+  renderArt();
+  armArtTimer();
+}
+
+// A self-rescheduling timeout rather than a free-running setInterval, so the
+// dwell is measured from when the picture actually appeared. While art is hidden
+// or the wall is asleep it re-arms WITHOUT advancing, so the roster is not burned
+// through behind a dark screen.
+function armArtTimer(){
+  clearTimeout(_artTimer);
+  _artTimer = setTimeout(function(){
+    if (document.body.classList.contains('show-art') && !document.hidden && !isSleeping()) nextArt();
+    else armArtTimer();
+  }, ART_DWELL_MS);
 }
 
 function fetchWallConfig(){
@@ -3774,10 +3835,10 @@ setInterval(fetchWallConfig, 20000);
 // Re-evaluate the automatic rule on its own clock: "everyone home" and the
 // commute window both change without the config changing.
 setInterval(function(){ if (IS_LOCAL) applyWallConfig(); }, 60000);
-// Rotate the picture while it is showing.
-setInterval(function(){
-  if (document.body.classList.contains('show-art') && !document.hidden && !isSleeping()) showArt();
-}, 30000);
+// Rotation is driven by armArtTimer() (12s per picture, measured from when it
+// appeared) — deliberately NOT a setInterval, which could not stay in step with
+// the re-renders above.
+armArtTimer();
 
 // --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
 let camImgTimer = null, camObjUrl = null;
