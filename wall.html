@@ -3701,10 +3701,18 @@ setInterval(fetchWallMessage, 20000);
 // LOCAL ONLY, like the wall message — the Pages fallback has neither endpoint.
 let _wallCfg = {main: 'auto', hidden: []};
 let _everyoneHome = false;      // set by renderLocations()
-let _artIds = [], _artIdx = 0, _artFetchedAt = 0;
+// Current picture is tracked by URL, not by index: /api/artworks is newest-first,
+// so any upload or edit reshuffles every index.
+let _artIds = [], _artCur = null, _artFetchedAt = 0;
 // Jeff (2026-07-29): every picture gets a full 12 seconds on screen.
 const ART_DWELL_MS = 12000;
-const ART_ROSTER_MS = 60000;    // how often to look for newly uploaded pictures
+// Near-realtime, so a new upload or an edited artist name lands almost at once.
+// /api/artworks is local (Caddy -> artwork-api on this box), so this is cheap.
+const ART_ROSTER_MS = 15000;
+// Recency bias: 5-day half-life, with a floor so older pieces still come round
+// instead of being buried forever.
+const ART_HALF_LIFE_DAYS = 5;
+const ART_MIN_WEIGHT = 0.06;
 let _artTimer = null;
 
 function inCommuteWindow(){
@@ -3739,9 +3747,6 @@ function applyWallConfig(){
 }
 
 function ensureArt(){
-  // Roster refresh every 60s (was 10 min, which is why a just-uploaded picture
-  // seemed never to arrive). /api/artworks is local — Caddy to artwork-api on
-  // this box — so this is cheap. Rotation itself is armArtTimer's job.
   if (Date.now() - _artFetchedAt > ART_ROSTER_MS) {
     _artFetchedAt = Date.now();
     fetch('/api/artworks', { cache: 'no-store' })
@@ -3749,26 +3754,32 @@ function ensureArt(){
       .then(function (d) {
         const list = (d && (d.artworks || d)) || [];
         const prev = _artIds.map(function (x) { return x.url; });
-        const curUrl = _artIds.length ? _artIds[_artIdx % _artIds.length].url : null;
-        _artIds = list.filter(function (a) { return a && a.status === 'ready' && a.urls; })
-                      .map(function (a) { return {url: a.urls.web, kid: a.kid, title: a.title}; });
-        // The list is newest-first, so ANY upload shifts every index. Left alone,
-        // _artIdx would silently point at a different picture and the one on
-        // screen would jump mid-turn.
+        _artIds = list
+          .filter(function (a) { return a && a.status === 'ready' && a.urls; })
+          .map(function (a) {
+            // NOTE the date field is `created`, NOT `created_at` (that one is
+            // null on every record). Getting it wrong silently kills the recency
+            // weighting, because everything then looks equally old.
+            return {
+              url: a.urls.web,
+              kid: a.kid,
+              title: a.title,
+              created: Date.parse(a.created || a.created_at || '') || null
+            };
+          });
+        // Any URL we had not seen before is a new upload. The feed is
+        // newest-first, so [0] is the newest -- straight to the top of the
+        // rotation with a full turn instead of waiting out the cycle.
         const fresh = prev.length
-          ? _artIds.findIndex(function (x) { return prev.indexOf(x.url) === -1; })
-          : -1;
-        if (fresh >= 0) {
-          // Something new was just added — put it up now and give it a full turn,
-          // rather than making Jeff wait out the rest of the cycle.
-          _artIdx = fresh;
+          ? _artIds.filter(function (x) { return prev.indexOf(x.url) === -1; })
+          : [];
+        if (fresh.length) {
+          _artCur = fresh[0].url;
           renderArt();
           armArtTimer();
         } else {
-          if (curUrl) {
-            const at = _artIds.findIndex(function (x) { return x.url === curUrl; });
-            _artIdx = at >= 0 ? at : 0;
-          }
+          // No new picture, but a title or artist may have been edited -- still
+          // re-render, which refreshes the caption in place.
           renderArt();
         }
       })
@@ -3776,36 +3787,76 @@ function ensureArt(){
   } else renderArt();
 }
 
-// Paint the CURRENT picture. Deliberately does not advance and does not touch
-// the dwell timer. This split is the whole fix: applyWallConfig() runs from
-// renderLocations() on every locations poll (15s, tightening to 7s when someone
-// nears home), from the config poll (20s) and from the rule re-check (60s). When
-// one function both painted AND advanced, those three callers raced the rotation
-// timer and pictures flipped after a few seconds instead of getting a full turn.
+// Strongly favour recent work without ever fully retiring the old stuff.
+function artWeight(a){
+  if (!a.created) return ART_MIN_WEIGHT;
+  const days = Math.max(0, (Date.now() - a.created) / 86400000);
+  return Math.max(ART_MIN_WEIGHT, Math.pow(0.5, days / ART_HALF_LIFE_DAYS));
+}
+
+// "Fireworks - Sydney - Jul 28". No name at all when kid === 'both' (Jeff's
+// call); the date is always shown.
+function artLabel(a){
+  const who = (a.kid && a.kid !== 'both')
+    ? a.kid.charAt(0).toUpperCase() + a.kid.slice(1) : '';
+  const when = a.created
+    ? new Date(a.created).toLocaleDateString('en-US', {month: 'short', day: 'numeric'})
+    : '';
+  return [a.title, who, when].filter(Boolean).join(' \u2014 ');
+}
+
+function currentArt(){
+  if (!_artIds.length) return null;
+  const hit = _artIds.filter(function (x) { return x.url === _artCur; })[0];
+  return hit || _artIds[0];
+}
+
+// Weighted random rather than round-robin, so recent art dominates while older
+// art still surfaces. Excludes the picture currently up, so nothing repeats
+// back-to-back.
+function pickArt(){
+  const pool = _artIds.length > 1
+    ? _artIds.filter(function (x) { return x.url !== _artCur; })
+    : _artIds.slice();
+  if (!pool.length) return null;
+  let total = 0;
+  const w = pool.map(function (a) { const v = artWeight(a); total += v; return v; });
+  let r = Math.random() * total;
+  for (let k = 0; k < pool.length; k++) { r -= w[k]; if (r <= 0) return pool[k]; }
+  return pool[pool.length - 1];
+}
+
+// Paint the CURRENT picture. Never advances and never touches the dwell timer:
+// applyWallConfig() reaches here from renderLocations() on every locations poll
+// (15s, tightening to 7s near home), from the config poll and from the rule
+// re-check. When one function both painted AND advanced, those callers raced the
+// rotation timer and pictures flipped after a few seconds.
 function renderArt(){
   const img = document.getElementById('artImg');
   const cap = document.getElementById('artCaption');
   if (!img) return;
-  if (!_artIds.length) {
+  const a = currentArt();
+  if (!a) {
     cap.textContent = 'No artwork yet';
     img.removeAttribute('src');
     return;
   }
-  const a = _artIds[_artIdx % _artIds.length];
-  // Only touch the DOM when the picture actually changes. This runs every 7-15s
-  // off the locations poll, and reassigning the same src makes the stick's
-  // WebView re-decode the image — a visible flicker on the wall for no reason.
-  if (img.getAttribute('src') === a.url) return;
-  img.src = a.url;
+  _artCur = a.url;
+  // Caption refreshed EVERY time, so an edited title or artist name shows up even
+  // though the image itself did not change. (An earlier version returned early
+  // when the src matched, which silently froze the caption.)
+  cap.textContent = artLabel(a);
   img.alt = a.title || 'Artwork';
-  const who = a.kid ? a.kid.charAt(0).toUpperCase() + a.kid.slice(1) : '';
-  cap.textContent = [a.title, who].filter(Boolean).join(' — ');
+  // ...but only touch src on a real change -- reassigning it makes the stick's
+  // WebView re-decode the image, a visible flicker on the wall.
+  if (img.getAttribute('src') !== a.url) img.src = a.url;
 }
 
 // Advance one picture and restart the dwell clock.
 function nextArt(){
-  if (!_artIds.length) return;
-  _artIdx = (_artIdx + 1) % _artIds.length;
+  const a = pickArt();
+  if (!a) return;
+  _artCur = a.url;
   renderArt();
   armArtTimer();
 }
