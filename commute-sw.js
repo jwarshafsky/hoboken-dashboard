@@ -1,6 +1,6 @@
 // Commute PWA service worker — caches only the static shell.
 // Live proxy data (cross-origin) is always fetched from the network.
-const CACHE = 'commute-shell-v7';
+const CACHE = 'commute-shell-v8';
 const SHELL = [
   './',
   'manifest.json',
@@ -31,14 +31,23 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   // Only handle same-origin GETs; let the proxy calls hit the network untouched.
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
-  // Network-first so the shell updates when online, cache as offline fallback.
+  // Stale-while-revalidate. Network-first meant every navigation waited on the
+  // network before painting anything, so the cache only ever earned its keep
+  // offline — it never made an open faster, which is most of the point.
+  //
+  // Safe here specifically because of the guard above: live bus data is
+  // cross-origin and has already returned, so nothing time-sensitive can be
+  // served stale. The worst case is one open painting the previous shell while
+  // the new one downloads, and skipWaiting + clients.claim means it is at most
+  // one open behind.
   e.respondWith(
-    fetch(req)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy));
-        return res;
+    caches.open(CACHE).then((c) =>
+      c.match(req).then((hit) => {
+        const net = fetch(req)
+          .then((res) => { c.put(req, res.clone()); return res; })
+          .catch(() => hit);
+        return hit || net;
       })
-      .catch(() => caches.match(req))
+    )
   );
 });
