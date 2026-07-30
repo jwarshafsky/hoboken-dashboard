@@ -346,6 +346,12 @@ function fetchT(url){
   const c = new AbortController();
   const t = setTimeout(()=>c.abort(), TIMEOUT_MS);
   return fetch(url, {signal:c.signal, headers:{'Accept':'application/json'}})
+    // A 5xx carrying a JSON body used to sail straight through to render: the
+    // outbound board painted "none soon" and marked the feed HEALTHY, i.e. it
+    // stated that no buses were coming when it had simply not been told.
+    // Failing here routes both directions into the error handling they already
+    // have, so a dead proxy reads as "Not updating", never as "no buses".
+    .then((res)=>{ if(!res.ok) throw new Error('proxy ' + res.status); return res; })
     .finally(()=>clearTimeout(t));
 }
 
@@ -769,6 +775,12 @@ let inFlight = null, inFlightDir = null;
 // Set once real data has rendered. Until then this page has nothing to show
 // but a stored board, so it fetches regardless of visibility — see below.
 let everLoaded = false;
+// Inside the launcher this page lives in an iframe that is swapped out rather
+// than unloaded, so `document.hidden` follows the TOP-level document and stays
+// false the whole time the tile is off screen. The launcher posts
+// {type:'hidden'} / {type:'shown'} for exactly this; until we tracked it the
+// 15s poll kept billing the proxy while Jeff sat on the launcher home screen.
+let frameHidden = false;
 function refresh(){
   if (dir === null) return Promise.resolve();
   // `document.hidden` keeps a BACKGROUNDED tab from polling, because every poll
@@ -778,7 +790,7 @@ function refresh(){
   // until visibilitychange or the 15s poll finally fired. Measured with the tab
   // hidden: board painted, zero requests attempted. So the guard applies to
   // POLLING, never to the first load.
-  if (document.hidden && everLoaded) return Promise.resolve();
+  if ((document.hidden || frameHidden) && everLoaded) return Promise.resolve();
   if (travelMode === 'ferry'){
     try { refreshFerry(); } catch(e){ console.error(e); }
     return Promise.resolve();
@@ -883,7 +895,13 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh
 // The launcher keeps this page alive in a background iframe, where
 // `document.hidden` follows the TOP-level document and so never fires here.
 addEventListener('message', e => {
-  if (e.origin !== location.origin || !e.data || e.data.type !== 'shown') return;
+  if (e.origin !== location.origin || !e.data) return;
+  // Swapped out for another tile: stop polling until we are told otherwise.
+  // Only 'shown' clears this, so a stuck flag cannot be un-stuck by the top
+  // document merely becoming visible again (the tile may still be off screen).
+  if (e.data.type === 'hidden'){ frameHidden = true; return; }
+  if (e.data.type !== 'shown') return;
+  frameHidden = false;
   // Coming back to the tab re-detects direction: Flip is a temporary override
   // for the trip you're on, not a setting to undo later. This is why there is
   // no "use my location" link — automatic IS the default, always.
