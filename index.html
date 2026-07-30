@@ -653,8 +653,10 @@ async function refreshOut(){
   const data = await res.json();
   saveSnap('out', data);          // before renderOut, which filters in place
   // Flipped while this was in flight — the board on screen is the other
-  // direction's now, and painting this over it would be simply wrong.
-  if (dir !== 'out') return;
+  // direction's now, and painting this over it would be simply wrong. The same
+  // is true of the MODE: tapping Ferry during a cold 4-5s fetch used to end with
+  // bus times landing on top of the ferry board seconds later.
+  if (dir !== 'out' || travelMode !== 'bus') return;
   cancelSnap();                   // fresh data won the race
   everLoaded = true;
   renderOut(data);
@@ -723,7 +725,7 @@ async function refreshIn(){
   } catch(e){ homeData = {error:'unavailable'}; }
   // Only snapshot a real inbound response — see the `supported` gate below.
   if (homeData && Array.isArray(homeData.predictions)) saveSnap('in', homeData);
-  if (dir !== 'in') return;   // flipped mid-fetch; see refreshOut
+  if (dir !== 'in' || travelMode !== 'bus') return;   // flipped mid-fetch; see refreshOut
   cancelSnap();               // fresh data won the race
   everLoaded = true;
   renderIn(homeData);
@@ -918,13 +920,19 @@ function paintSnap(data){
 // tailnet), so the snapshot stays unseen exactly when it should be.
 const SNAP_PAINT_DELAY_MS = 250;
 let snapTimer = null;
+// The snapshot is a BUS concept — it is a stored copy of a fetched board, and
+// the ferry has nothing to fetch. Checked both when arming and when firing:
+// arming covers a flip made while already on the ferry, firing covers a tap on
+// the Ferry tab in the 250ms after a bus snapshot was armed.
 function scheduleSnap(d){
+  if (travelMode !== 'bus') return;
   const snap = loadSnap(d);
   if (!snap) return;
   clearTimeout(snapTimer);
   snapTimer = setTimeout(() => {
     snapTimer = null;
-    if (dir === d) paintSnap(snap);   // still the same direction, still waiting
+    // still the same direction, still on the bus, still waiting
+    if (dir === d && travelMode === 'bus') paintSnap(snap);
   }, SNAP_PAINT_DELAY_MS);
 }
 // Real data landed — drop any snapshot still queued behind it.
@@ -934,6 +942,12 @@ function cancelSnap(){ clearTimeout(snapTimer); snapTimer = null; }
 // instead of blanking to "Loading…" for however long NJT takes to answer.
 function paintOrClear(){
   setHdrEta(null);
+  // Ferry mode loads nothing: refreshFerry() paints the local timetable in this
+  // same tick, so "Loading…" would be a lie and there is no race for a stored
+  // board to lose. Flipping direction on the ferry used to arm a BUS snapshot
+  // here, which then landed on top of the ferry board 250ms later — the board
+  // was right for a quarter of a second and then showed buses.
+  if (travelMode !== 'bus') return;
   document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
   scheduleSnap(dir);   // only lands if the fetch is slower than the delay
 }
@@ -941,6 +955,7 @@ function paintOrClear(){
 // Ferry board. No network at all — the timetable is local, so this also works
 // with the proxy down.
 function refreshFerry(){
+  cancelSnap();               // this board won the race, same as the bus paths
   const leg = FERRY[isWeekendNow() ? 'weekend' : 'weekday'][dir === 'out' ? 'out' : 'in'];
   const list = nextFerries(leg.times, 4);
   let rows;
