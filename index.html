@@ -126,6 +126,27 @@
     text-transform:uppercase; color:var(--dim); margin-right:auto; white-space:nowrap}
   .tunnel .big{font-size:22px; font-weight:800; line-height:1}
   .tunnel .lbl{font-size:13px; color:var(--dim); white-space:nowrap}
+  /* Tap the row for recent Port Authority advisories. Same trick as .late:
+     always rendered, shown purely in CSS, so the 15s repaint can't collapse it
+     and re-opening costs no fetch. */
+  .tunnel{cursor:pointer; -webkit-tap-highlight-color:transparent}
+  .tunnel .tchev{font-size:15px; color:var(--dim); transition:transform .15s;
+    margin-left:2px}
+  body.show-tunnel-alerts .tunnel .tchev{transform:rotate(90deg)}
+  .tunnel-alerts{display:none; margin-top:10px; border-top:1px solid var(--line);
+    padding-top:9px}
+  body.show-tunnel-alerts .tunnel-alerts{display:block}
+  .ta-item{display:flex; gap:8px; font-size:13px; line-height:1.35;
+    padding:5px 0; border-bottom:1px solid var(--line)}
+  .ta-item:last-child{border-bottom:0}
+  .ta-time{color:var(--accent); font-weight:700; white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  /* Superseded/cleared advisories stay visible but recede — the sequence is the
+     story ("crash blocking lane" → "cleared"), so dropping them loses context. */
+  .ta-item.resolved{opacity:.55}
+  .ta-item.resolved .ta-time{color:var(--dim)}
+  .ta-empty{color:var(--dim); font-size:13px; padding:3px 0}
+  .ta-empty.err{color:var(--warn)}
   .empty{color:var(--dim); font-size:14px; padding:8px 2px}
   /* Upstream failure reads amber — distinct from quiet emptiness. */
   .empty.err{color:var(--warn)}
@@ -546,14 +567,79 @@ function tunnelCard(tunnel){
   const name = `<span class="tname">Lincoln Tunnel</span>`;
   if (!tunnel || tunnel.error){
     return `<div class="card"><div class="tunnel">${name}
-      <span class="lbl">unavailable</span></div></div>`;
+      <span class="lbl">unavailable</span><span class="tchev">›</span></div>
+      ${tunnelAlertsHtml()}</div>`;
   }
   const tt = parseInt(tunnel.travelTime, 10);
   const c = tunnelColor(tt);
   return `<div class="card"><div class="tunnel">${name}
     <span class="big" style="color:${c}">${isFinite(tt)?tt:'--'}</span>
-    <span class="lbl">min</span></div></div>`;
+    <span class="lbl">min</span><span class="tchev">›</span></div>
+    ${tunnelAlertsHtml()}</div>`;
 }
+
+// ── Lincoln Tunnel advisories (tap the tunnel row) ────────────────────────
+// Fetched ONLY on tap, never on the 15s poll: the upstream is Port Authority's
+// alert feed via the proxy, and PANYNJ throttles chatty callers.
+const TUNNEL_ALERTS_TTL_MS = 120000;
+let tunnelAlerts = null;          // last response, or {alerts:[],error}
+let tunnelAlertsAt = 0;
+let tunnelAlertsLoading = false;
+
+// PANYNJ text is third-party content going into innerHTML — escape it.
+function escHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function tunnelAlertsHtml(){
+  let inner;
+  if (!tunnelAlerts){
+    inner = tunnelAlertsLoading
+      ? '<div class="ta-empty">Checking Port Authority…</div>'
+      : '<div class="ta-empty">Tap for recent alerts</div>';
+  } else if (tunnelAlerts.error){
+    inner = '<div class="ta-empty err">Alerts unavailable</div>';
+  } else if (!(tunnelAlerts.alerts || []).length){
+    inner = `<div class="ta-empty">No alerts in the past ${tunnelAlerts.window_hours || 2} hours</div>`;
+  } else {
+    inner = tunnelAlerts.alerts.map(a =>
+      `<div class="ta-item${a.resolved ? ' resolved' : ''}">
+         <span class="ta-time">${escHtml(a.time)}</span>
+         <span class="ta-msg">${escHtml(a.message)}</span>
+       </div>`).join('');
+  }
+  return `<div class="tunnel-alerts">${inner}</div>`;
+}
+
+// Repaint just the alerts block, so loading state lands without waiting for the
+// next 15s render (and without disturbing the bus columns).
+function paintTunnelAlerts(){
+  document.querySelectorAll('.tunnel-alerts').forEach(n => { n.outerHTML = tunnelAlertsHtml(); });
+}
+
+function loadTunnelAlerts(){
+  if (tunnelAlertsLoading) return;
+  if (tunnelAlerts && !tunnelAlerts.error && Date.now() - tunnelAlertsAt < TUNNEL_ALERTS_TTL_MS) return;
+  tunnelAlertsLoading = true;
+  paintTunnelAlerts();
+  fetchT(PROXY_URL + '/tunnel_alerts')
+    .then(r => r.json())
+    .then(d => { tunnelAlerts = d; tunnelAlertsAt = Date.now(); })
+    .catch(() => { tunnelAlerts = {alerts: [], error: true}; })
+    .finally(() => { tunnelAlertsLoading = false; paintTunnelAlerts(); });
+}
+
+// Delegated: #content survives the repaint, the cards inside it do not. Bound on
+// the row only, so tapping an alert doesn't collapse the list you just opened.
+// (Guarded: an unguarded null here would throw at parse-time-adjacent script
+// level and leave the page inert at "Loading…", same failure mode the
+// localStorage try/catch below exists to prevent.)
+const _contentEl = document.getElementById('content');
+if (_contentEl) _contentEl.addEventListener('click', (e) => {
+  if (!e.target.closest('.tunnel')) return;
+  if (document.body.classList.toggle('show-tunnel-alerts')) loadTunnelAlerts();
+});
 
 // Header ETA — total door-to-door minutes, centered at the top of the page.
 function setHdrEta(mins){
