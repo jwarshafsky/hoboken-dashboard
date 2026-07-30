@@ -48,7 +48,10 @@
   body.embedded{padding-top:14px !important}
   .top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:14px; position:relative}
   .hdr-eta{position:absolute; left:50%; transform:translateX(-50%); text-align:center;
-    font-size:24px; font-weight:800; line-height:1; color:var(--live); pointer-events:none}
+    /* Neutral, NOT --live. This is a door-to-door total, and --live means "we
+       have a live fix" everywhere else on the page — a 52-minute total rendered
+       in the good-news colour straight off a dead feed. */
+    font-size:24px; font-weight:800; line-height:1; color:var(--txt); pointer-events:none}
   .hdr-eta small{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:2px}
   /* Fixed 20px/800 to match every other app page; vw units resolved against
      the iframe width and made this title smaller inside the launcher. */
@@ -77,7 +80,9 @@
   .tabs{display:flex; gap:4px; background:var(--card2); border:1px solid var(--line);
     border-radius:13px; padding:4px; margin-bottom:14px}
   .tab{flex:1; background:none; border:0; border-radius:10px; color:var(--dim);
-    font:inherit; font-size:14px; font-weight:700; padding:10px 0; cursor:pointer;
+    /* 13px, not 10px: at 14px/1.2 text this is what puts the control over the
+       44px minimum touch target. It was ~42px. */
+    font:inherit; font-size:14px; font-weight:700; padding:13px 0; cursor:pointer;
     touch-action:manipulation}
   .tab[aria-selected="true"]{background:var(--accent); color:var(--onaccent)}
   .card{background:var(--card); border:1px solid var(--line); border-radius:16px;
@@ -105,6 +110,10 @@
   .loadlbl{font-size:11px; color:var(--dim); margin-left:5px}
   .tag{font-size:10px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; margin-top:2px}
   .tag.est{color:var(--warn)}
+  /* A PABT departure with no bus broadcasting for it yet. Marked like `est` is:
+     the exception carries the label, so an unmarked row means a tracked bus. */
+  .tag.sched{color:var(--dim)}
+  .row.sched{box-shadow:inset 3px 0 0 var(--dim)}
   /* Route number, tucked under the fullness bars. */
   .rt{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:3px}
   .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
@@ -120,16 +129,30 @@
   .empty{color:var(--dim); font-size:14px; padding:8px 2px}
   /* Upstream failure reads amber — distinct from quiet emptiness. */
   .empty.err{color:var(--warn)}
+  /* NJT dropped the vehicle. Louder than "none soon" because the two are
+     different facts and only one of them is actually knowable: a stripped
+     column means we lost the bus, not that no bus is coming. */
+  .empty.nolive{color:var(--warn); font-size:17px; font-weight:700; padding:10px 2px}
+  .empty.nolive span{display:block; font-size:12px; font-weight:600;
+    color:var(--dim); margin-top:3px}
   .note{background:var(--notebg); border:1px dashed var(--line); border-radius:12px;
     padding:12px 14px; color:var(--dim); font-size:13px; margin-bottom:14px}
   .foot{display:flex; justify-content:space-between; align-items:center;
     gap:10px; color:var(--warn); font-size:12px; margin-top:10px}
   .foot:empty{display:none}
   .foot .stat{display:flex; align-items:center; gap:6px}
-  body.stale #content{opacity:.5}
-  /* Painted from the last-good board while a fresh fetch is still in flight.
-     Lighter than .stale — this is "a moment behind", not "not updating". */
-  body.pending #content{opacity:.66; transition:opacity .15s}
+  /* Staleness is signalled with a full-opacity coloured rail, NOT by dimming.
+     Dimming #content dropped .meta (11-12px, --dim) to ~2.8:1 contrast, which
+     is unreadable on a phone in direct sun — precisely the situation (outdoors,
+     on a platform, deciding whether to run) where these times matter most. An
+     inset shadow rather than a border so applying it shifts nothing on screen.
+     .pending = "a moment behind"; .stale = "not updating at all". */
+  body.pending .card{box-shadow:inset 0 3px 0 var(--warn)}
+  body.stale .card{box-shadow:inset 0 3px 0 var(--urgent)}
+  /* #hdrEta is a SIBLING of #content, so it escaped the old dimming entirely —
+     the largest, brightest number on the page was the one thing with no
+     staleness signal at all. */
+  body.pending .hdr-eta, body.stale .hdr-eta{color:var(--dim)}
   a.reset{color:var(--accent); text-decoration:none}
   /* ---- Pull to refresh (custom — native PTR is dead in an installed iOS PWA) ---- */
   .ptr{position:fixed; top:-36px; left:50%; transform:translateX(-50%);
@@ -371,6 +394,17 @@ function tunnelColor(tt){
   return 'var(--live)';
 }
 
+// "Do I need to run?" should be answerable by colour, not by reading digits.
+// Same idea as tunnelColor and inverted for the same reason: on a tunnel a BIG
+// number is the bad one, on a bus a SMALL one is. Null (a clock time rather
+// than a countdown) stays inherit — there is no urgency to infer from it.
+function minsColor(m){
+  if (m === null || !isFinite(m)) return '';
+  if (m <= 2) return 'var(--urgent)';
+  if (m <= 6) return 'var(--warn)';
+  return 'var(--live)';
+}
+
 // Bus fullness as 3 ascending bars (cell-signal style) instead of NJT's raw
 // "HALF_EMPTY" text. EMPTY→1 green, HALF_EMPTY→2 yellow, FULL→3 red.
 function loadBars(passload){
@@ -405,13 +439,20 @@ function predRow(p, fetchedAt, compact){
   const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
-  const tag = p.is_inferred ? '<div class="tag est">est</div>' : '';
+  // Schedule-only: the feed lists this departure but nothing is broadcasting for
+  // it. Only the INBOUND board ever renders these — PABT is an origin terminal
+  // so a scheduled departure there is a real bus about to leave; outbound strips
+  // them as phantoms before they reach here. Untagged therefore means tracked.
+  const sched = !p.is_live && !p.is_inferred;
+  const tag = p.is_inferred ? '<div class="tag est">est</div>'
+            : (sched ? '<div class="tag sched">sched</div>' : '');
+  const col = minsColor(m);
   // Fleet number of the actual bus (e.g. 20541), under the fullness bars.
   // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
   // so render nothing rather than an empty line in that case.
   const rt = p.vehicle_id ? `<span class="rt">#${p.vehicle_id}</span>` : '';
-  return `<div class="row"${compact ? ' style="padding:10px 12px"' : ''}>
-    <span class="mins">${label}${unit}</span>
+  return `<div class="row${sched ? ' sched' : ''}"${compact ? ' style="padding:10px 12px"' : ''}>
+    <span class="mins"${col ? ` style="color:${col}"` : ''}>${label}${unit}</span>
     <span class="meta">${lateNote(p)}${load}${rt}${tag}</span>
   </div>`;
 }
@@ -424,6 +465,14 @@ function predRow(p, fetchedAt, compact){
 // object) pass through untouched so the error branch still fires.
 function realBuses(preds){
   return Array.isArray(preds) ? preds.filter(p => p.is_live || p.is_inferred) : preds;
+}
+
+// The feed listed departures and every one of them was a phantom — i.e. NJT has
+// lost the vehicles, which is a different statement from "no bus is coming".
+// Must be read BEFORE realBuses() mutates the column away.
+function allPhantom(preds){
+  return Array.isArray(preds) && preds.length > 0
+    && !preds.some(p => p.is_live || p.is_inferred);
 }
 
 // Drop departures whose bus has already gone. On fresh data this is a no-op,
@@ -461,9 +510,14 @@ function boardCard(title, mode, cols, note, stack){
 
 // Rows for one column: the departures, or a quiet "none soon". `max` caps how
 // many show (defaults to MAX_PER_STOP).
-function colRows(preds, fetchedAt, max){
-  return (Array.isArray(preds) && preds.length)
-    ? preds.slice(0, max || MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('')
+function colRows(preds, fetchedAt, max, dropped){
+  if (Array.isArray(preds) && preds.length)
+    return preds.slice(0, max || MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('');
+  // "none soon" asserts something we may not know. If the feed DID list
+  // departures and phantom-stripping emptied the column, the fact is that NJT
+  // has lost the vehicles — the ~85% dropout — not that no bus is coming.
+  return dropped
+    ? `<div class="empty nolive">no live bus<span>NJT isn’t tracking one right now</span></div>`
     : '<div class="empty">none soon</div>';
 }
 
@@ -528,6 +582,11 @@ function renderOut(data, live){
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
+  // Read before the strip below empties the column, so a column that vanishes
+  // because NJT lost its buses can say so. Only Washington & 13th needs it:
+  // 15th & Willow is only given a column when a 119 is genuinely coming, so its
+  // empty branch is unreachable.
+  const drop3 = allPhantom(s3 && s3.predictions);
   // Strip phantoms first, so neither the board nor the header ETA below can be
   // built from a timetable entry with no bus behind it. Then drop anything that
   // has already left, which only bites when this data is a few minutes old.
@@ -546,7 +605,7 @@ function renderOut(data, live){
   // column for a bus that runs a few times an hour is just dead space.
   // Stacked, not side by side: 13th on top with up to 4 departures, 15th below
   // with up to 3. 15th only earns its block when a 119 is genuinely coming.
-  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt, 4)}];
+  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt, 4, drop3)}];
   if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt, 3)});
 
   let html = boardCard('To Port Authority', boardMode(p3.concat(p2)), cols,
@@ -583,6 +642,12 @@ async function refreshIn(){
   everLoaded = true;
   renderIn(homeData);
 }
+
+// How many polls a PABT gate keeps its column after dropping out of the feed.
+// Two is enough to ride out a single-cycle blip without pinning a gate that has
+// genuinely closed for the evening.
+const GATE_HOLD_POLLS = 2;
+const gateHold = {};
 
 // Split from the fetch for the same reason as renderOut: this is what paints a
 // stored board the instant the page opens.
@@ -622,6 +687,25 @@ function renderIn(homeData, live){
     if (!(g in byGate)){ byGate[g] = []; gateKeys.push(g); }
     byGate[g].push(p);
   }
+  // Gates come and go with the feed's dropout, and #content is rebuilt from
+  // scratch every poll — so a gate absent for a single cycle let the gate below
+  // it slide up into its screen position, under a thumb already on the way
+  // down. Hold a vanished gate's column for a couple of polls with an explicit
+  // placeholder instead. Live data only: repainting a snapshot must not age the
+  // hold out, or backgrounding the tab would expire every gate at once.
+  // Held gates are RENDERED on every paint, but only aged by a live one. A
+  // snapshot repaint is the same board drawn again, not another poll's worth of
+  // evidence that the gate is gone — letting it decrement meant reopening the
+  // tab collapsed the layout immediately, which is what this exists to stop.
+  if (supported){
+    if (live !== false) for (const g of gateKeys) gateHold[g] = GATE_HOLD_POLLS;
+    for (const g of Object.keys(gateHold)){
+      if (g in byGate) continue;
+      if (live !== false && --gateHold[g] <= 0){ delete gateHold[g]; continue; }
+      byGate[g] = [];
+      gateKeys.push(g);
+    }
+  }
   // Ascending gate order (213 left, 214 right); a blank/unknown gate sorts last.
   gateKeys.sort((a,b) => (a === '') - (b === '')
     || (parseInt(a,10) || 0) - (parseInt(b,10) || 0)
@@ -629,7 +713,8 @@ function renderIn(homeData, live){
   // No buses at all -> keep one empty column so the card isn't blank.
   const cols = gateKeys.length
     ? gateKeys.map(g => ({head: g ? ('Gate ' + g) : '126',
-                          rows: colRows(byGate[g], lastFetchedAt)}))
+                          rows: colRows(byGate[g], lastFetchedAt, null,
+                                        byGate[g].length === 0)}))
     : [{head: '126', rows: colRows([], lastFetchedAt)}];
   // Stacked (gates sorted ascending -> 213 on top, 214 below), not side by side.
   html += boardCard('Home from Port Authority', boardMode(realPreds), cols,
@@ -656,15 +741,30 @@ function renderIn(homeData, live){
 }
 
 let lastOkAt = 0;
+// A dead feed used to keep firing at the flat 15s poll indefinitely. Back off
+// instead — but cap at 60s rather than the couple of minutes you would normally
+// pick: this is a bus board, and being slow to notice the feed came back is
+// worse than the handful of requests it saves.
+const MAX_BACKOFF_MS = 60000;
+let failStreak = 0, nextTryAt = 0;
+function noteOk(){ failStreak = 0; nextTryAt = 0; }
+function noteFail(){
+  failStreak++;
+  nextTryAt = Date.now() +
+    Math.min(MAX_BACKOFF_MS, POLL_MS * Math.pow(2, failStreak - 1));
+}
+
 function markHealth(data){
   const ok = !!data;
   const el = document.getElementById('staleMsg');
   const fmt = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
   if (ok) {
+    noteOk();
     lastOkAt = Date.now();
     el.hidden = true; el.textContent = '';
     document.body.classList.remove('stale');
   } else {
+    noteFail();
     // The one thing the board above genuinely cannot tell you: it has stopped
     // updating. Frozen countdowns look exactly like live ones.
     el.hidden = false;
@@ -697,6 +797,18 @@ function markFreshness(data){
   }
 }
 
+// Say the board is behind BEFORE the fetch goes out, not after it lands. The
+// treatment below already existed but only ever ran on arriving data, so the
+// commonest interaction there is — tile hidden ten minutes in a pocket, pulled
+// out on the platform, cold proxy taking ~5s — showed a ten-minute-old
+// countdown at full confidence for that entire window. Countdowns are computed
+// once at render and never decay, so "4 min" can mean a bus that left six
+// minutes ago.
+function markPendingIfStale(){
+  if (!everLoaded || !lastFetchedAt) return;
+  markFreshness({fetched_at: lastFetchedAt});
+}
+
 // Draw the stored board for the current direction right now, ahead of any
 // network call. `false` = not live, so it can't touch the health footer that
 // the real fetch behind it is still deciding.
@@ -712,7 +824,13 @@ function paintSnap(data){
 // snapshot back for a beat means the fresh board almost always wins the race
 // and the stale one is never seen; on a genuinely slow or cold fetch it still
 // appears fast enough to beat a blank screen.
-const SNAP_PAINT_DELAY_MS = 600;
+// 250ms, not the original 600ms. That 600 was chosen on the assumption quoted
+// above — a warm proxy answering in ~0.1s — which holds INSIDE the commute
+// window and nowhere else: measured cold, the proxy takes 4.4-4.9s, so off-peak
+// this spent 600ms on a blank screen before a four-second wait. 250ms still
+// comfortably loses the race to a warm response (~80ms local, ~150ms via the
+// tailnet), so the snapshot stays unseen exactly when it should be.
+const SNAP_PAINT_DELAY_MS = 250;
 let snapTimer = null;
 function scheduleSnap(d){
   const snap = loadSnap(d);
@@ -781,7 +899,9 @@ let everLoaded = false;
 // {type:'hidden'} / {type:'shown'} for exactly this; until we tracked it the
 // 15s poll kept billing the proxy while Jeff sat on the launcher home screen.
 let frameHidden = false;
-function refresh(){
+// `isPoll` marks the unattended 15s tick. Only those are subject to backoff —
+// a pull-to-refresh, a flip, or coming back to the tile always tries at once.
+function refresh(isPoll){
   if (dir === null) return Promise.resolve();
   // `document.hidden` keeps a BACKGROUNDED tab from polling, because every poll
   // is a billable request on the proxy. But a freshly launched iOS PWA reports
@@ -791,6 +911,7 @@ function refresh(){
   // hidden: board painted, zero requests attempted. So the guard applies to
   // POLLING, never to the first load.
   if ((document.hidden || frameHidden) && everLoaded) return Promise.resolve();
+  if (isPoll && failStreak && Date.now() < nextTryAt) return Promise.resolve();
   if (travelMode === 'ferry'){
     try { refreshFerry(); } catch(e){ console.error(e); }
     return Promise.resolve();
@@ -799,6 +920,7 @@ function refresh(){
   // resolving fires another a beat later; without this both go out, and the
   // first one is the slow uncached one we're trying to hide.
   if (inFlight && inFlightDir === dir) return inFlight;
+  markPendingIfStale();
   inFlightDir = dir;
   inFlight = (dir === 'out' ? refreshOut() : refreshIn())
     .catch(e => { console.error(e); markHealth(null); })
@@ -851,21 +973,35 @@ function attachPullToRefresh(scroller, onRefresh, canStart){
     ind.classList.toggle('ready', !!ready);
     ind.classList.toggle('spinning', !!spin);
   };
-  target.addEventListener('touchstart', e => {
-    if (busy || e.touches.length !== 1){ active = false; return; }
-    active = topOf() <= 0 && (!canStart || canStart());
-    startY = e.touches[0].clientY; dist = 0;
-  }, {passive:true});
-  target.addEventListener('touchmove', e => {
+  // touchmove has to be non-passive (it calls preventDefault to own the drag),
+  // but registering it permanently on window makes Safari block every scroll
+  // frame on JS for a handler that early-returns on all but a gesture starting
+  // at the very top. So it is attached only for the life of such a gesture.
+  const onMove = e => {
     if (!active || busy) return;
     const dy = e.touches[0].clientY - startY;
-    if (dy <= 0 || topOf() > 0){ active = false; if (dist) set(0,false); dist = 0; return; }
+    if (dy <= 0 || topOf() > 0){ endGesture(); return; }
     e.preventDefault();
     dist = Math.min(MAX, dy * 0.5);
     set(dist, dist >= THRESH);
-  }, {passive:false});
+  };
+  const detachMove = () => target.removeEventListener('touchmove', onMove);
+  function endGesture(){
+    active = false;
+    if (dist) set(0, false);
+    dist = 0;
+    detachMove();
+  }
+  target.addEventListener('touchstart', e => {
+    if (busy || e.touches.length !== 1){ active = false; detachMove(); return; }
+    active = topOf() <= 0 && (!canStart || canStart());
+    startY = e.touches[0].clientY; dist = 0;
+    // Re-adding an identical listener is a no-op, so repeat touches can't stack.
+    if (active) target.addEventListener('touchmove', onMove, {passive:false});
+  }, {passive:true});
   const finish = () => {
     if (busy) return;
+    detachMove();
     if (active && dist >= THRESH){
       busy = true; active = false; set(THRESH, true, true);
       const t0 = Date.now();
@@ -886,8 +1022,10 @@ function setMode(m){
   // The right direction anchors differ per mode (PABT vs the ferry terminals),
   // so an auto-detected direction is re-derived for the new mode.
   render();
-  if (manual) refresh(); else detectDirection();
-  refresh();
+  // One refresh, not two. The trailing unconditional call meant the manual
+  // branch fetched twice; harmless for bus (the in-flight coalesce absorbs it)
+  // but the ferry board has no coalesce and rendered itself twice per tap.
+  if (manual) refresh(); else { detectDirection(); refresh(); }
 }
 document.getElementById('tabBus').addEventListener('click', ()=>setMode('bus'));
 document.getElementById('tabFerry').addEventListener('click', ()=>setMode('ferry'));
@@ -902,6 +1040,7 @@ addEventListener('message', e => {
   if (e.data.type === 'hidden'){ frameHidden = true; return; }
   if (e.data.type !== 'shown') return;
   frameHidden = false;
+  noteOk();   // back on screen: try immediately, whatever the backoff was at
   // Coming back to the tab re-detects direction: Flip is a temporary override
   // for the trip you're on, not a setting to undo later. This is why there is
   // no "use my location" link — automatic IS the default, always.
@@ -933,7 +1072,7 @@ function primeFromSnapshot(){
 
 primeFromSnapshot();
 detectDirection();
-timer = setInterval(refresh, POLL_MS);
+timer = setInterval(() => refresh(true), POLL_MS);
 
 // ---- Self-report position ------------------------------------------------
 // Life360's fixes lag minutes, so the family ETAs can call you a "walk" while
@@ -945,7 +1084,10 @@ timer = setInterval(refresh, POLL_MS);
 const TID_BY_ME = {jeff:'HW', jenny:'XW'};
 function myTid(){ try { return TID_BY_ME[localStorage.getItem('launcherMe')] || ''; } catch(e){ return ''; } }
 function reportPosition(){
-  if (window.self === window.top || document.hidden) return;   // standalone/hidden: skip
+  // Same iframe caveat as the poll guard: inside the launcher `document.hidden`
+  // follows the top document, so this kept taking high-accuracy GPS fixes with
+  // the tile off screen. frameHidden is the signal that actually tracks it.
+  if (window.self === window.top || document.hidden || frameHidden) return;
   const tid = myTid();
   if (!tid || !navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(pos => {
