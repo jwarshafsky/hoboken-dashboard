@@ -346,6 +346,99 @@
     object-fit: contain; border-radius: 10px;
   }
   #artCaption { font-size: var(--fs-small, 15px); color: var(--c-mute, #8ea0b5); flex: 0 0 auto; }
+
+  /* ---- Frame mode ---------------------------------------------------------
+     Full-screen artwork floating in a museum mat, after the Samsung Frame. The
+     whole dashboard goes away — that is the point of it — so this is the only
+     thing on the panel. --mat is the one knob worth turning if the room wants a
+     different board colour. */
+  #frameMode { display: none; }
+  body.frame-mode #frameMode {
+    display: flex; position: fixed; inset: 0; z-index: 1500;
+    flex-direction: column; align-items: center; justify-content: center;
+    /* TWO declarations, and the literal MUST come first. This was
+       `background: var(--mat, #e6dfd3)` and the mat came out near-black on the
+       actual wall: the Google TV stick's WebView drops a whole declaration when
+       var() appears inside a SHORTHAND, so the board colour never applied and
+       the gradient below composited over the dashboard's dark page instead.
+       The longhand takes the variable if the engine supports it and is simply
+       ignored if not, leaving the literal standing. */
+    background-color: #e6dfd3;
+    background-color: var(--mat, #e6dfd3);
+    /* Mat board is never a flat fill — across 65" a dead-even colour reads as a
+       blank screen rather than as paper, so a very slight centre lift and edge
+       fall-off stand in for the way a real mat catches room light. */
+    background-image: radial-gradient(115% 85% at 50% 36%,
+      rgba(255,255,255,.5), rgba(0,0,0,.04) 62%, rgba(0,0,0,.13));
+  }
+  body.frame-mode > *:not(#frameMode) { display: none !important; }
+
+  /* The window hugs the artwork exactly (inline-block on a block image), which
+     is what makes the bevel read as a mat CUT to the picture rather than a box
+     the picture happens to sit in. */
+  .fr-window { display: inline-block; line-height: 0; position: relative; }
+  .fr-window img {
+    display: block; max-width: 72vw; max-height: 70vh;
+    opacity: 0; transition: opacity .55s ease;
+  }
+  .fr-window img.in { opacity: 1; }
+  /* cut edge · the light catching the bevel · recess · the shadow it throws */
+  .fr-window::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    box-shadow:
+      inset 0 0 0 1px rgba(58,46,32,.30),
+      0 1px 0 2px rgba(255,255,255,.5),
+      0 3px 7px rgba(0,0,0,.17),
+      0 26px 55px rgba(0,0,0,.19);
+  }
+  .fr-plate {
+    margin-top: 30px; text-align: center; line-height: 1.5;
+    font-size: 15px; font-weight: 700; letter-spacing: .17em;
+    text-transform: uppercase; color: rgba(52,42,30,.62);
+  }
+  .fr-plate .who {
+    display: block; margin-top: 4px; font-size: 14px; font-weight: 600;
+    letter-spacing: .06em; text-transform: none; color: rgba(52,42,30,.44);
+  }
+  /* The comment ticker is MOVED into the mat in frame mode rather than
+     duplicated, so it keeps one implementation — but it was styled for a dark
+     panel, so the colours have to flip for the board. */
+  body.frame-mode #artTicker {
+    max-width: 72vw; margin-top: 20px; padding-top: 10px;
+    border-top: 1px solid rgba(58,46,32,.16);
+  }
+  body.frame-mode #artTickerTrack { font-size: 15px; color: rgba(52,42,30,.6); }
+  body.frame-mode #artTickerTrack .who { color: rgba(124,72,20,.85); }
+  body.frame-mode #artTickerTrack .sep { color: rgba(52,42,30,.3); }
+  /* A note posted from the phone still has to reach the wall — frame mode hides
+     the panel that normally carries it, so it is mirrored onto the mat. */
+  #frameMsg { display: none; }
+  /* IN FLOW, not absolutely pinned to the bottom: pinned, it landed directly on
+     top of the comment ticker and both became unreadable. In the flex column the
+     mat simply re-centres around whatever is present. */
+  body.frame-mode.has-wall-msg #frameMsg {
+    display: block; margin-top: 22px; max-width: 78vw;
+    background: rgba(28,22,14,.88); color: #fdf9f2; padding: 11px 24px;
+    border-radius: 999px; font-size: 17px; font-weight: 600; text-align: center;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+
+  /* What the family said about the picture that is up, scrolling along the
+     bottom. Hidden entirely when a piece has no comments, so the artwork keeps
+     the full height rather than sitting above an empty strip. */
+  #artTicker {
+    flex: 0 0 auto; align-self: stretch; overflow: hidden; white-space: nowrap;
+    border-top: 1px solid rgba(255,255,255,.08); padding-top: 7px; margin-top: 2px;
+  }
+  #artTicker[hidden] { display: none; }
+  #artTickerTrack {
+    display: inline-block; padding-left: 100%;   /* start just off the right edge */
+    font-size: var(--fs-small, 15px); color: var(--c-text, #dbe4ef);
+    animation: artScroll linear infinite;
+  }
+  #artTickerTrack .who { color: var(--c-accent, #f0a45a); font-weight: 700; }
+  #artTickerTrack .sep { color: var(--c-mute, #8ea0b5); padding: 0 14px; }
+  @keyframes artScroll { to { transform: translateX(-100%); } }
   /* A panel switched off from the phone. */
   body .card.panel-off { display: none !important; }
 
@@ -1020,6 +1113,7 @@
   <div id="artPanel">
     <img id="artImg" alt="">
     <div id="artCaption"></div>
+    <div id="artTicker" hidden><div id="artTickerTrack"></div></div>
   </div>
   <div id="mapStatusOverlay"></div>
   <div id="wallMsg" hidden>
@@ -1106,6 +1200,14 @@
 <div class="status-bar">
   <span id="statusFreshness">Loading...</span>
   <span id="statusErrors" class="status-ok"></span>
+</div>
+
+<!-- Frame mode. A direct child of body, because the rule that clears the screen
+     is `body.frame-mode > *:not(#frameMode)`. -->
+<div id="frameMode">
+  <div class="fr-window"><img id="frameImg" alt=""></div>
+  <div class="fr-plate" id="framePlate"></div>
+  <div id="frameMsg"></div>
 </div>
 
 <script>
@@ -3674,13 +3776,19 @@ function fetchWallMessage() {
       const box = document.getElementById('wallMsg');
       if (!box) return;
       const text = data && data.message;
+      // Frame mode hides the panel this normally lives in, so the note is
+      // mirrored onto the mat — a message nobody sees is worse than a mat with
+      // something on it.
+      const fm = document.getElementById('frameMsg');
       if (!text) {
         box.hidden = true;
+        if (fm) fm.textContent = '';
         document.body.classList.remove('has-wall-msg');
         return;
       }
       document.getElementById('wallMsgText').textContent = text;
       document.getElementById('wallMsgFrom').textContent = data.sender ? '— ' + data.sender : '';
+      if (fm) fm.textContent = text + (data.sender ? '   — ' + data.sender : '');
       box.hidden = false;
       document.body.classList.add('has-wall-msg');
     })
@@ -3704,7 +3812,9 @@ let _everyoneHome = false;      // set by renderLocations()
 // Current picture is tracked by URL, not by index: /api/artworks is newest-first,
 // so any upload or edit reshuffles every index.
 let _artIds = [], _artCur = null, _artFetchedAt = 0;
-// Jeff (2026-07-29): every picture gets a full 12 seconds on screen.
+// Jeff (2026-07-29, restated 2026-07-30): every picture gets 12 seconds on
+// screen. This is now a FIXED dwell, not a floor — nothing extends it, and the
+// comment ticker fits itself into the window instead (see renderTicker).
 const ART_DWELL_MS = 12000;
 // Near-realtime, so a new upload or an edited artist name lands almost at once.
 // /api/artworks is local (Caddy -> artwork-api on this box), so this is cheap.
@@ -3714,6 +3824,13 @@ const ART_ROSTER_MS = 15000;
 const ART_HALF_LIFE_DAYS = 5;
 const ART_MIN_WEIGHT = 0.06;
 let _artTimer = null;
+// New arrivals waiting for their turn, newest first. Anything that appears in
+// the roster having never been seen goes in here, and nextArt() drains it
+// BEFORE the weighted random resumes — so "a new picture always comes up next"
+// holds even when several land at once, or when one lands while the previous
+// new one is still on screen (Jeff, 2026-07-30). Before this only ONE new piece
+// was jumped to and the rest were left to chance.
+let _artNewQueue = [];
 
 function inCommuteWindow(){
   const d = new Date(), day = d.getDay();
@@ -3727,12 +3844,30 @@ function autoWantsArt(){
   return _everyoneHome && !inCommuteWindow();
 }
 
+// The ticker is MOVED between the panel and the mat rather than duplicated, so
+// there stays exactly one implementation of it. It has to be re-rendered after
+// the move because its scroll duration is computed from the container width and
+// the mat is far wider than the map slot — clearing the key forces that.
+function moveTicker(toFrame){
+  const t = document.getElementById('artTicker');
+  const dest = document.getElementById(toFrame ? 'frameMode' : 'artPanel');
+  if (t && dest && t.parentNode !== dest) {
+    dest.appendChild(t);
+    _artCommentsFor = null;
+  }
+}
+
 function applyWallConfig(){
-  const want = _wallCfg.main === 'art' ? true
-             : _wallCfg.main === 'map' ? false
+  const mode = _wallCfg.main;
+  const frame = mode === 'frame';
+  const want = (frame || mode === 'art') ? true
+             : mode === 'map' ? false
              : autoWantsArt();
   const wasShowing = document.body.classList.contains('show-art');
+  const wasFrame = document.body.classList.contains('frame-mode');
+  document.body.classList.toggle('frame-mode', frame);
   document.body.classList.toggle('show-art', !!want);
+  if (frame !== wasFrame) moveTicker(frame);
   if (want) {
     ensureArt();
     // Turning art ON restarts the dwell clock, so the first picture gets its
@@ -3762,18 +3897,30 @@ function ensureArt(){
             // weighting, because everything then looks equally old.
             return {
               url: a.urls.web,
+              id: a.id,
+              // Carried so the ticker can skip the fetch entirely for a piece
+              // nobody has commented on, and re-fetch when the count moves.
+              comments: a.comments || 0,
               kid: a.kid,
               title: a.title,
               created: Date.parse(a.created || a.created_at || '') || null
             };
           });
         // Any URL we had not seen before is a new upload. The feed is
-        // newest-first, so [0] is the newest -- straight to the top of the
-        // rotation with a full turn instead of waiting out the cycle.
+        // newest-first, so [0] is the newest -- straight up on screen, and any
+        // others queued so they follow it rather than falling back into the
+        // random draw.
         const fresh = prev.length
           ? _artIds.filter(function (x) { return prev.indexOf(x.url) === -1; })
           : [];
         if (fresh.length) {
+          // Queued newest-first, minus the one going up right now. Anything
+          // already waiting stays behind them: a brand new picture outranks a
+          // slightly less new one.
+          _artNewQueue = fresh.slice(1).map(function (x) { return x.url; })
+            .concat(_artNewQueue.filter(function (u) {
+              return u !== fresh[0].url;
+            }));
           _artCur = fresh[0].url;
           renderArt();
           armArtTimer();
@@ -3831,17 +3978,123 @@ function pickArt(){
 // (15s, tightening to 7s near home), from the config poll and from the rule
 // re-check. When one function both painted AND advanced, those callers raced the
 // rotation timer and pictures flipped after a few seconds.
+// ---- comment ticker -------------------------------------------------------
+// What the family said about the picture that is up, scrolling along the bottom
+// of the art panel. Keyed by "<id>:<count>" so a NEW comment on the picture
+// currently showing re-fetches, while the 15s roster poll re-rendering the same
+// unchanged picture does not.
+let _artCommentsFor = null;
+
+// Only the most recent few. The ticker has to finish a pass inside the picture's
+// turn on screen, and every extra comment lengthens that pass.
+const TICKER_MAX = 4;
+// The dwell is now a FIXED 12s for every picture (Jeff, 2026-07-30: "make sure
+// they are all showing for 12 seconds"), which reverses the old arrangement —
+// the ticker used to stretch the picture's turn up to 34s to finish its pass.
+// So the speed is now DERIVED from the time available instead of being fixed:
+// fit one complete pass inside the dwell, with a moment to spare.
+const TICKER_FIT_MS = ART_DWELL_MS - 1000;
+// ...but not at any speed. Past this it is a blur, so a very chatty piece
+// scrolls at the cap and simply does not complete its pass — the alternative is
+// parking on the wall, which is the thing being fixed.
+const TICKER_MAX_SPEED = 260;   // px/second
+const TICKER_MIN_SPEED = 70;    // don't crawl when there is little to say
+
+function renderTicker(items){
+  const box = document.getElementById('artTicker');
+  const track = document.getElementById('artTickerTrack');
+  if (!box || !track) return;
+  track.textContent = '';
+  if (!items || !items.length) {
+    box.hidden = true;
+    return;
+  }
+  items = items.slice(-TICKER_MAX);
+  items.forEach(function (c, i) {
+    if (i) {
+      const sep = document.createElement('span');
+      sep.className = 'sep'; sep.textContent = '•';
+      track.appendChild(sep);
+    }
+    const who = document.createElement('span');
+    who.className = 'who'; who.textContent = (c.author || 'Family') + ': ';
+    const body = document.createElement('span');
+    // textContent, never innerHTML — comment text is typed by people and is
+    // never parsed as markup, same rule as the gallery's own comment list.
+    body.textContent = c.body || '';
+    track.appendChild(who); track.appendChild(body);
+  });
+  box.hidden = false;
+  // Fit one pass into the picture's fixed turn, at a readable speed. The dwell
+  // does not move for the ticker any more, so this is the only lever left.
+  const dist = track.scrollWidth + box.clientWidth;
+  const speed = Math.max(TICKER_MIN_SPEED,
+                Math.min(TICKER_MAX_SPEED, dist / (TICKER_FIT_MS / 1000)));
+  const secs = dist / speed;
+  // Reassigning the shorthand after a reflow restarts the scroll from the right;
+  // without the reflow the browser coalesces the change and the text jumps.
+  track.style.animation = 'none';
+  void track.offsetWidth;
+  track.style.animation = 'artScroll ' + secs.toFixed(1) + 's linear infinite';
+}
+
+function loadArtComments(a){
+  const key = a ? a.id + ':' + (a.comments || 0) : null;
+  if (_artCommentsFor === key) return;
+  _artCommentsFor = key;
+  if (!a || !a.id || !a.comments) { renderTicker(null); return; }
+  fetch('/api/artworks/' + encodeURIComponent(a.id) + '/comments', { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (_artCommentsFor !== key) return;   // picture moved on mid-fetch
+      renderTicker((d && d.comments) || null);
+    })
+    .catch(function () { renderTicker(null); });
+}
+
 function renderArt(){
   const img = document.getElementById('artImg');
   const cap = document.getElementById('artCaption');
   if (!img) return;
+  const fimg = document.getElementById('frameImg');
+  const plate = document.getElementById('framePlate');
   const a = currentArt();
   if (!a) {
     cap.textContent = 'No artwork yet';
     img.removeAttribute('src');
+    if (fimg) fimg.removeAttribute('src');
+    if (plate) plate.textContent = '';
+    loadArtComments(null);
     return;
   }
   _artCur = a.url;
+  loadArtComments(a);
+  if (fimg) {
+    // Cross-fade rather than a hard cut: on a wall this is the difference
+    // between a picture frame and a slideshow.
+    if (fimg.getAttribute('src') !== a.url) {
+      fimg.classList.remove('in');
+      fimg.onload = function () { fimg.classList.add('in'); };
+      fimg.alt = a.title || 'Artwork';
+      fimg.src = a.url;
+    } else {
+      fimg.classList.add('in');
+    }
+  }
+  if (plate) {
+    // Same rule as the panel caption: no name at all when it is both girls
+    // (Jeff's call), and the date reads long-form because a mat is not a feed.
+    plate.textContent = a.title || 'Untitled';
+    const who = (a.kid && a.kid !== 'both')
+      ? a.kid.charAt(0).toUpperCase() + a.kid.slice(1) : '';
+    const when = a.created
+      ? new Date(a.created).toLocaleDateString('en-US', {month: 'long', year: 'numeric'})
+      : '';
+    const sub = document.createElement('span');
+    sub.className = 'who';
+    sub.textContent = [who, when].filter(Boolean).join(' · ');
+    plate.appendChild(sub);
+  }
   // Caption refreshed EVERY time, so an edited title or artist name shows up even
   // though the image itself did not change. (An earlier version returned early
   // when the src matched, which silently froze the caption.)
@@ -3852,9 +4105,23 @@ function renderArt(){
   if (img.getAttribute('src') !== a.url) img.src = a.url;
 }
 
-// Advance one picture and restart the dwell clock.
+// Take the next queued arrival that is still in the roster. Entries are dropped
+// rather than trusted: a piece can be deleted, unapproved or edited out between
+// being queued and its turn coming round.
+function takeQueuedArt(){
+  while (_artNewQueue.length) {
+    const url = _artNewQueue.shift();
+    if (url === _artCur) continue;
+    const hit = _artIds.filter(function (x) { return x.url === url; })[0];
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// Advance one picture and restart the dwell clock. New arrivals first, then the
+// weighted random draw.
 function nextArt(){
-  const a = pickArt();
+  const a = takeQueuedArt() || pickArt();
   if (!a) return;
   _artCur = a.url;
   renderArt();
