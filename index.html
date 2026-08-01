@@ -838,8 +838,17 @@ let failStreak = 0, nextTryAt = 0;
 function noteOk(){ failStreak = 0; nextTryAt = 0; }
 function noteFail(){
   failStreak++;
-  nextTryAt = Date.now() +
-    Math.min(MAX_BACKOFF_MS, POLL_MS * Math.pow(2, failStreak - 1));
+  // Before anything has rendered the user is staring at "Loading…", so the
+  // first rungs of the backoff ladder are seconds, not poll cycles — and the
+  // retry is scheduled directly, because the 15s interval tick is the only
+  // thing that honours nextTryAt and it may be most of a cycle away.
+  const base = everLoaded ? POLL_MS : 5000;
+  const wait = Math.min(MAX_BACKOFF_MS, base * Math.pow(2, failStreak - 1));
+  nextTryAt = Date.now() + wait;
+  if (!everLoaded){
+    clearTimeout(catchupTimer);
+    catchupTimer = setTimeout(() => { catchupTimer = null; refresh(); }, wait);
+  }
 }
 
 function markHealth(data){
@@ -869,12 +878,28 @@ function markHealth(data){
 // painted from localStorage before the network answered. Say so and dim it
 // rather than passing it off as live. When the feed is genuinely down,
 // markHealth owns the footer and the dimming, so leave both alone.
+// While the board is dimmed "updating…", every poll is a ~2ms cache hit on the
+// proxy while its background NJT refresh runs — so ask every few seconds, not
+// every 15. Measured 2026-07-31 9:31pm: the refresh finished at 9:32:01 and the
+// page didn't come back for it until 9:32:26; with the 90s pending threshold on
+// top, that read as 43 seconds of "updating…". Only while the feed is HEALTHY:
+// a failing fetch belongs to noteFail's backoff, and fast-polling a dead proxy
+// would undo exactly what that backoff exists for.
+const CATCHUP_MS = 4000;
+let catchupTimer = null;
+function scheduleCatchup(on){
+  clearTimeout(catchupTimer); catchupTimer = null;
+  if (!on || failStreak) return;
+  catchupTimer = setTimeout(() => { catchupTimer = null; refresh(); }, CATCHUP_MS);
+}
+
 function markFreshness(data){
-  if (document.body.classList.contains('stale')) return;
+  if (document.body.classList.contains('stale')){ scheduleCatchup(false); return; }
   const el = document.getElementById('staleMsg');
   const age = snapAge(data);
   const behind = isFinite(age) && age > PENDING_AGE_S;
   document.body.classList.toggle('pending', behind);
+  scheduleCatchup(behind);
   if (behind){
     const fmt = t => new Date(t*1000).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
     el.hidden = false;
