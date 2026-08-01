@@ -551,12 +551,19 @@
      street off. Sized in % so the tailnet/phone view scales with it; no
      aspect-ratio here, the Onn's WebView is too old to bet on it. */
   :root { --pip-w: 24%; --pip-h: 44%; --pip-gap: 8px; }
+  /* Three boxes wall off one whole side at full size, so they step down when
+     the third appears. Custom properties inherit, so overriding them on <body>
+     re-sizes the boxes AND the pill/note narrowing that calc()s off them. */
+  body.pips-3 { --pip-w: 19%; --pip-h: 34%; }
   .loc-pip {
     position: absolute;
     z-index: 700;
     display: none;
     width: var(--pip-w);
     height: var(--pip-h);
+    /* --pip-h is a share of the CARD, and late mode gives the map all three
+       rows — without this cap a box becomes a 152x218 slab after 5pm. */
+    max-height: 120px;
     border-radius: var(--r-chip);
     overflow: hidden;
     background: #0a0a0f;
@@ -3166,6 +3173,8 @@ function renderLocations(locations) {
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
   if (!_hobokenMap) return;
+  // Decide the boxes FIRST — the pill row below skips whoever got one.
+  _pipPlan = planAwayInsets(locations);
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
   // Split into at-home vs elsewhere
@@ -3275,7 +3284,7 @@ function renderLocations(locations) {
       // A family display with no family reads as broken — say why instead.
       overlay.innerHTML =
         '<span class="ms-pill ms-pill--cold"><span class="ms-status">Location sharing offline</span></span>';
-    } else if (elsewhere.every(hasAwayInset)) {
+    } else if (elsewhere.every(function (l) { return _pipPlan.shown.has(l.tid); })) {
       // Everyone home = the boring steady state, and the faces orbiting the
       // house badge already say it. The strip earns its place only when
       // someone is out (Jeff, 2026-07-26) — and since 2026-08-01, only when
@@ -3288,7 +3297,7 @@ function renderLocations(locations) {
       // at-home pills compress to a bare name so all five fit one line on
       // the 930px wall display.
       overlay.innerHTML = locations.filter(function (l) {
-        return !hasAwayInset(l);
+        return !_pipPlan.shown.has(l.tid);
       }).map(function (l) {
         const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
         let cls = '';
@@ -3352,7 +3361,7 @@ function renderLocations(locations) {
     });
   }
 
-  renderAwayInsets(locations);
+  renderAwayInsets(locations, _pipPlan);
 }
 
 // ============================================================
@@ -3366,6 +3375,10 @@ function renderLocations(locations) {
 const PIP_CORNERS = ['tl', 'tr', 'bl', 'br'];
 const _pipMaps = {};        // corner → { map, markers }
 let _lastLocations = [];
+let _pipShrunk = false;
+// Who currently has a box. renderLocations() fills this before it builds the
+// pill row; anyone in it is described by their box and skipped in the pills.
+let _pipPlan = { groups: { tl: [], tr: [], bl: [], br: [] }, shown: new Set() };
 
 // Direction is measured in SCREEN space (container points), not raw lat/lon, so
 // street-grid view (map rotated -29°) puts the inset in the corner the person
@@ -3417,14 +3430,73 @@ function hasAwayInset(l) {
   return distMi(HOME, l) > NEAR_HOME_RADIUS_MI;
 }
 
-function renderAwayInsets(locations) {
-  if (!_hobokenMap) return;
+// How many boxes can be up at once, and how far apart two people can be and
+// still share one. Three is the realistic ceiling for this house (the girls'
+// Tiles report identical coordinates so they always merge, and Juno is home) —
+// a fourth box would wall off 88% of the card's height on both edges. Anyone
+// who doesn't get a box isn't dropped: they fall back to the pill row, which
+// since 2026-08-01 exists precisely for away people without one.
+const MAX_PIPS = 3;
+const PIP_SPREAD_MAX_MI = 25;
+
+// Decides who gets a box and where. Pure — returns the assignment rather than
+// touching the DOM, because renderLocations() needs it BEFORE it builds the
+// pill row (a person with a box is dropped from the pills).
+function planAwayInsets(locations) {
   const groups = { tl: [], tr: [], bl: [], br: [] };
-  (locations || []).forEach(function (l) {
-    if (!hasAwayInset(l)) return;
-    groups[pipCornerFor(l)].push(l);
+  const shown = new Set();
+  const cands = (locations || []).filter(hasAwayInset).map(function (l) {
+    return {
+      loc: l,
+      age: l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity,
+      dist: distMi(HOME, l),
+      corner: pipCornerFor(l),
+    };
   });
-  PIP_CORNERS.forEach(function (c) { renderPip(c, groups[c]); });
+  // Fresh beats stale, then farther first: a live fix answers "where are they
+  // NOW", and among equally live people the distant one is the news.
+  cands.sort(function (a, b) {
+    const fa = a.age < 1800 ? 0 : 1;
+    const fb = b.age < 1800 ? 0 : 1;
+    if (fa !== fb) return fa - fb;
+    return b.dist - a.dist;
+  });
+  let corners = 0;
+  cands.forEach(function (c) {
+    const g = groups[c.corner];
+    if (!g.length) {
+      if (corners >= MAX_PIPS) return;   // budget spent — this one gets a pill
+      corners++;
+      g.push(c.loc);
+      shown.add(c.loc.tid);
+      return;
+    }
+    // Share a box only with someone actually nearby. Midtown and Boston are
+    // both "north-east"; one box fitted to both zooms out to a scale that
+    // shows neither. The far one falls to the pill row instead.
+    if (distMi(g[0], c.loc) <= PIP_SPREAD_MAX_MI) {
+      g.push(c.loc);
+      shown.add(c.loc.tid);
+    }
+  });
+  return { groups: groups, shown: shown };
+}
+
+function renderAwayInsets(locations, plan) {
+  if (!_hobokenMap) return;
+  const p = plan || planAwayInsets(locations);
+  let n = 0;
+  PIP_CORNERS.forEach(function (c) { if (p.groups[c].length) n++; });
+  const shrink = n >= 3;
+  const resized = shrink !== _pipShrunk;
+  _pipShrunk = shrink;
+  document.body.classList.toggle('pips-3', shrink);
+  PIP_CORNERS.forEach(function (c) { renderPip(c, p.groups[c]); });
+  // The boxes just changed size under Leaflet's feet; maps that already
+  // existed measured the old ones.
+  if (resized) {
+    Object.keys(_pipMaps).forEach(function (c) { _pipMaps[c].map.invalidateSize(); });
+  }
 }
 
 function createPipMap(corner) {
@@ -3451,6 +3523,8 @@ function renderPip(corner, people) {
   if (!people.length) {
     box.classList.remove('on');
     document.body.classList.remove('has-pip-' + corner);
+    const emptyLabel = document.getElementById('pipplace-' + corner);
+    if (emptyLabel) emptyLabel.textContent = '';   // don't keep a dead place name
     // Tear the map down rather than parking it hidden — this page runs for
     // days between reloads and a hidden Leaflet instance keeps its tiles.
     if (_pipMaps[corner]) {
