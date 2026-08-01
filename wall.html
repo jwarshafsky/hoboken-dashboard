@@ -542,6 +542,47 @@
   /* Shift the freshness pills up so the note never covers them. */
   body.has-wall-msg #mapStatusOverlay { bottom: 46px; }
 
+  /* ---- Away insets --------------------------------------------------------
+     A small live map of whoever is out of the house, pinned to the corner of
+     the wall map that matches their DIRECTION from the house: north-east of
+     home lands top-right, south-west lands bottom-left. The corner carries the
+     bearing, so the box itself only has to answer "where exactly" — the wall
+     map behind it keeps the overview, the inset is the close-up you can read a
+     street off. Sized in % so the tailnet/phone view scales with it; no
+     aspect-ratio here, the Onn's WebView is too old to bet on it. */
+  :root { --pip-w: 24%; --pip-h: 44%; --pip-gap: 8px; }
+  .loc-pip {
+    position: absolute;
+    z-index: 700;
+    display: none;
+    width: var(--pip-w);
+    height: var(--pip-h);
+    border-radius: var(--r-chip);
+    overflow: hidden;
+    background: #0a0a0f;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  }
+  .loc-pip.on { display: block; }
+  .loc-pip > div { width: 100%; height: 100%; }
+  .pip-tl { top: var(--pip-gap);    left: var(--pip-gap); }
+  .pip-tr { top: var(--pip-gap);    right: var(--pip-gap); }
+  .pip-bl { bottom: var(--pip-gap); left: var(--pip-gap); }
+  .pip-br { bottom: var(--pip-gap); right: var(--pip-gap); }
+  /* Artwork owns the whole card when it's up. */
+  body.show-art .loc-pip { display: none !important; }
+  /* The bottom corners share that strip with the freshness pills and the wall
+     note. Narrow those rather than stacking on top of them — the pill row is
+     bottom-anchored and flex-wrap, so it grows upward once it has a right edge
+     to wrap against. */
+  body.has-pip-bl #mapStatusOverlay,
+  body.has-pip-bl #wallMsg { left: calc(var(--pip-w) + var(--pip-gap) * 2); }
+  body.has-pip-br #mapStatusOverlay,
+  body.has-pip-br #wallMsg { right: calc(var(--pip-w) + var(--pip-gap) * 2); }
+  body.has-pip-bl #mapStatusOverlay { right: var(--pip-gap); }
+  body.has-pip-br #mapStatusOverlay { left: var(--pip-gap); }
+  body.has-pip-tr #viewModeToast { right: calc(var(--pip-w) + var(--pip-gap) * 2); }
+
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
     flex: 1;
@@ -1115,6 +1156,10 @@
     <div id="artCaption"></div>
     <div id="artTicker" hidden><div id="artTickerTrack"></div></div>
   </div>
+  <div class="loc-pip pip-tl" id="pip-tl"><div id="pipmap-tl"></div></div>
+  <div class="loc-pip pip-tr" id="pip-tr"><div id="pipmap-tr"></div></div>
+  <div class="loc-pip pip-bl" id="pip-bl"><div id="pipmap-bl"></div></div>
+  <div class="loc-pip pip-br" id="pip-br"><div id="pipmap-br"></div></div>
   <div id="mapStatusOverlay"></div>
   <div id="wallMsg" hidden>
     <div class="wm-text" id="wallMsgText"></div>
@@ -2633,6 +2678,21 @@ function distMi(a, b) {
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
+// Jawg.Dark — clean dark theme, no road shield badges. Shared by the wall map
+// and the corner away-insets so they never drift apart visually.
+const MAP_TILE_URL = 'https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq';
+
+// Face bubble for a person marker. onerror: photos live only on the Beelink now
+// (pulled from the public repo 2026-07-26) — on the Pages fallback the jpgs 404,
+// so degrade to the same initials treatment as an unmapped TID.
+function faceMarkerHtml(loc) {
+  const faceUrl = FACE_IMAGES[loc.tid];
+  return faceUrl
+    ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
+      '" onerror="this.replaceWith(this.alt.slice(0,2).toUpperCase())"/>'
+    : (displayName(loc) || '?').substring(0, 2).toUpperCase();
+}
+
 function initHobokenMap() {
   if (_hobokenMap || typeof L === 'undefined') return;
   const hasRotate = typeof L.Map.prototype.setBearing === 'function';
@@ -2650,8 +2710,7 @@ function initHobokenMap() {
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
   _hobokenMap.setView([40.750, -74.003], 14);
-  // Jawg.Dark — clean dark theme, no road shield badges
-  L.tileLayer('https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq', {
+  L.tileLayer(MAP_TILE_URL, {
     maxZoom: 22,
     subdomains: 'abcd',
     attribution: '',
@@ -2734,6 +2793,9 @@ function initHobokenMap() {
         permanent: wantLabels,
       });
     }
+    // Rotating to the street grid moves people around the compass on screen,
+    // so the away-insets have to re-pick their corners with it.
+    if (typeof renderAwayInsets === 'function') renderAwayInsets(_lastLocations);
   }
   applyViewMode();
 
@@ -3023,6 +3085,7 @@ function _smoothZoomBounds(bounds, opts) {
 }
 
 function renderLocations(locations) {
+  _lastLocations = locations || [];   // away-insets re-render on view-mode changes
   // Feeds the automatic panel rule. Kids' trackers count: "everyone home"
   // means the whole household, which is exactly when the map is redundant.
   try {
@@ -3088,14 +3151,7 @@ function renderLocations(locations) {
   const seen = new Set();
   for (const loc of locations) {
     seen.add(loc.tid);
-    const faceUrl = FACE_IMAGES[loc.tid];
-    // onerror: photos live only on the Beelink now (pulled from the public
-    // repo 2026-07-26) — on the Pages fallback the jpgs 404, so degrade to
-    // the same initials treatment as an unmapped TID.
-    const html = faceUrl
-      ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
-        '" onerror="this.replaceWith(this.alt.slice(0,2).toUpperCase())"/>'
-      : (displayName(loc) || '?').substring(0, 2).toUpperCase();
+    const html = faceMarkerHtml(loc);
 
     // Freshness ladder (drives marker visual decay + pill copy below).
     // fresh < 3m, recent < 30m, stale < 3h, cold ≥ 3h.
@@ -3214,6 +3270,140 @@ function renderLocations(locations) {
       padding: [20, 20],
       maxZoom: 15,
     });
+  }
+
+  renderAwayInsets(locations);
+}
+
+// ============================================================
+// AWAY INSETS — a corner picture-in-picture for whoever is out
+// ============================================================
+// The wall map frames the whole family at once, which is exactly why it can't
+// answer "where is Jeff, specifically" — at a fit-everyone zoom his face covers
+// six blocks. So each person who's out gets a small map of their own, and the
+// CORNER it sits in is their direction from the house: top-right = north-east,
+// bottom-left = south-west. Direction from the corner, detail from the box.
+const PIP_CORNERS = ['tl', 'tr', 'bl', 'br'];
+const PIP_COLD_S = 10800;   // 3h — same freshness ladder the pills use
+const _pipMaps = {};        // corner → { map, markers }
+let _lastLocations = [];
+
+// Direction is measured in SCREEN space (container points), not raw lat/lon, so
+// street-grid view (map rotated -29°) puts the inset in the corner the person
+// actually appears toward. Trig fallback if the projection can't answer.
+function pipCornerFor(loc) {
+  try {
+    const h = _hobokenMap.latLngToContainerPoint([HOME.lat, HOME.lon]);
+    const p = _hobokenMap.latLngToContainerPoint([loc.lat, loc.lon]);
+    if (isFinite(h.x) && isFinite(h.y) && isFinite(p.x) && isFinite(p.y)) {
+      return (p.y < h.y ? 't' : 'b') + (p.x < h.x ? 'l' : 'r');
+    }
+  } catch (e) {}
+  return (loc.lat >= HOME.lat ? 't' : 'b') + (loc.lon >= HOME.lon ? 'r' : 'l');
+}
+
+// Close enough to read the block when they're local, wide enough to say
+// "Boston" when they're not.
+function pipZoom(mi) {
+  if (mi <= 1)   return 15;
+  if (mi <= 3)   return 14;
+  if (mi <= 8)   return 13;
+  if (mi <= 25)  return 11;
+  if (mi <= 80)  return 9;
+  if (mi <= 300) return 7;
+  return 5;
+}
+
+function renderAwayInsets(locations) {
+  if (!_hobokenMap) return;
+  const groups = { tl: [], tr: [], bl: [], br: [] };
+  (locations || []).forEach(function (l) {
+    if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return;
+    if (isAtHome(l)) return;
+    // A 3h-old fix is where they WERE — the pill already says "last seen X",
+    // and a confident close-up of a stale coordinate is a lie.
+    const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
+    if (ageSec >= PIP_COLD_S) return;
+    // Inside ~2 blocks the wall map has already zoomed onto them; a close-up
+    // of the same thing is just a second copy.
+    if (distMi(HOME, l) <= NEAR_HOME_RADIUS_MI) return;
+    groups[pipCornerFor(l)].push(l);
+  });
+  PIP_CORNERS.forEach(function (c) { renderPip(c, groups[c]); });
+}
+
+function createPipMap(corner) {
+  if (typeof L === 'undefined') return null;
+  // Inert on purpose — the remote drives the main map only, and a pan that
+  // nobody can undo would strand the box on the wrong place for days.
+  const map = L.map('pipmap-' + corner, {
+    // rotateControl: leaflet-rotate adds a compass button by default, and four
+    // of them stamped into the corners of four tiny maps is pure noise.
+    zoomControl: false, attributionControl: false, rotateControl: false,
+    dragging: false, keyboard: false, scrollWheelZoom: false,
+    doubleClickZoom: false, boxZoom: false, touchZoom: false,
+    zoomAnimation: false, fadeAnimation: false, inertia: false,
+  }).setView([HOME.lat, HOME.lon], 13);
+  L.tileLayer(MAP_TILE_URL, { maxZoom: 22, subdomains: 'abcd', attribution: '' }).addTo(map);
+  const ctx = _pipMaps[corner] = { map: map, markers: {} };
+  setTimeout(function () { map.invalidateSize(); }, 0);
+  return ctx;
+}
+
+function renderPip(corner, people) {
+  const box = document.getElementById('pip-' + corner);
+  if (!box) return;
+  if (!people.length) {
+    box.classList.remove('on');
+    document.body.classList.remove('has-pip-' + corner);
+    // Tear the map down rather than parking it hidden — this page runs for
+    // days between reloads and a hidden Leaflet instance keeps its tiles.
+    if (_pipMaps[corner]) {
+      _pipMaps[corner].map.remove();
+      delete _pipMaps[corner];
+    }
+    return;
+  }
+  // Show the box BEFORE creating the map: Leaflet measures a display:none
+  // element as 0×0 and never recovers on its own.
+  box.classList.add('on');
+  document.body.classList.add('has-pip-' + corner);
+  const ctx = _pipMaps[corner] || createPipMap(corner);
+  if (!ctx) return;
+
+  const seen = new Set();
+  people.forEach(function (l) {
+    seen.add(l.tid);
+    const icon = L.divIcon({
+      className: 'person-marker small',
+      html: faceMarkerHtml(l),
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+    if (ctx.markers[l.tid]) {
+      ctx.markers[l.tid].setLatLng([l.lat, l.lon]);
+      ctx.markers[l.tid].setIcon(icon);
+    } else {
+      ctx.markers[l.tid] = L.marker([l.lat, l.lon], { icon: icon, zIndexOffset: 10000 }).addTo(ctx.map);
+    }
+  });
+  Object.keys(ctx.markers).forEach(function (tid) {
+    if (seen.has(tid)) return;
+    ctx.map.removeLayer(ctx.markers[tid]);
+    delete ctx.markers[tid];
+  });
+
+  if (people.length === 1) {
+    ctx.map.setView([people[0].lat, people[0].lon],
+      pipZoom(distMi(HOME, people[0])), { animate: false });
+  } else {
+    // Two people in the same direction share one box.
+    const lats = people.map(function (p) { return p.lat; });
+    const lons = people.map(function (p) { return p.lon; });
+    ctx.map.fitBounds(
+      [[Math.min.apply(null, lats), Math.min.apply(null, lons)],
+       [Math.max.apply(null, lats), Math.max.apply(null, lons)]],
+      { padding: [22, 22], maxZoom: 14, animate: false });
   }
 }
 
