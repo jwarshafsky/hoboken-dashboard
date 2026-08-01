@@ -2513,6 +2513,10 @@ function applyHomeFromProxy(home) {
 }
 const HOME_RADIUS_MI = 0.014;     // ~75 ft — inside the house
 const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
+// ~265 ft — two people this close render as one dot unless they're fanned
+// apart. Module-scope because BOTH the wall map (lat/lon ring) and the corner
+// insets (pixel fan) need the same "these are the same place" threshold.
+const OVERLAP_MI = 0.05;
 
 // A person counts as home if the proxy's payload says so ('place' comes from
 // Life360, whose geofence made the home/away call server-side) OR they're
@@ -3141,7 +3145,6 @@ function renderLocations(locations) {
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
   if (!_hobokenMap) return;
-  const OVERLAP_MI = 0.05;        // ~265 ft for clustering non-home people
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
   // Split into at-home vs elsewhere
@@ -3428,6 +3431,25 @@ function renderPip(corner, people) {
   const ctx = _pipMaps[corner] || createPipMap(corner);
   if (!ctx) return;
 
+  // Co-located people stack into one dot and hide each other — the girls' two
+  // Tiles report the EXACT same lat/lon (verified live 2026-08-01: both at
+  // 40.8743,-74.1946), so without this the box shows one face and silently
+  // drops the other. The main map fans them into a lat/lon ring; here the fan
+  // is in PIXELS via iconAnchor, because the ring radius that separates faces
+  // at the wall map's zoom is sub-pixel at an inset's.
+  const fanDx = {};
+  const fanned = new Set();
+  people.forEach(function (a) {
+    if (fanned.has(a.tid)) return;
+    const group = people.filter(function (b) {
+      return !fanned.has(b.tid) && distMi(a, b) < OVERLAP_MI;
+    });
+    group.forEach(function (b, i) {
+      fanned.add(b.tid);
+      fanDx[b.tid] = (i - (group.length - 1) / 2) * 30;
+    });
+  });
+
   const seen = new Set();
   people.forEach(function (l) {
     seen.add(l.tid);
@@ -3442,9 +3464,10 @@ function renderPip(corner, people) {
             '<div class="pf-age">' + pipAgeText(l.received_at) + '</div>',
       // Anchor on the FACE's centre, not the icon's — the age line hangs below
       // it, and anchoring on the middle of the pair would float the dot north
-      // of where the person actually is.
+      // of where the person actually is. Subtracting the fan offset shifts the
+      // icon visually RIGHT (same trick as the at-home orbit).
       iconSize: [56, 46],
-      iconAnchor: [28, 14],
+      iconAnchor: [28 - (fanDx[l.tid] || 0), 14],
     });
     if (ctx.markers[l.tid]) {
       ctx.markers[l.tid].setLatLng([l.lat, l.lon]);
