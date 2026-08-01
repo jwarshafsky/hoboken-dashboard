@@ -564,7 +564,25 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   }
   .loc-pip.on { display: block; }
-  .loc-pip > div { width: 100%; height: 100%; }
+  .loc-pip > .pip-map { width: 100%; height: 100%; }
+  /* Where the box IS — the geofence name if the fix has one ("Abujia"), else
+     the city. Hidden entirely when neither is known rather than captioned with
+     a placeholder. Sits above every Leaflet pane (controls are z 800). */
+  .pip-place {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 900;
+    padding: 3px 7px;
+    background: linear-gradient(rgba(0, 0, 0, 0.82), rgba(0, 0, 0, 0));
+    font-size: var(--fs-label);
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+  }
+  .pip-place:empty { display: none; }
   .pip-tl { top: var(--pip-gap);    left: var(--pip-gap); }
   .pip-tr { top: var(--pip-gap);    right: var(--pip-gap); }
   .pip-bl { bottom: var(--pip-gap); left: var(--pip-gap); }
@@ -1203,10 +1221,10 @@
     <div id="artCaption"></div>
     <div id="artTicker" hidden><div id="artTickerTrack"></div></div>
   </div>
-  <div class="loc-pip pip-tl" id="pip-tl"><div id="pipmap-tl"></div></div>
-  <div class="loc-pip pip-tr" id="pip-tr"><div id="pipmap-tr"></div></div>
-  <div class="loc-pip pip-bl" id="pip-bl"><div id="pipmap-bl"></div></div>
-  <div class="loc-pip pip-br" id="pip-br"><div id="pipmap-br"></div></div>
+  <div class="loc-pip pip-tl" id="pip-tl"><div class="pip-map" id="pipmap-tl"></div><div class="pip-place" id="pipplace-tl"></div></div>
+  <div class="loc-pip pip-tr" id="pip-tr"><div class="pip-map" id="pipmap-tr"></div><div class="pip-place" id="pipplace-tr"></div></div>
+  <div class="loc-pip pip-bl" id="pip-bl"><div class="pip-map" id="pipmap-bl"></div><div class="pip-place" id="pipplace-bl"></div></div>
+  <div class="loc-pip pip-br" id="pip-br"><div class="pip-map" id="pipmap-br"></div><div class="pip-place" id="pipplace-br"></div></div>
   <div id="mapStatusOverlay"></div>
   <div id="wallMsg" hidden>
     <div class="wm-text" id="wallMsgText"></div>
@@ -2756,7 +2774,10 @@ function initHobokenMap() {
     rotate: true,
     bearing: 0,
     touchRotate: false,
-    rotateControl: { closeOnZeroBearing: false },
+    // No compass button. Rotation is driven by the remote's OK button through
+    // applyViewMode(), and nobody touches the wall display with a mouse — the
+    // control was just a stray widget sitting on the map.
+    rotateControl: false,
   } : {}));
   // Use setView with center+zoom (works better with rotation than fitBounds)
   // Center: between Hoboken and Midtown Manhattan
@@ -3254,16 +3275,21 @@ function renderLocations(locations) {
       // A family display with no family reads as broken — say why instead.
       overlay.innerHTML =
         '<span class="ms-pill ms-pill--cold"><span class="ms-status">Location sharing offline</span></span>';
-    } else if (elsewhere.length === 0) {
+    } else if (elsewhere.every(hasAwayInset)) {
       // Everyone home = the boring steady state, and the faces orbiting the
       // house badge already say it. The strip earns its place only when
-      // someone is out (Jeff, 2026-07-26).
+      // someone is out (Jeff, 2026-07-26) — and since 2026-08-01, only when
+      // someone is out WITHOUT a corner inset. A person in an inset is fully
+      // described there (face, place, age); repeating it down here was saying
+      // the same thing twice.
       overlay.innerHTML = '';
     } else {
       // Someone is out: away pills carry the full story (where + how fresh);
       // at-home pills compress to a bare name so all five fit one line on
       // the 930px wall display.
-      overlay.innerHTML = locations.map(function (l) {
+      overlay.innerHTML = locations.filter(function (l) {
+        return !hasAwayInset(l);
+      }).map(function (l) {
         const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
         let cls = '';
         if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
@@ -3273,10 +3299,14 @@ function renderLocations(locations) {
             displayName(l) + '</span></span>';
         }
         const status = personStatus(l);
-        const ago = agoText(l.received_at * 1000);
+        // A cold fix reads "last seen 13h ago" from personStatus(), so the
+        // trailing age span would repeat it verbatim — "Sydney last seen 13h
+        // ago 13h ago". Same 3h threshold personStatus() switches on.
+        const showAge = !!l.received_at && ageSec < 10800;
         return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
-          '</span><span class="ms-status">' + status +
-          '</span><span class="ms-ago">' + ago + '</span></span>';
+          '</span><span class="ms-status">' + status + '</span>' +
+          (showAge ? '<span class="ms-ago">' + agoText(l.received_at * 1000) + '</span>' : '') +
+          '</span>';
       }).join('');
     }
   }
@@ -3375,18 +3405,23 @@ function pipZoom(mi) {
   return 5;
 }
 
+// Who earns an inset. ONE definition, because the pill row keys off it too:
+// anyone with a box is described there and is dropped from the pills.
+// No staleness cutoff on purpose (Jeff, 2026-08-01) — the girls' Tiles don't
+// update overnight, so a 13h-old fix can be the freshest thing that exists for
+// them; the age rides on the face instead (see .pip-person). Inside ~2 blocks
+// the wall map has already zoomed onto them, so a close-up is just a copy.
+function hasAwayInset(l) {
+  if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return false;
+  if (isAtHome(l)) return false;
+  return distMi(HOME, l) > NEAR_HOME_RADIUS_MI;
+}
+
 function renderAwayInsets(locations) {
   if (!_hobokenMap) return;
   const groups = { tl: [], tr: [], bl: [], br: [] };
   (locations || []).forEach(function (l) {
-    if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return;
-    if (isAtHome(l)) return;
-    // No staleness cutoff on purpose (Jeff, 2026-08-01): the girls' Tiles don't
-    // update overnight, so a 13h-old fix can be the freshest thing that exists
-    // for them. The age rides on the face instead — see .pip-person.
-    // Inside ~2 blocks the wall map has already zoomed onto them; a close-up
-    // of the same thing is just a second copy.
-    if (distMi(HOME, l) <= NEAR_HOME_RADIUS_MI) return;
+    if (!hasAwayInset(l)) return;
     groups[pipCornerFor(l)].push(l);
   });
   PIP_CORNERS.forEach(function (c) { renderPip(c, groups[c]); });
@@ -3430,6 +3465,19 @@ function renderPip(corner, people) {
   document.body.classList.add('has-pip-' + corner);
   const ctx = _pipMaps[corner] || createPipMap(corner);
   if (!ctx) return;
+
+  // Name the place: the geofence name if the fix carries one ("Abujia"),
+  // otherwise the proxy's city. De-duplicated, because the usual case is two
+  // people at the SAME place and "Abujia · Abujia" is noise.
+  const label = document.getElementById('pipplace-' + corner);
+  if (label) {
+    const names = [];
+    people.forEach(function (l) {
+      const n = l.place || l.city;
+      if (n && names.indexOf(n) === -1) names.push(n);
+    });
+    label.textContent = names.join(' · ');
+  }
 
   // Co-located people stack into one dot and hide each other — the girls' two
   // Tiles report the EXACT same lat/lon (verified live 2026-08-01: both at
