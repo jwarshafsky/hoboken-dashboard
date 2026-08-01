@@ -574,14 +574,61 @@
   /* The bottom corners share that strip with the freshness pills and the wall
      note. Narrow those rather than stacking on top of them — the pill row is
      bottom-anchored and flex-wrap, so it grows upward once it has a right edge
-     to wrap against. */
+     to wrap against.
+     The pill row ships with only a `left`, so the bl rule also hands it a right
+     edge — without one it can't wrap and just runs under the inset. Do NOT add
+     "restore the other edge" rules here: both classes can be on the body at
+     once, and a later `left: 8px` from the br rule silently undid the bl
+     narrowing (caught 2026-08-01 — pills ran the full width over both boxes).
+     Each rule now touches only the edge it owns. */
   body.has-pip-bl #mapStatusOverlay,
-  body.has-pip-bl #wallMsg { left: calc(var(--pip-w) + var(--pip-gap) * 2); }
+  body.has-pip-bl #wallMsg {
+    left: calc(var(--pip-w) + var(--pip-gap) * 2);
+    right: var(--pip-gap);
+  }
   body.has-pip-br #mapStatusOverlay,
   body.has-pip-br #wallMsg { right: calc(var(--pip-w) + var(--pip-gap) * 2); }
-  body.has-pip-bl #mapStatusOverlay { right: var(--pip-gap); }
-  body.has-pip-br #mapStatusOverlay { left: var(--pip-gap); }
   body.has-pip-tr #viewModeToast { right: calc(var(--pip-w) + var(--pip-gap) * 2); }
+
+  /* Inset face + its own age. There is NO staleness cutoff on the insets: the
+     girls' Tiles legitimately go 13h between fixes (they don't update
+     overnight), so a phone-calibrated cutoff would mean the two people you most
+     want a "where are they" box for never get one. The fix is shown instead
+     with its age attached, decaying on the same ladder as the map markers, so
+     an old position reads as old rather than being hidden or (worse) presented
+     as live. Per-face, not per-box, so a fresh dot sharing a corner with a
+     stale one isn't tarred with the other's age. */
+  .pip-person { text-align: center; background: none; border: 0; }
+  .pip-person .pf-face {
+    width: 28px; height: 28px; margin: 0 auto;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.65);
+    overflow: hidden;
+    background: #3a3a48;
+    color: #000;
+    font-weight: 700;
+    font-size: var(--fs-micro);
+    line-height: 26px;
+  }
+  .pip-person .pf-face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pip-person .pf-age {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 0 4px;
+    border-radius: var(--r-badge);
+    background: rgba(0, 0, 0, 0.62);
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    line-height: 1.5;
+    color: #ddd;
+  }
+  /* Same tiers as .ms-pill / .person-marker so one glance reads consistently. */
+  .pip-person.stale-recent .pf-face { opacity: 0.92; }
+  .pip-person.stale-warm  .pf-face { opacity: 0.8;  border-style: dashed; }
+  .pip-person.stale-cold  .pf-face { opacity: 0.65; border-style: dashed; }
+  .pip-person.stale-warm  .pf-age  { color: var(--c-warn); }
+  .pip-person.stale-cold  .pf-age  { color: #a0a0b0; font-style: italic; }
 
   /* Calendar events (rendered from Google Calendar API) */
   .cal-content {
@@ -3284,7 +3331,6 @@ function renderLocations(locations) {
 // CORNER it sits in is their direction from the house: top-right = north-east,
 // bottom-left = south-west. Direction from the corner, detail from the box.
 const PIP_CORNERS = ['tl', 'tr', 'bl', 'br'];
-const PIP_COLD_S = 10800;   // 3h — same freshness ladder the pills use
 const _pipMaps = {};        // corner → { map, markers }
 let _lastLocations = [];
 
@@ -3300,6 +3346,18 @@ function pipCornerFor(loc) {
     }
   } catch (e) {}
   return (loc.lat >= HOME.lat ? 't' : 'b') + (loc.lon >= HOME.lon ? 'r' : 'l');
+}
+
+// Compact age for the chip under an inset face. agoText() stops at hours, which
+// would render a two-day-old Tile fix as "50h ago"; with no cutoff on the insets
+// that case is now reachable, so this one carries days.
+function pipAgeText(receivedAt) {
+  if (!receivedAt) return 'no fix';
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - receivedAt));
+  if (sec < 60)    return sec + 's';
+  if (sec < 3600)  return Math.floor(sec / 60) + 'm';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+  return Math.floor(sec / 86400) + 'd';
 }
 
 // Close enough to read the block when they're local, wide enough to say
@@ -3320,10 +3378,9 @@ function renderAwayInsets(locations) {
   (locations || []).forEach(function (l) {
     if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return;
     if (isAtHome(l)) return;
-    // A 3h-old fix is where they WERE — the pill already says "last seen X",
-    // and a confident close-up of a stale coordinate is a lie.
-    const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
-    if (ageSec >= PIP_COLD_S) return;
+    // No staleness cutoff on purpose (Jeff, 2026-08-01): the girls' Tiles don't
+    // update overnight, so a 13h-old fix can be the freshest thing that exists
+    // for them. The age rides on the face instead — see .pip-person.
     // Inside ~2 blocks the wall map has already zoomed onto them; a close-up
     // of the same thing is just a second copy.
     if (distMi(HOME, l) <= NEAR_HOME_RADIUS_MI) return;
@@ -3374,11 +3431,20 @@ function renderPip(corner, people) {
   const seen = new Set();
   people.forEach(function (l) {
     seen.add(l.tid);
+    const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
+    let staleClass = '';
+    if (!l.received_at || ageSec >= 10800) staleClass = ' stale-cold';
+    else if (ageSec >= 1800)               staleClass = ' stale-warm';
+    else if (ageSec >= 180)                staleClass = ' stale-recent';
     const icon = L.divIcon({
-      className: 'person-marker small',
-      html: faceMarkerHtml(l),
-      iconSize: [28, 28],
-      iconAnchor: [14, 14],
+      className: 'pip-person' + staleClass,
+      html: '<div class="pf-face">' + faceMarkerHtml(l) + '</div>' +
+            '<div class="pf-age">' + pipAgeText(l.received_at) + '</div>',
+      // Anchor on the FACE's centre, not the icon's — the age line hangs below
+      // it, and anchoring on the middle of the pair would float the dot north
+      // of where the person actually is.
+      iconSize: [56, 46],
+      iconAnchor: [28, 14],
     });
     if (ctx.markers[l.tid]) {
       ctx.markers[l.tid].setLatLng([l.lat, l.lon]);
