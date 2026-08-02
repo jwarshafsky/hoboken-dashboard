@@ -2551,8 +2551,15 @@ function isAtHome(loc) {
   if (loc && loc.place === 'Home') return true;
   return distMi(HOME, loc) < HOME_RADIUS_MI;
 }
-// All of Hoboken — never zoom tighter than this. West edge ~ Jackson St.
+// All of Hoboken. West edge ~ Jackson St. The comment here used to claim this
+// was a floor on the map's zoom; it never was — nothing read the constant at
+// all. It now has one real job: deciding who is close enough to be on the main
+// map already (see hasAwayInset).
 const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
+function inHoboken(l) {
+  return l && l.lat >= HOBOKEN_BOUNDS[0][0] && l.lat <= HOBOKEN_BOUNDS[1][0]
+           && l.lon >= HOBOKEN_BOUNDS[0][1] && l.lon <= HOBOKEN_BOUNDS[1][1];
+}
 // People outside this radius (miles) from HOME don't trigger an auto-zoom-out.
 const AUTO_FIT_RADIUS_MI = 5;
 
@@ -3424,9 +3431,15 @@ function pipZoom(mi) {
 // update overnight, so a 13h-old fix can be the freshest thing that exists for
 // them; the age rides on the face instead (see .pip-person). Inside ~2 blocks
 // the wall map has already zoomed onto them, so a close-up is just a copy.
+// Still in Hoboken means still on the main map: the auto-fit above frames HOME
+// plus everyone within AUTO_FIT_RADIUS_MI, so a box for them is a second copy
+// of a dot already on screen. Juno crossing the 2-block line on a walk (Jeff,
+// 2026-08-02) is the case that made this obvious — she was 0.2 mi out, plainly
+// visible on the map, and still took a whole corner.
 function hasAwayInset(l) {
   if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return false;
   if (isAtHome(l)) return false;
+  if (inHoboken(l)) return false;
   return distMi(HOME, l) > NEAR_HOME_RADIUS_MI;
 }
 
