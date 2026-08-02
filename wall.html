@@ -4253,8 +4253,15 @@ function inCommuteWindow(){
   return (m >= 7*60 && m <= 10*60+30) || (m >= 16*60+30 && m <= 20*60);
 }
 
-// The rule, in one place so it is easy to argue with later.
-function autoWantsArt(){
+// The rule, in one place so it is easy to argue with later. Jeff (2026-08-02)
+// moved auto's destination from the artwork PANEL to full-screen Frame — same
+// trigger, much bigger gesture, since frame-mode hides the clock, weather,
+// calendar and transit rather than just taking over the map slot.
+//
+// Deliberately still no time-of-day test. That was raised and settled: a quiet
+// weekend morning with everyone in goes to Frame too, and that is wanted. If
+// this ever needs a night gate, isLateMode() is the existing concept to reuse.
+function autoWantsFrame(){
   return _everyoneHome && !inCommuteWindow();
 }
 
@@ -4273,10 +4280,15 @@ function moveTicker(toFrame){
 
 function applyWallConfig(){
   const mode = _wallCfg.main;
-  const frame = mode === 'frame';
-  const want = (frame || mode === 'art') ? true
-             : mode === 'map' ? false
-             : autoWantsArt();
+  // "art" stays a mode you can pick by hand — it is the artwork in the MAP SLOT
+  // with the rest of the dashboard intact, which is a different thing from
+  // Frame. Only auto's destination changed.
+  const frame = mode === 'frame' || (mode === 'auto' && autoWantsFrame());
+  // Frame implies show-art: same picture pipeline (ensureArt/renderArt paint
+  // #frameImg once frame-mode is on), and frame-mode's CSS hides the rest
+  // anyway. Kept as it was so an auto-Frame and a hand-picked Frame are
+  // literally the same state.
+  const want = frame || mode === 'art';
   const wasShowing = document.body.classList.contains('show-art');
   const wasFrame = document.body.classList.contains('frame-mode');
   document.body.classList.toggle('frame-mode', frame);
