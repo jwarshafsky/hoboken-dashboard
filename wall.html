@@ -331,8 +331,22 @@
     grid-column: 3;
   }
 
-  /* Artwork fills the map's slot rather than taking a slot of its own, so the
-     3x3 grid and late-mode's re-spanning stay exactly as they were. */
+  /* Art mode takes the whole left region — everything except the calendar and
+     the weather (Jeff, 2026-08-02). Those two are the reason to be in art mode
+     rather than Frame: you still want to see what's on today and what it's
+     doing outside. Bus and ferry go, because a picture worth showing full
+     height beats a departure board nobody is about to use.
+
+     This is the SAME re-span late mode does, deliberately — one mechanism, and
+     when both are on the two rules are identical rather than fighting. The
+     panel still lives inside #mapCard rather than taking a grid slot of its
+     own, so it inherits the card's position:relative and needs no placement of
+     its own; growing the card grows the artwork. No guard against frame-mode
+     is needed: that hides every grid child with !important anyway. */
+  body.show-art #busCard,
+  body.show-art #ferryCard { display: none; }
+  body.show-art #mapCard   { grid-row: 1 / 4; }
+
   #artPanel {
     position: absolute; inset: 0; display: none;
     flex-direction: column; align-items: center; justify-content: center;
