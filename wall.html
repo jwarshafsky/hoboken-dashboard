@@ -1059,6 +1059,15 @@
     background: #1a2a1a;
   }
 
+  /* NJT lists this departure but has no bus broadcasting behind it. Muted, and
+     it never takes the green "next chip" highlight — that highlight reads as
+     "this is the one you can catch", which is the one thing we don't know. */
+  .dep-chip.sched,
+  .dep-chip.sched:first-child {
+    background: #16161f;
+    opacity: 0.72;
+  }
+
   .dep-chip .cd-unit {
     font-size: 0.65em;
     font-weight: 400;
@@ -2125,9 +2134,14 @@ function renderLivePredictions(predictions, label) {
       // flags them is_inferred; mark the chip so a guessed time never looks like
       // a real one — "~" on the countdown and "est" instead of a false-precise clock.
       const est = !!p.is_inferred;
+      // Timetable-only: NJT lists the departure with no bus broadcasting behind
+      // it. Shown since 2026-08-02 — hiding it left a gap where the NJT app had
+      // a bus — but never coloured by urgency, because a red "3 min" you cannot
+      // actually catch is worse than no number at all.
+      const sched = !!p.is_scheduled;
       const cdText = (est ? '<span class="cd-unit">~</span>' : '') + countdownText(mins);
       const subLine = est ? 'est' : displayTime;
-      html += `<div class="dep-chip"><span class="t">${subLine}</span><span class="cd" style="color:${cdColor}">${cdText}</span></div>`;
+      html += `<div class="dep-chip${sched ? ' sched' : ''}"><span class="t">${subLine}</span><span class="cd" style="color:${sched ? '#8a8a9e' : cdColor}">${cdText}</span></div>`;
     }
     html += '</div></div>';
     return html;
@@ -2212,10 +2226,20 @@ async function fetchProxy() {
       const stop20523 = data.stops['20523'];
       if (stop20523 && Array.isArray(stop20523.predictions) && stop20523.predictions.length > 0) {
         const preds13 = (stop20514 && Array.isArray(stop20514.predictions)) ? stop20514.predictions : [];
-        const etaMins13 = preds13.filter(p => p.route === '126').map(p => parseInt(p.countdown, 10));
+        const p13_126 = preds13.filter(p => p.route === '126');
+        // Exact match first: one bus on one trip carries the same trip_id at
+        // both stops, which beats any time window.
+        const trips13 = new Set(p13_126.map(p => p.trip_id).filter(Boolean));
+        // Then RAW (un-biased) countdowns. This used to read `countdown`, on the
+        // grounds that PREDICTION_BIAS is a constant that cancels when comparing
+        // like with like — but is_scheduled rows get no bias, so once they were
+        // shown (2026-08-02) the two sides could differ by the bias alone and a
+        // 126 leaked into the 119 column. njtRaw() is unbiased on both sides.
+        const etaMins13 = p13_126.map(njtRaw);
         const filtered = stop20523.predictions.filter(p => {
           if (p.route !== '126') return true;
-          const mins = parseInt(p.countdown, 10);
+          if (p.trip_id && trips13.has(p.trip_id)) return false;
+          const mins = njtRaw(p);
           return !etaMins13.some(m13 => Math.abs(mins - m13) <= 3);
         });
         if (filtered.length > 0) {
@@ -2242,7 +2266,12 @@ async function fetchProxy() {
           .filter(s => s && Array.isArray(s.predictions))
           .flatMap(s => s.predictions);
         const anyInferred = allPreds.some(p => p.is_inferred);
-        const mode = !apiWorking ? 'schedule' : (anyInferred ? 'inferred' : 'live');
+        // A board carrying nothing but is_scheduled rows is a SCHEDULE board,
+        // even though the API answered — no bus is being tracked at either
+        // stop. Without this the headlights went green over timetable times.
+        const anyTracked = allPreds.some(p => p.is_live);
+        const mode = (!apiWorking || !anyTracked) ? 'schedule'
+                   : (anyInferred ? 'inferred' : 'live');
         hl1.setAttribute('class', 'bus-headlight ' + mode);
         hl2.setAttribute('class', 'bus-headlight ' + mode);
       }

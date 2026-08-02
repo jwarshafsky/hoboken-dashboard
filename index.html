@@ -114,6 +114,9 @@
      the exception carries the label, so an unmarked row means a tracked bus. */
   .tag.sched{color:var(--dim)}
   .row.sched{box-shadow:inset 3px 0 0 var(--dim)}
+  /* The countdown itself carries no urgency colour on a scheduled row — a red
+     "3 min" you may not be able to catch is a worse claim than a quiet one. */
+  .row.sched .mins{color:var(--dim)}
   /* Route number, tucked under the fullness bars. */
   .rt{display:block; font-size:11px; font-weight:600; color:var(--dim); margin-top:3px}
   .twocol{display:grid; grid-template-columns:1fr 1fr; gap:10px}
@@ -174,6 +177,9 @@
      the largest, brightest number on the page was the one thing with no
      staleness signal at all. */
   body.pending .hdr-eta, body.stale .hdr-eta{color:var(--dim)}
+  /* Built from a timetable row with no bus tracked behind it. Same dim as
+     .row.sched below, so the headline number and the row it came from agree. */
+  .hdr-eta.sched{color:var(--dim)}
   a.reset{color:var(--accent); text-decoration:none}
   /* ---- Pull to refresh (custom — native PTR is dead in an installed iOS PWA) ---- */
   .ptr{position:fixed; top:-36px; left:50%; transform:translateX(-50%);
@@ -461,13 +467,14 @@ function predRow(p, fetchedAt, compact){
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
   const load = loadBars(p.passload);
   // Schedule-only: the feed lists this departure but nothing is broadcasting for
-  // it. Only the INBOUND board ever renders these — PABT is an origin terminal
-  // so a scheduled departure there is a real bus about to leave; outbound strips
-  // them as phantoms before they reach here. Untagged therefore means tracked.
+  // it. BOTH boards render these (outbound since 2026-08-02) — untagged means a
+  // bus is tracked, `sched` means NJT's timetable says so and nothing more. The
+  // distinction is the whole point: hiding these showed a gap where the NJT app
+  // showed a bus, and promoting them to live invents buses that never arrive.
   const sched = !p.is_live && !p.is_inferred;
   const tag = p.is_inferred ? '<div class="tag est">est</div>'
             : (sched ? '<div class="tag sched">sched</div>' : '');
-  const col = minsColor(m);
+  const col = sched ? '' : minsColor(m);
   // Fleet number of the actual bus (e.g. 20541), under the fullness bars.
   // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
   // so render nothing rather than an empty line in that case.
@@ -478,19 +485,10 @@ function predRow(p, fetchedAt, compact){
   </div>`;
 }
 
-// Drop "phantom" departures: entries NJT emits from its printed timetable with
-// no bus actually broadcasting for them (is_live false, and not one of our
-// GPS-inferred estimates). They count down like a real bus, carry no fleet
-// number, never appear in the NJT app, and evaporate the moment NJT's feed
-// blips — so they're worse than showing nothing. Non-arrays (the {error:...}
-// object) pass through untouched so the error branch still fires.
-function realBuses(preds){
-  return Array.isArray(preds) ? preds.filter(p => p.is_live || p.is_inferred) : preds;
-}
-
-// The feed listed departures and every one of them was a phantom — i.e. NJT has
-// lost the vehicles, which is a different statement from "no bus is coming".
-// Must be read BEFORE realBuses() mutates the column away.
+// The feed listed departures and NJT is tracking a bus behind none of them —
+// i.e. the vehicles are lost, which is a different statement from "no bus is
+// coming". Every row still renders (tagged sched); this only decides wording
+// when `upcoming()` has since emptied the column.
 function allPhantom(preds){
   return Array.isArray(preds) && preds.length > 0
     && !preds.some(p => p.is_live || p.is_inferred);
@@ -642,9 +640,13 @@ if (_contentEl) _contentEl.addEventListener('click', (e) => {
 });
 
 // Header ETA — total door-to-door minutes, centered at the top of the page.
-function setHdrEta(mins){
-  document.getElementById('hdrEta').innerHTML =
-    (mins !== null && isFinite(mins)) ? `${mins}<small>min total</small>` : '';
+// `sched` = this total was built from a departure NJT lists but isn't tracking.
+// Dimmed rather than annotated: the row it came from is on screen a few pixels
+// below carrying the `sched` tag, so the number only has to agree with it.
+function setHdrEta(mins, sched){
+  const el = document.getElementById('hdrEta');
+  el.innerHTML = (mins !== null && isFinite(mins)) ? `${mins}<small>min total</small>` : '';
+  el.classList.toggle('sched', !!sched);
 }
 
 // Outbound: to NYC. Uses proxy `/` (stops 20514, 20523 + tunnel).
@@ -670,16 +672,16 @@ function renderOut(data, live){
   lastFetchedAt = data.fetched_at || Math.floor(Date.now()/1000);
   const s2 = data.stops && data.stops['20523'];
   const s3 = data.stops && data.stops['20514'];
-  // Read before the strip below empties the column, so a column that vanishes
-  // because NJT lost its buses can say so. Only Washington & 13th needs it:
-  // 15th & Willow is only given a column when a 119 is genuinely coming, so its
-  // empty branch is unreachable.
+  // True when NJT listed departures but is tracking a bus behind none of them.
+  // Only Washington & 13th needs it: 15th & Willow is only given a column when a
+  // 119 is genuinely coming, so its empty branch is unreachable.
   const drop3 = allPhantom(s3 && s3.predictions);
-  // Strip phantoms first, so neither the board nor the header ETA below can be
-  // built from a timetable entry with no bus behind it. Then drop anything that
-  // has already left, which only bites when this data is a few minutes old.
-  if (s2) s2.predictions = upcoming(realBuses(s2.predictions), lastFetchedAt);
-  if (s3) s3.predictions = upcoming(realBuses(s3.predictions), lastFetchedAt);
+  // Drop anything that has already left, which only bites when this data is a
+  // few minutes old. Timetable rows are NOT stripped here any more — the proxy
+  // tags them is_scheduled and predRow renders them dimmed, because hiding them
+  // outright showed a gap where the NJT app showed a bus (2026-08-02).
+  if (s2) s2.predictions = upcoming(s2.predictions, lastFetchedAt);
+  if (s3) s3.predictions = upcoming(s3.predictions, lastFetchedAt);
   // 15th & Willow is the 119 stop (the 126 is covered at Washington & 13th) —
   // show only 119s there. Applies to the header ETA below too.
   if (s2 && Array.isArray(s2.predictions))
@@ -703,14 +705,16 @@ function renderOut(data, live){
 
   // Total: walk to the stop + next bus at Washington & 13th + tunnel-adjusted
   // ride to PABT. No walk is added at the far end — the office is at PABT.
-  const waits = [s3]
-    .map(s => s && Array.isArray(s.predictions) && s.predictions.length
-      ? liveMins(njtCountdown(s.predictions[0]), lastFetchedAt) : null)
-    .filter(v => v !== null);
+  // The next departure at Washington & 13th, tracked or not: the header and the
+  // board's top row have to name the same bus, so this reads p3[0] rather than
+  // hunting for the first live one. setHdrEta dims it when that bus is only
+  // scheduled.
+  const next3 = p3.length ? p3[0] : null;
+  const wait = next3 ? liveMins(njtCountdown(next3), lastFetchedAt) : null;
   const tt = data.tunnel && !data.tunnel.error ? parseInt(data.tunnel.travelTime,10) : NaN;
   const delay = isFinite(tt) ? Math.max(0, tt - TUNNEL_FREEFLOW) : 0;
-  setHdrEta(waits.length
-    ? Math.min(...waits) + RIDE_BASE_MIN + delay + WALK_TO_STOP_MIN : null);
+  setHdrEta(wait !== null ? wait + RIDE_BASE_MIN + delay + WALK_TO_STOP_MIN : null,
+            next3 && !next3.is_live && !next3.is_inferred);
   if (live !== false) markHealth(data);
   markFreshness(data);
 }
@@ -761,10 +765,9 @@ function renderIn(homeData, live){
   // (213 and 214) -> one column per gate; off-peak there's a single gate (often a
   // different number entirely). Group by the gate the feed actually reports so
   // the headers stay correct when NJT moves the stop -- never hardcode 213/214.
-  // NOTE: no realBuses() here (unlike the outbound stops). PABT is an origin
-  // terminal, so a scheduled departure with no live vehicle yet is a real bus
-  // about to leave — stripping "phantoms" hid most of the rush-hour board. Just
-  // drop buses that have already gone.
+  // PABT is an origin terminal, so a scheduled departure with no live vehicle
+  // yet is a real bus about to leave — this board never stripped them, and as of
+  // 2026-08-02 the outbound board doesn't either. Just drop buses already gone.
   const realPreds = upcoming(preds, lastFetchedAt) || [];
   // "213-1" -> "213": drop the sub-lane suffix. Blank gate => no header number.
   const gateOf = p => ((p.gate || '').split(/[-\s]/)[0] || '').trim();
