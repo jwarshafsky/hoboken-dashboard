@@ -1048,6 +1048,11 @@
     gap: 0;
     background: #1a1a2a;
     padding: 3px 6px;
+    /* Transparent by default so .sched can turn it dashed without resizing the
+       chip. An `outline` would be the layout-free way to do this, but old
+       WebViews (this is an Onn stick) draw outlines square and ignore the
+       border-radius, which would read as a rendering bug on the wall. */
+    border: 1px solid transparent;
     border-radius: 6px;
     width: 64px;   /* +4px headroom for the larger --fs-sub countdown */
     text-align: center;
@@ -1059,13 +1064,21 @@
     background: #1a2a1a;
   }
 
-  /* NJT lists this departure but has no bus broadcasting behind it. Muted, and
-     it never takes the green "next chip" highlight — that highlight reads as
+  /* NJT lists this departure but has no bus broadcasting behind it. The DASHED
+     border is the actual signal (Jeff, 2026-08-02). The first pass used only a
+     dim countdown and a darker background, and on a row where every trailing
+     chip was scheduled there was no bright chip beside it to read the dimming
+     against — "how am I supposed to tell". A dashed edge reads as provisional
+     on its own, at wall distance, with nothing to compare it to.
+     Deliberately NOT `opacity` — that fades the dashes too, and they are the
+     one part that has to stay crisp; muting is done with colours instead.
+     It also never takes the green "next chip" highlight, since that reads as
      "this is the one you can catch", which is the one thing we don't know. */
   .dep-chip.sched,
   .dep-chip.sched:first-child {
     background: #16161f;
-    opacity: 0.72;
+    border-color: #8a8a9e;
+    border-style: dashed;
   }
 
   .dep-chip .cd-unit {
