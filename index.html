@@ -197,7 +197,13 @@
      Schedule-only rows carry no position and stay inert. */
   .row.mappable{cursor:pointer}
   .row.mappable:active{background:var(--line)}
-  .rowpin{margin-left:4px; font-size:12px; opacity:.65}
+  /* Rides on the countdown's own line, inside .mins. In .meta it landed after
+     the block-level `tag`/`rt` lines and so made every mappable row taller than
+     its neighbours — the board's whole job is a glanceable even list. Explicit
+     line-height:1 because an emoji glyph can otherwise report a taller line box
+     than its font-size and reintroduce the very height it's here to avoid. */
+  .rowpin{font-size:11px; line-height:1; vertical-align:middle;
+    margin-left:5px; opacity:.7}
   /* Full-screen overlay, sibling of #content so the 15s repaint never touches
      it. Shown purely by a body class, same idiom as .show-tunnel-alerts. */
   .busmap{position:fixed; inset:0; z-index:1000; background:var(--bg);
@@ -221,9 +227,16 @@
     background:var(--live); box-shadow:0 0 8px var(--live)}
   .bm-dot.stale{background:var(--warn); box-shadow:none}
   /* Marker glyphs (divIcons, so Leaflet's default marker PNGs never load). */
-  .bm-bus{display:flex; align-items:center; justify-content:center;
+  .bm-bus{position:relative; display:flex; align-items:center; justify-content:center;
     width:30px; height:30px; border-radius:50%; background:var(--accent);
     font-size:15px; box-shadow:0 0 0 3px rgba(74,168,255,.35), 0 2px 6px rgba(0,0,0,.5)}
+  /* Fleet number, pinned beside the marker. Absolute so it overflows the 30px
+     icon box without changing iconSize/iconAnchor — the marker must stay
+     anchored on the bus's actual coordinate, label or not. */
+  .bm-busno{position:absolute; left:37px; top:50%; transform:translateY(-50%);
+    font-size:12px; font-weight:700; line-height:1; color:var(--txt);
+    background:var(--card); border:1px solid var(--line); border-radius:6px;
+    padding:3px 6px; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.45)}
   .bm-bus.est{background:var(--warn); box-shadow:0 0 0 3px rgba(255,155,64,.35), 0 2px 6px rgba(0,0,0,.5)}
   .bm-stop{font-size:26px; filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
 </style>
@@ -552,8 +565,8 @@ function predRow(p, fetchedAt, compact, stop){
     pin = '<span class="rowpin" aria-hidden="true">📍</span>';
   }
   return `<div class="row${sched ? ' sched' : ''}${mapCls}"${mapAttrs}${compact ? ' style="padding:10px 12px"' : ''}>
-    <span class="mins"${col ? ` style="color:${col}"` : ''}>${label}${unit}</span>
-    <span class="meta">${lateNote(p)}${load}${rt}${tag}${pin}</span>
+    <span class="mins"${col ? ` style="color:${col}"` : ''}>${label}${unit}${pin}</span>
+    <span class="meta">${lateNote(p)}${load}${rt}${tag}</span>
   </div>`;
 }
 
@@ -1355,17 +1368,21 @@ function ensureLeaflet(){
 // fallback, so updateBusMap can re-find the same bus each poll and slide it.
 let _map = null, _busMk = null, _stopMk = null;
 
-function busIcon(est){
+// `vid` is NJT's fleet number — the one printed on the bus, so it's what lets
+// you match the dot on the map to the vehicle pulling up. Omitted entirely when
+// unknown (a rare inferred bus with no id) rather than shown as an empty chip.
+function busIcon(est, vid){
+  const no = vid ? `<span class="bm-busno">#${escHtml(vid)}</span>` : '';
   return L.divIcon({className: '', iconSize: [30, 30], iconAnchor: [15, 15],
-    html: `<div class="bm-bus${est ? ' est' : ''}">🚌</div>`});
+    html: `<div class="bm-bus${est ? ' est' : ''}">🚌${no}</div>`});
 }
 function stopIcon(){
   return L.divIcon({className: '', iconSize: [26, 34], iconAnchor: [13, 32],
     html: `<div class="bm-stop">📍</div>`});
 }
-function setBusMarker(lat, lon, est){
-  if (!_busMk) _busMk = L.marker([lat, lon], {icon: busIcon(est), zIndexOffset: 1000}).addTo(_map);
-  else { _busMk.setLatLng([lat, lon]); _busMk.setIcon(busIcon(est)); }
+function setBusMarker(lat, lon, est, vid){
+  if (!_busMk) _busMk = L.marker([lat, lon], {icon: busIcon(est, vid), zIndexOffset: 1000}).addTo(_map);
+  else { _busMk.setLatLng([lat, lon]); _busMk.setIcon(busIcon(est, vid)); }
 }
 function setStopMarker(lat, lon){
   if (lat == null || lon == null || !isFinite(lat) || !isFinite(lon)){
@@ -1403,7 +1420,7 @@ function buildBusMap(){
   }
   _map.invalidateSize();
   setStopMarker(openBus.slat, openBus.slon);
-  setBusMarker(openBus.blat, openBus.blon, openBus.est);
+  setBusMarker(openBus.blat, openBus.blon, openBus.est, openBus.vid);
   fitBusMap();
 }
 
@@ -1448,7 +1465,11 @@ function updateBusMap(data){
     (openBus.vid && x.vehicle_id === openBus.vid));
   if (p && p.lat != null && p.lon != null && isFinite(+p.lat) && isFinite(+p.lon)){
     openBus.blat = +p.lat; openBus.blon = +p.lon; openBus.est = !!p.is_inferred;
-    setBusMarker(openBus.blat, openBus.blon, openBus.est);
+    // NJT populates vehicle_id inconsistently, so a bus matched by trip number
+    // can gain a fleet number partway through — take it when it shows up, but
+    // never blank an id we already have.
+    if (p.vehicle_id) openBus.vid = p.vehicle_id;
+    setBusMarker(openBus.blat, openBus.blon, openBus.est, openBus.vid);
     setFoot(liveMins(njtCountdown(p), data.fetched_at || Math.floor(Date.now()/1000)),
             openBus.est, false);
   } else {
