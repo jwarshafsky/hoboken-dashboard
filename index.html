@@ -239,6 +239,13 @@
     padding:3px 6px; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.45)}
   .bm-bus.est{background:var(--warn); box-shadow:0 0 0 3px rgba(255,155,64,.35), 0 2px 6px rgba(0,0,0,.5)}
   .bm-stop{font-size:26px; filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+  /* Other buses bound for 13th/15th — context, not the subject. Smaller, muted,
+     and carrying the route number rather than a fleet number, because the useful
+     question about a bus you did NOT tap is "which route is that". */
+  .bm-other{display:flex; align-items:center; justify-content:center;
+    width:24px; height:24px; border-radius:50%; background:var(--card2);
+    border:1px solid var(--line); color:var(--dim); font-size:9px; font-weight:800;
+    letter-spacing:-.2px; box-shadow:0 1px 4px rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -311,6 +318,16 @@ let manual = false;           // user flipped/overrode auto
 // map module would still be in its temporal dead zone and throw, leaving the
 // page inert at "Loading…".
 let openBus = null;
+// Last outbound payload, kept so the map can draw the OTHER buses the moment it
+// opens — a tap carries only the row's dataset, not the board's data. Declared
+// here with openBus for the same temporal-dead-zone reason.
+let _lastTransit = null;
+// The Leaflet map and its markers. These live up here, NOT in the map module at
+// the bottom, because closeBusMap() -> clearOtherBuses() reads them and runs
+// synchronously from setDir() during first paint on the geolocation-absent path.
+// A `let` further down is still in its temporal dead zone at that moment and
+// throws, leaving the page inert at "Loading…". This has now bitten twice.
+let _map = null, _busMk = null, _stopMk = null, _otherMks = [];
 
 // ---------------------------------------------------------------------------
 // FERRY
@@ -807,6 +824,11 @@ function renderOut(data, live){
             next3 && !next3.is_live && !next3.is_inferred);
   if (live !== false) markHealth(data);
   markFreshness(data);
+  // Set before updateBusMap: this same object is what a later tap reads to draw
+  // the other buses. It holds the FILTERED lists (already `upcoming()`-stripped,
+  // and 15th narrowed to 119) because renderOut filters in place — which is
+  // exactly what the map should show.
+  _lastTransit = data;
   updateBusMap(data);   // move the marker if a bus map is open
 }
 
@@ -1362,11 +1384,11 @@ function ensureLeaflet(){
   return _leafletP;
 }
 
-// `openBus` (the bus currently on the map) is declared near the top with the
-// other page state — see the note there on why it must not live down here.
-// Identity is the trip number (stable per trip) with the fleet number as a
-// fallback, so updateBusMap can re-find the same bus each poll and slide it.
-let _map = null, _busMk = null, _stopMk = null;
+// `openBus`, `_lastTransit`, `_map` and the marker handles are all declared near
+// the top with the other page state — see the note there on why they must not
+// live down here. openBus's identity is the trip number (stable per trip) with
+// the fleet number as a fallback, so updateBusMap can re-find the same bus each
+// poll and slide it.
 
 // `vid` is NJT's fleet number — the one printed on the bus, so it's what lets
 // you match the dot on the map to the vehicle pulling up. Omitted entirely when
@@ -1391,6 +1413,55 @@ function setStopMarker(lat, lon){
   }
   if (!_stopMk) _stopMk = L.marker([lat, lon], {icon: stopIcon()}).addTo(_map);
   else _stopMk.setLatLng([lat, lon]);
+}
+
+// The stops this board covers. 20490 (14th & Bloomfield) is deliberately absent
+// — it's in the proxy payload but the commute board ignores it, so a bus shown
+// heading there would be going somewhere the page never mentions.
+const MAP_STOP_IDS = ['20514', '20523'];
+
+function clearOtherBuses(){
+  if (_map) for (const m of _otherMks) _map.removeLayer(m);
+  _otherMks = [];
+}
+
+function otherIcon(route){
+  return L.divIcon({className: '', iconSize: [24, 24], iconAnchor: [12, 12],
+    html: `<div class="bm-other">${escHtml(route || '')}</div>`});
+}
+
+// Every other tracked bus heading for 13th or 15th. Deliberately NOT part of
+// fitBusMap's bounds — the view belongs to the bus you tapped, so these appear
+// only when they happen to fall inside it (and more of them turn up if you zoom
+// out, which is the natural way to ask "what else is around").
+//
+// Keyed by rounded POSITION, not by trip: NJT lists the same physical bus under
+// every stop it will serve, so trip 26206109 came back at 20514, 20523 AND
+// 20490 with identical coordinates — three stacked markers for one bus.
+// Position is the thing that must be unique on a map, so it is the key.
+function renderOtherBuses(data){
+  if (!_map || !window.L) return;
+  clearOtherBuses();
+  const stops = (data && data.stops) || {};
+  const key = (la, lo) => la.toFixed(5) + ',' + lo.toFixed(5);
+  const seen = new Set();
+  // Seed with the selected bus so it never also gets a dim secondary marker.
+  if (openBus && isFinite(openBus.blat) && isFinite(openBus.blon))
+    seen.add(key(openBus.blat, openBus.blon));
+  for (const sid of MAP_STOP_IDS){
+    const preds = (stops[sid] && stops[sid].predictions) || [];
+    for (const p of preds){
+      if (p.lat == null || p.lon == null) continue;
+      const la = +p.lat, lo = +p.lon;
+      if (!isFinite(la) || !isFinite(lo)) continue;
+      const k = key(la, lo);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      // interactive:false — these must never swallow a tap meant for the map.
+      _otherMks.push(L.marker([la, lo],
+        {icon: otherIcon(p.route), interactive: false}).addTo(_map));
+    }
+  }
 }
 
 // Fit both points on open; on later polls just slide the marker so the map
@@ -1421,7 +1492,8 @@ function buildBusMap(){
   _map.invalidateSize();
   setStopMarker(openBus.slat, openBus.slon);
   setBusMarker(openBus.blat, openBus.blon, openBus.est, openBus.vid);
-  fitBusMap();
+  fitBusMap();                    // fit is the selected bus + its stop, only
+  renderOtherBuses(_lastTransit); // then everything else that lands in frame
 }
 
 function showMapFallback(lat, lon){
@@ -1475,10 +1547,14 @@ function updateBusMap(data){
   } else {
     setFoot(null, openBus.est, true);
   }
+  // Runs even when the selected bus has dropped out of the feed — the other
+  // buses are still real and still worth showing.
+  renderOtherBuses(data);
 }
 
 function closeBusMap(){
   document.body.classList.remove('show-busmap');
+  clearOtherBuses();
   openBus = null;
 }
 
