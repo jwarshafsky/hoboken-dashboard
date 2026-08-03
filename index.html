@@ -192,6 +192,40 @@
   .ptr.ready .ptr-spin{border-top-color:var(--accent)}
   .ptr.spinning .ptr-spin{border-top-color:var(--accent); animation:ptrspin .7s linear infinite}
   @keyframes ptrspin{to{transform:rotate(360deg)}}
+  /* ---- Live bus map (tap a tracked bus) --------------------------------- */
+  /* A tracked row is tappable; the dim pin is the only positive marker of that.
+     Schedule-only rows carry no position and stay inert. */
+  .row.mappable{cursor:pointer}
+  .row.mappable:active{background:var(--line)}
+  .rowpin{margin-left:4px; font-size:12px; opacity:.65}
+  /* Full-screen overlay, sibling of #content so the 15s repaint never touches
+     it. Shown purely by a body class, same idiom as .show-tunnel-alerts. */
+  .busmap{position:fixed; inset:0; z-index:1000; background:var(--bg);
+    display:none; flex-direction:column}
+  body.show-busmap .busmap{display:flex}
+  .busmap-bar{display:flex; align-items:center; gap:10px; flex:none;
+    padding:max(12px, calc(env(safe-area-inset-top, 0px) + 8px)) 14px 12px;
+    border-bottom:1px solid var(--line)}
+  .bm-title{font-size:16px; font-weight:800; line-height:1.2}
+  .bm-sub{font-size:12px; color:var(--dim); margin-top:2px}
+  .bm-close{margin-left:auto; flex:none; width:40px; height:40px; border-radius:12px;
+    background:var(--card2); border:1px solid var(--line); color:var(--txt);
+    font-size:18px; line-height:1; cursor:pointer; touch-action:manipulation}
+  .bm-close:active{background:var(--line)}
+  .busmap-canvas{flex:1; min-height:0}
+  .leaflet-container{background:var(--card)}
+  .busmap-foot{flex:none; display:flex; align-items:center; gap:8px; font-size:13px;
+    color:var(--dim); padding:12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    border-top:1px solid var(--line)}
+  .bm-dot{width:10px; height:10px; border-radius:50%; flex:none;
+    background:var(--live); box-shadow:0 0 8px var(--live)}
+  .bm-dot.stale{background:var(--warn); box-shadow:none}
+  /* Marker glyphs (divIcons, so Leaflet's default marker PNGs never load). */
+  .bm-bus{display:flex; align-items:center; justify-content:center;
+    width:30px; height:30px; border-radius:50%; background:var(--accent);
+    font-size:15px; box-shadow:0 0 0 3px rgba(74,168,255,.35), 0 2px 6px rgba(0,0,0,.5)}
+  .bm-bus.est{background:var(--warn); box-shadow:0 0 0 3px rgba(255,155,64,.35), 0 2px 6px rgba(0,0,0,.5)}
+  .bm-stop{font-size:26px; filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
 </style>
 </head>
 <body>
@@ -221,6 +255,20 @@
     <span class="stat" id="staleMsg" hidden></span>
   </div>
 
+  <!-- Live bus map — opened by tapping a tracked departure. Sibling of #content
+       so a repaint underneath can't collapse it; Leaflet is loaded on first open. -->
+  <div class="busmap" id="busMap">
+    <div class="busmap-bar">
+      <div>
+        <div class="bm-title" id="bmTitle">Bus</div>
+        <div class="bm-sub" id="bmSub"></div>
+      </div>
+      <button class="bm-close" id="bmClose" aria-label="Close map">✕</button>
+    </div>
+    <div class="busmap-canvas" id="busMapCanvas"></div>
+    <div class="busmap-foot"><span class="bm-dot" id="bmDot"></span><span id="bmFootTxt"></span></div>
+  </div>
+
 <script>
 const PROXY_URL = 'https://proxy-105885243706.us-east1.run.app';
 const POLL_MS = 15000;
@@ -244,6 +292,12 @@ const WALK_TO_STOP_MIN = 3; // outbound: home -> Washington & 13th, so the
 
 let dir = null;               // 'out' (to NYC) | 'in' (to Hoboken)
 let manual = false;           // user flipped/overrode auto
+// The bus currently shown on the live map, or null. Declared up here, not with
+// the map code at the bottom, because closeBusMap() runs synchronously from
+// setDir() during first paint (geolocation-absent path) — a `let` down in the
+// map module would still be in its temporal dead zone and throw, leaving the
+// page inert at "Loading…".
+let openBus = null;
 
 // ---------------------------------------------------------------------------
 // FERRY
@@ -381,6 +435,7 @@ function detectDirection(){
 
 function setDir(d, fromGeo){
   const changed = d !== dir;
+  if (changed) closeBusMap();   // the tracked bus belongs to the old direction
   dir = d;
   // Which board to paint on sight next time, before geolocation has answered.
   try { localStorage.setItem(LAST_DIR_KEY, d); } catch(e){}
@@ -461,7 +516,11 @@ function lateNote(p){
     ? `<span class="late">runs ~${cd - rc} late</span>` : '';
 }
 
-function predRow(p, fetchedAt, compact){
+// `stop` (id/name/lat/lon) is threaded through only for the outbound Hoboken
+// stops, so only there can a row become tappable. A row earns the map — and the
+// pin that advertises it — only when the proxy sent a live GPS fix for the bus
+// (p.lat/p.lon); schedule-only rows have no bus behind them and stay inert.
+function predRow(p, fetchedAt, compact, stop){
   const m = liveMins(njtCountdown(p), fetchedAt);
   const label = m === null ? (p.departure_text||'') : (m <= 0 ? 'DUE' : m);
   const unit = (m !== null && m > 0) ? '<small>min</small>' : '';
@@ -479,9 +538,22 @@ function predRow(p, fetchedAt, compact){
   // The proxy leaves vehicle_id empty for schedule-only trips with no GPS match,
   // so render nothing rather than an empty line in that case.
   const rt = p.vehicle_id ? `<span class="rt">#${p.vehicle_id}</span>` : '';
-  return `<div class="row${sched ? ' sched' : ''}"${compact ? ' style="padding:10px 12px"' : ''}>
+  const hasPos = stop && p.lat != null && p.lon != null
+    && isFinite(+p.lat) && isFinite(+p.lon);
+  let mapAttrs = '', mapCls = '', pin = '';
+  if (hasPos){
+    const slat = (stop.lat != null && isFinite(+stop.lat)) ? ` data-slat="${+stop.lat}"` : '';
+    const slon = (stop.lon != null && isFinite(+stop.lon)) ? ` data-slon="${+stop.lon}"` : '';
+    mapAttrs = ` data-blat="${+p.lat}" data-blon="${+p.lon}"${slat}${slon}`
+      + ` data-sid="${escHtml(stop.id||'')}" data-sname="${escHtml(stop.name||'')}"`
+      + ` data-route="${escHtml(p.route||'')}" data-trip="${escHtml(p.trip_id||'')}"`
+      + ` data-vid="${escHtml(p.vehicle_id||'')}" data-est="${p.is_inferred ? '1' : ''}"`;
+    mapCls = ' mappable';
+    pin = '<span class="rowpin" aria-hidden="true">📍</span>';
+  }
+  return `<div class="row${sched ? ' sched' : ''}${mapCls}"${mapAttrs}${compact ? ' style="padding:10px 12px"' : ''}>
     <span class="mins"${col ? ` style="color:${col}"` : ''}>${label}${unit}</span>
-    <span class="meta">${lateNote(p)}${load}${rt}${tag}</span>
+    <span class="meta">${lateNote(p)}${load}${rt}${tag}${pin}</span>
   </div>`;
 }
 
@@ -529,9 +601,9 @@ function boardCard(title, mode, cols, note, stack){
 
 // Rows for one column: the departures, or a quiet "none soon". `max` caps how
 // many show (defaults to MAX_PER_STOP).
-function colRows(preds, fetchedAt, max, dropped){
+function colRows(preds, fetchedAt, max, dropped, stop){
   if (Array.isArray(preds) && preds.length)
-    return preds.slice(0, max || MAX_PER_STOP).map(p => predRow(p, fetchedAt, true)).join('');
+    return preds.slice(0, max || MAX_PER_STOP).map(p => predRow(p, fetchedAt, true, stop)).join('');
   // "none soon" asserts something we may not know. If the feed DID list
   // departures and phantom-stripping emptied the column, the fact is that NJT
   // has lost the vehicles — the ~85% dropout — not that no bus is coming.
@@ -695,8 +767,13 @@ function renderOut(data, live){
   // column for a bus that runs a few times an hour is just dead space.
   // Stacked, not side by side: 13th on top with up to 4 departures, 15th below
   // with up to 3. 15th only earns its block when a 119 is genuinely coming.
-  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt, 4, drop3)}];
-  if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt, 3)});
+  // Stop context so a tapped row can put the bus and its stop on a map. Coords
+  // come from the proxy payload (added alongside `name`); an older proxy without
+  // them simply yields no `data-slat` and the map centres on the bus alone.
+  const stop3 = {id: '20514', name: 'Washington & 13th', lat: s3 && s3.lat, lon: s3 && s3.lon};
+  const stop2 = {id: '20523', name: '15th & Willow',     lat: s2 && s2.lat, lon: s2 && s2.lon};
+  const cols = [{head: 'Washington & 13th', rows: colRows(p3, lastFetchedAt, 4, drop3, stop3)}];
+  if (p2.length) cols.push({head: '15th & Willow', rows: colRows(p2, lastFetchedAt, 3, null, stop2)});
 
   let html = boardCard('To Port Authority', boardMode(p3.concat(p2)), cols,
                        feedError(s3 && s3.predictions, s2 && s2.predictions), true);
@@ -717,6 +794,7 @@ function renderOut(data, live){
             next3 && !next3.is_live && !next3.is_inferred);
   if (live !== false) markHealth(data);
   markFreshness(data);
+  updateBusMap(data);   // move the marker if a bus map is open
 }
 
 // Inbound: to Hoboken. Uses proxy `?mode=commute_home` (Hoboken-bound 126 from PABT).
@@ -1146,6 +1224,7 @@ function attachPullToRefresh(scroller, onRefresh, canStart){
 attachPullToRefresh(document.scrollingElement, refresh);
 function setMode(m){
   if (m === travelMode) return;
+  closeBusMap();   // no bus map over the ferry board
   travelMode = m;
   try { localStorage.setItem(MODE_KEY, travelMode); } catch(e){}
   // The right direction anchors differ per mode (PABT vs the ferry terminals),
@@ -1240,6 +1319,158 @@ if (navigator.standalone) document.body.classList.add('standalone');
 // inside the launcher this page kept the full standalone notch inset and its
 // title sat ~40px below every other app's.
 if (window.self !== window.top) document.body.classList.add('embedded');
+
+// ---- Live bus map --------------------------------------------------------
+// Tap a tracked departure and see where that bus actually is. The proxy already
+// carries each bus's GPS fix (same feed the wall map uses), so this is that
+// position on a Leaflet map — the SAME Jawg dark tiles as the wall so the two
+// read as one system. Leaflet is heavy for a glance-and-go board, so it is
+// loaded on first open, never on page load.
+const MAP_TILE_URL = 'https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?access-token=Lrrwi9HKsiS8ptMSGUR1K7cGy3sg60y1kCop0PsvWIy3H5yUz85QIzfTXJwtjwnq';
+
+let _leafletP = null;
+function ensureLeaflet(){
+  if (window.L) return Promise.resolve();
+  if (_leafletP) return _leafletP;
+  _leafletP = new Promise((resolve, reject) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    css.crossOrigin = '';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.crossOrigin = '';
+    js.onload = () => resolve();
+    // Reset so a later open (e.g. once back online) can retry the load.
+    js.onerror = () => { _leafletP = null; reject(new Error('leaflet load failed')); };
+    document.head.appendChild(js);
+  });
+  return _leafletP;
+}
+
+// `openBus` (the bus currently on the map) is declared near the top with the
+// other page state — see the note there on why it must not live down here.
+// Identity is the trip number (stable per trip) with the fleet number as a
+// fallback, so updateBusMap can re-find the same bus each poll and slide it.
+let _map = null, _busMk = null, _stopMk = null;
+
+function busIcon(est){
+  return L.divIcon({className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+    html: `<div class="bm-bus${est ? ' est' : ''}">🚌</div>`});
+}
+function stopIcon(){
+  return L.divIcon({className: '', iconSize: [26, 34], iconAnchor: [13, 32],
+    html: `<div class="bm-stop">📍</div>`});
+}
+function setBusMarker(lat, lon, est){
+  if (!_busMk) _busMk = L.marker([lat, lon], {icon: busIcon(est), zIndexOffset: 1000}).addTo(_map);
+  else { _busMk.setLatLng([lat, lon]); _busMk.setIcon(busIcon(est)); }
+}
+function setStopMarker(lat, lon){
+  if (lat == null || lon == null || !isFinite(lat) || !isFinite(lon)){
+    if (_stopMk){ _map.removeLayer(_stopMk); _stopMk = null; }
+    return;
+  }
+  if (!_stopMk) _stopMk = L.marker([lat, lon], {icon: stopIcon()}).addTo(_map);
+  else _stopMk.setLatLng([lat, lon]);
+}
+
+// Fit both points on open; on later polls just slide the marker so the map
+// doesn't yank the view out from under a pan/zoom.
+function fitBusMap(){
+  const pts = [[openBus.blat, openBus.blon]];
+  if (isFinite(openBus.slat) && isFinite(openBus.slon)) pts.push([openBus.slat, openBus.slon]);
+  if (pts.length > 1) _map.fitBounds(pts, {padding: [60, 60], maxZoom: 16});
+  else _map.setView(pts[0], 15);
+}
+
+function setFoot(mins, est, stale){
+  const dot = document.getElementById('bmDot');
+  const txt = document.getElementById('bmFootTxt');
+  dot.className = 'bm-dot' + ((est || stale) ? ' stale' : '');
+  if (stale){ txt.textContent = 'Live position lost — showing where it last was'; return; }
+  const eta = (mins == null || !isFinite(mins)) ? '' : (mins <= 0 ? 'arriving now' : mins + ' min away');
+  txt.textContent = [est ? 'estimated from GPS' : 'live', eta].filter(Boolean).join(' · ');
+}
+
+function buildBusMap(){
+  const box = document.getElementById('busMapCanvas');
+  if (!_map){
+    box.innerHTML = '';   // clear any prior offline-fallback message
+    _map = L.map(box, {zoomControl: true, attributionControl: false});
+    L.tileLayer(MAP_TILE_URL, {maxZoom: 19}).addTo(_map);
+  }
+  _map.invalidateSize();
+  setStopMarker(openBus.slat, openBus.slon);
+  setBusMarker(openBus.blat, openBus.blon, openBus.est);
+  fitBusMap();
+}
+
+function showMapFallback(lat, lon){
+  const box = document.getElementById('busMapCanvas');
+  box.innerHTML = `<div style="padding:24px; color:var(--dim); font-size:14px; line-height:1.5">
+    Couldn’t load the map.<br>
+    <a class="reset" target="_blank" rel="noopener"
+       href="https://maps.google.com/?q=${lat},${lon}">Open the bus location in Google Maps ›</a></div>`;
+}
+
+function openBusMap(row){
+  const d = row.dataset;
+  const blat = parseFloat(d.blat), blon = parseFloat(d.blon);
+  if (!isFinite(blat) || !isFinite(blon)) return;
+  openBus = {
+    sid: d.sid || '', trip: d.trip || '', vid: d.vid || '', route: d.route || '',
+    sname: d.sname || '', est: d.est === '1',
+    slat: parseFloat(d.slat), slon: parseFloat(d.slon), blat, blon,
+  };
+  document.getElementById('bmTitle').textContent = (openBus.route || 'Bus') + ' · to Port Authority';
+  document.getElementById('bmSub').textContent = openBus.sname;
+  // Seed the footer from the number already on the row, so it reads right the
+  // instant the map opens; updateBusMap refines it on the next poll.
+  const minsTxt = (row.querySelector('.mins') || {}).textContent || '';
+  const mm = minsTxt.match(/\d+/);
+  const due = /due|now|arriv/i.test(minsTxt);
+  setFoot(due ? 0 : (mm ? parseInt(mm[0], 10) : null), openBus.est, false);
+  document.body.classList.add('show-busmap');
+  ensureLeaflet().then(buildBusMap).catch(() => showMapFallback(blat, blon));
+}
+
+// Called at the end of every outbound render. If a map is open, re-find the bus
+// in the fresh payload and slide its marker; if it has dropped out of the feed,
+// keep the last position but mark it stale.
+function updateBusMap(data){
+  if (!openBus || !window.L || !_map) return;
+  const s = data && data.stops && data.stops[openBus.sid];
+  const preds = s && Array.isArray(s.predictions) ? s.predictions : [];
+  const p = preds.find(x =>
+    (openBus.trip && x.trip_id === openBus.trip) ||
+    (openBus.vid && x.vehicle_id === openBus.vid));
+  if (p && p.lat != null && p.lon != null && isFinite(+p.lat) && isFinite(+p.lon)){
+    openBus.blat = +p.lat; openBus.blon = +p.lon; openBus.est = !!p.is_inferred;
+    setBusMarker(openBus.blat, openBus.blon, openBus.est);
+    setFoot(liveMins(njtCountdown(p), data.fetched_at || Math.floor(Date.now()/1000)),
+            openBus.est, false);
+  } else {
+    setFoot(null, openBus.est, true);
+  }
+}
+
+function closeBusMap(){
+  document.body.classList.remove('show-busmap');
+  openBus = null;
+}
+
+document.getElementById('bmClose').addEventListener('click', closeBusMap);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('show-busmap')) closeBusMap();
+});
+// Delegated on #content (rebuilt every poll). Distinct from the tunnel handler
+// above — a `.row.mappable` is never a `.tunnel`, so the two don't collide.
+if (_contentEl) _contentEl.addEventListener('click', e => {
+  const row = e.target.closest('.row.mappable');
+  if (row) openBusMap(row);
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

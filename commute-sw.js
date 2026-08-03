@@ -1,6 +1,6 @@
 // Commute PWA service worker — caches only the static shell.
 // Live proxy data (cross-origin) is always fetched from the network.
-const CACHE = 'commute-shell-v11';
+const CACHE = 'commute-shell-v12';
 const SHELL = [
   './',
   'manifest.json',
