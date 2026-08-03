@@ -1464,13 +1464,25 @@ function renderOtherBuses(data){
   }
 }
 
+// Never zoom in tighter than this (Jeff, 2026-08-03). The fit is still driven
+// ONLY by the selected bus and its stop — other buses never widen it — but left
+// uncapped Leaflet picks z16 for the common case of a bus half a mile out, and
+// z16 is a ~0.45 mi window. Measured against the live feed, the other buses
+// bound for these stops sat 2.5 and 3.0 mi away (119s run out through Jersey
+// City), i.e. ~9x outside that window, so they could never appear and the
+// feature was dead on arrival. z14 is ~1.75-1.9 mi across on a phone: the bus
+// and its stop stay prominent, and a genuinely nearby bus now fits.
+const MAP_MAX_ZOOM = 14;
+
 // Fit both points on open; on later polls just slide the marker so the map
 // doesn't yank the view out from under a pan/zoom.
 function fitBusMap(){
   const pts = [[openBus.blat, openBus.blon]];
   if (isFinite(openBus.slat) && isFinite(openBus.slon)) pts.push([openBus.slat, openBus.slon]);
-  if (pts.length > 1) _map.fitBounds(pts, {padding: [60, 60], maxZoom: 16});
-  else _map.setView(pts[0], 15);
+  // A bus FARTHER out than the cap still zooms out to fit — the cap is a floor
+  // on how tight the view gets, never a ceiling on how wide.
+  if (pts.length > 1) _map.fitBounds(pts, {padding: [60, 60], maxZoom: MAP_MAX_ZOOM});
+  else _map.setView(pts[0], MAP_MAX_ZOOM);
 }
 
 function setFoot(mins, est, stale){
