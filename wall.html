@@ -2607,11 +2607,18 @@ function isAtHome(loc) {
   if (loc && loc.place === 'Home') return true;
   return distMi(HOME, loc) < HOME_RADIUS_MI;
 }
-// All of Hoboken. West edge ~ Jackson St. The comment here used to claim this
-// was a floor on the map's zoom; it never was — nothing read the constant at
-// all. It now has one real job: deciding who is close enough to be on the main
-// map already (see hasAwayInset).
-const HOBOKEN_BOUNDS = [[40.734, -74.030], [40.760, -74.022]];
+// All of Hoboken — the mile-square, corner to corner: Observer Hwy up to the
+// Weehawken line, the Palisades across to the piers.
+//
+// It did not used to be. The west edge was -74.030, which is Willow Ave, about
+// halfway across town: Church Square, Columbus Park, Jackson St and everything
+// west of them read as NOT in Hoboken. Nothing depended on it while the value
+// was decorative, but it now decides who is in town, and it decided the girls
+// at a west-side park were out of it — which dropped the town anchor and put a
+// corner box on a person standing six blocks away (Jeff, 2026-08-04).
+// Cross-check against HOBOKEN_BBOX below, which is a deliberately looser box
+// (it reaches into the river so a ferry rider still counts as approaching).
+const HOBOKEN_BOUNDS = [[40.733, -74.040], [40.762, -74.021]];
 function inHoboken(l) {
   return l && l.lat >= HOBOKEN_BOUNDS[0][0] && l.lat <= HOBOKEN_BOUNDS[1][0]
            && l.lon >= HOBOKEN_BOUNDS[0][1] && l.lon <= HOBOKEN_BOUNDS[1][1];
@@ -2805,6 +2812,47 @@ function personStatus(loc) {
 
   if (dHome < 0.5) return 'near home';
   return dHome.toFixed(1) + ' mi away';
+}
+
+// --- Pill grouping: people who are in the same place share one pill ---------
+// Home is its own group regardless of coordinate jitter — isAtHome() already
+// settled that question (Life360 geofence beats a 300 ft Tile wobble), and two
+// people in the house can otherwise read as 400 ft apart.
+function groupByPlace(people) {
+  const groups = [];
+  (people || []).forEach(function (l) {
+    const home = isAtHome(l);
+    let g = null;
+    for (const cand of groups) {
+      if (cand.home !== home) continue;
+      if (home) { g = cand; break; }
+      // NaN (a person with no usable fix) fails this, so they stand alone.
+      if (distMi(cand.people[0], l) <= OVERLAP_MI) { g = cand; break; }
+    }
+    if (g) g.people.push(l);
+    else groups.push({ home: home, people: [l] });
+  });
+  return groups;
+}
+
+// One label for the group. personStatus() is per-person and can disagree for
+// people standing together — one phone knows the geofence name, the other only
+// its distance. Prefer whichever actually names the place; the fallbacks all
+// describe the same spot anyway.
+function groupStatus(people) {
+  const vague = /^(near home|last seen |[\d.]+ mi away)/;
+  let best = null;
+  people.forEach(function (l) {
+    const s = personStatus(l);   // called once per person either way
+    if (best === null || (vague.test(best) && !vague.test(s))) best = s;
+  });
+  return best || '';
+}
+
+function joinNames(names) {
+  if (names.length <= 1) return names[0] || '';
+  if (names.length === 2) return names[0] + ' & ' + names[1];
+  return names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1];
 }
 
 function distMi(a, b) {
@@ -3226,6 +3274,143 @@ function _smoothZoomBounds(bounds, opts) {
   _hobokenMap.flyToBounds(bounds, Object.assign({ duration: 1.2 }, opts));
 }
 
+// ============================================================
+// MAIN MAP FRAMING — decided first, because it decides the insets
+// ============================================================
+// The wall map and the corner insets answer the same question at two scales,
+// so they must never answer it twice for the same person. Framing is therefore
+// planned as data (who ends up inside the view) before anything is drawn, and
+// planAwayInsets() hands a box only to people this set leaves out. The old
+// code approximated that with "not at home, not in Hoboken, >2 blocks out",
+// which drifted from what the map actually framed: anyone from 0.15 mi to the
+// 5 mi auto-fit edge was a dot on screen AND a whole corner box.
+//
+// Hoboken anchor (Jeff, 2026-08-04): when the family is mostly in town, the
+// map's job is the town. Midtown is ~3.5 mi out — inside the 5 mi auto-fit —
+// so one adult at work pulled the frame across the Hudson and squeezed the
+// three people actually here into a few pixels. Now the town holds the frame
+// and the outlier gets a corner box, which is the more useful split anyway:
+// wide view of home, close-up of whoever is out.
+//
+// Juno sits out the head-count entirely ("don't worry about Juno's location")
+// — the dog's walk shouldn't decide how the map is framed in either direction.
+function isPet(l) {
+  return !!l && (l.tid === 'JU' || PERSON_NAMES[l.tid] === 'Juno');
+}
+function hasFix(l) {
+  return !!l && isFinite(l.lat) && isFinite(l.lon);
+}
+// In town = on the main map once the town holds the frame. At-home counts:
+// the home badge is the one point every framing branch includes.
+function inTown(l) {
+  return hasFix(l) && (isAtHome(l) || inHoboken(l));
+}
+
+// Roughly how far the map card can see from its centre, in miles, at a given
+// zoom. The card is ~900×500 CSS px; one pixel spans 24901·cos(lat)/(256·2^z)
+// miles of longitude. Measured on the SHORT axis, so this under-claims on the
+// wide axis — the safe direction: at worst someone near the left edge gets a
+// box they didn't strictly need, never a box AND a dot for the same person.
+function visRadiusMi(zoom) {
+  const miPerPx = 24901 * Math.cos(HOME.lat * Math.PI / 180) / (256 * Math.pow(2, zoom));
+  return 250 * miPerPx;   // half the ~500px short axis
+}
+
+// Pure: returns the framing decision plus the set of people that view puts on
+// screen. applyMapFrame() does the moving, later in the render, so the corner
+// assignment still measures against the view the wall is currently showing.
+//
+// `fit` is who the view is BUILT around; `framed` is who ends up visible in it,
+// which is a superset — a z15 view of the house also shows the park two blocks
+// over. Answering "is this person already on the map" with the bounding box
+// alone got that wrong: someone 0.2 mi out, plainly on screen, still took a
+// corner. So visibility is judged against the view's actual reach.
+function planMapFrame(locations) {
+  const list = (locations || []).filter(hasFix);
+  const town = list.filter(inTown);
+  const inRange = list.filter(function (l) { return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI; });
+  // Ties anchor on the town — this is a wall in the house, and the house wins
+  // a 1-in/1-out split. Pets excluded from both sides of the count.
+  const townPeople = town.filter(function (l) { return !isPet(l); }).length;
+  const awayPeople = list.filter(function (l) { return !inTown(l) && !isPet(l); }).length;
+  const anchorTown = town.length > 0 && townPeople >= awayPeople;
+  const fit = anchorTown ? town : inRange;
+
+  // Everyone within reach of the resulting view, whether or not it was built
+  // for them. Centre + radius rather than a rectangle: the map is rotated to
+  // the street grid in one of its view modes, so a lat/lon box isn't what's
+  // on screen anyway.
+  function framedWithin(centerLat, centerLon, radiusMi) {
+    const center = { lat: centerLat, lon: centerLon };
+    const s = new Set();
+    list.forEach(function (l) {
+      if (distMi(center, l) <= radiusMi) s.add(l.tid);
+    });
+    // The fit group counts as framed even in the close-up approach view, where
+    // the far end of town falls off screen for a minute or two. Boxes popping
+    // in and out for the length of someone's walk up the block is churn, not
+    // information; the pill row still names anyone the close-up drops.
+    fit.forEach(function (l) { s.add(l.tid); });
+    return s;
+  }
+
+  if (!fit.length) {
+    return { mode: 'default', fit: fit, framed: framedWithin(HOME.lat, HOME.lon, visRadiusMi(14)) };
+  }
+  if (fit.every(isAtHome)) {
+    return { mode: 'home', fit: fit, framed: framedWithin(HOME.lat, HOME.lon, visRadiusMi(15)) };
+  }
+  // Someone is within ~2 blocks: close up on the last stretch home.
+  const approaching = fit.filter(function (l) {
+    return !isAtHome(l) && distMi(HOME, l) <= NEAR_HOME_RADIUS_MI;
+  });
+  const pts = approaching.length ? approaching : fit;
+  const maxZoom = approaching.length ? 16 : 15;
+  const lats = [HOME.lat].concat(pts.map(function (p) { return p.lat; }));
+  const lngs = [HOME.lon].concat(pts.map(function (p) { return p.lon; }));
+  const cLat = (Math.min.apply(null, lats) + Math.max.apply(null, lats)) / 2;
+  const cLon = (Math.min.apply(null, lngs) + Math.max.apply(null, lngs)) / 2;
+  // A bounds fit stops zooming in at maxZoom, so a tight cluster still shows
+  // the whole neighbourhood around it — hence the floor. A spread-out fit
+  // reaches at least to its own corners.
+  const reach = Math.max(
+    distMi({ lat: cLat, lon: cLon }, { lat: Math.max.apply(null, lats), lon: Math.max.apply(null, lngs) }),
+    visRadiusMi(maxZoom)
+  );
+  return {
+    mode: approaching.length ? 'approach' : 'fit',
+    fit: fit,
+    approaching: approaching,
+    framed: framedWithin(cLat, cLon, reach),
+  };
+}
+
+function applyMapFrame(frame) {
+  if (!_hobokenMap || !frame) return;
+  if (frame.mode === 'default') { _smoothZoomTo([HOME.lat, HOME.lon], 14); return; }
+  if (frame.mode === 'home')    { _smoothZoomTo([HOME.lat, HOME.lon], 15); return; }
+  let pts, opts;
+  if (frame.mode === 'approach') {
+    // Also include any approaching NY-bound bus that's within ~3 mi of home
+    // so the map auto-frames "Jeff + the bus he's about to catch" together.
+    const nearbyBuses = (_lastBuses || []).filter(function (b) {
+      return b && b.lat && b.lon && distMi(HOME, b) <= NEAR_HOME_RADIUS_MI;
+    });
+    pts = frame.approaching.concat(nearbyBuses);
+    opts = { padding: [30, 30], maxZoom: 16 };
+  } else {
+    pts = frame.fit;
+    opts = { padding: [20, 20], maxZoom: 15 };
+  }
+  const lats = [HOME.lat].concat(pts.map(function (p) { return p.lat; }));
+  const lngs = [HOME.lon].concat(pts.map(function (p) { return p.lon; }));
+  _smoothZoomBounds(
+    [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
+     [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
+    opts
+  );
+}
+
 function renderLocations(locations) {
   _lastLocations = locations || [];   // away-insets re-render on view-mode changes
   // Feeds the automatic panel rule. Kids' trackers count: "everyone home"
@@ -3236,8 +3421,10 @@ function renderLocations(locations) {
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
   if (!_hobokenMap) return;
-  // Decide the boxes FIRST — the pill row below skips whoever got one.
-  _pipPlan = planAwayInsets(locations);
+  // Decide the frame FIRST, then the boxes (only for people the frame leaves
+  // out), then the pills (only for people neither one covers).
+  const frame = planMapFrame(locations);
+  _pipPlan = planAwayInsets(locations, frame.framed);
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
   // Split into at-home vs elsewhere
@@ -3359,70 +3546,45 @@ function renderLocations(locations) {
       // Someone is out: away pills carry the full story (where + how fresh);
       // at-home pills compress to a bare name so all five fit one line on
       // the 930px wall display.
-      overlay.innerHTML = locations.filter(function (l) {
+      //
+      // One pill per PLACE, not per person (Jeff, 2026-08-04): the girls at the
+      // same park produced two pills saying the same location twice, which is
+      // both the widest and the least informative way to use the row. Grouping
+      // is by proximity rather than by matching status text, because two fixes
+      // in the same building can still be labelled differently ("at Columbus
+      // Park" vs "0.4 mi away") — same OVERLAP_MI the map markers use to decide
+      // two faces are one dot.
+      overlay.innerHTML = groupByPlace(locations.filter(function (l) {
         return !_pipPlan.shown.has(l.tid);
-      }).map(function (l) {
-        const ageSec = l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity;
+      })).map(function (g) {
+        // Freshness is the group's NEWEST fix: the pill asserts one place, and
+        // the newest fix is the strongest evidence anyone is still at it.
+        const newest = g.people.reduce(function (a, b) {
+          return (b.received_at || 0) > (a.received_at || 0) ? b : a;
+        });
+        const ageSec = newest.received_at ? (Date.now() / 1000 - newest.received_at) : Infinity;
         let cls = '';
-        if (!l.received_at || ageSec >= 10800)   cls = ' ms-pill--cold';
-        else if (ageSec >= 1800)                  cls = ' ms-pill--warm';
-        if (isAtHome(l)) {
+        if (!newest.received_at || ageSec >= 10800) cls = ' ms-pill--cold';
+        else if (ageSec >= 1800)                    cls = ' ms-pill--warm';
+        const names = joinNames(g.people.map(displayName));
+        if (g.home) {
           return '<span class="ms-pill' + cls + '"><span class="ms-name">' +
-            displayName(l) + '</span></span>';
+            names + '</span></span>';
         }
-        const status = personStatus(l);
+        const status = groupStatus(g.people);
         // A cold fix reads "last seen 13h ago" from personStatus(), so the
         // trailing age span would repeat it verbatim — "Sydney last seen 13h
         // ago 13h ago". Same 3h threshold personStatus() switches on.
-        const showAge = !!l.received_at && ageSec < 10800;
-        return '<span class="ms-pill' + cls + '"><span class="ms-name">' + displayName(l) +
+        const showAge = !!newest.received_at && ageSec < 10800;
+        return '<span class="ms-pill' + cls + '"><span class="ms-name">' + names +
           '</span><span class="ms-status">' + status + '</span>' +
-          (showAge ? '<span class="ms-ago">' + agoText(l.received_at * 1000) + '</span>' : '') +
+          (showAge ? '<span class="ms-ago">' + agoText(newest.received_at * 1000) + '</span>' : '') +
           '</span>';
       }).join('');
     }
   }
 
-  // Auto-fit: include home + any person within 5mi. If none in range, default Hoboken view.
-  const inRange = locations.filter(function (l) {
-    return distMi(HOME, l) <= AUTO_FIT_RADIUS_MI;
-  });
-  var anyApproaching = inRange.some(function (l) {
-    var d = distMi(HOME, l);
-    return !isAtHome(l) && d <= NEAR_HOME_RADIUS_MI;
-  });
-  if (inRange.length === 0) {
-    _smoothZoomTo([HOME.lat, HOME.lon], 14);
-  } else if (locations.length > 0 && inRange.length === locations.length &&
-             inRange.every(function (l) { return isAtHome(l); })) {
-    _smoothZoomTo([HOME.lat, HOME.lon], 15);
-  } else if (anyApproaching) {
-    var approaching = inRange.filter(function (l) { return distMi(HOME, l) <= NEAR_HOME_RADIUS_MI; });
-    // Also include any approaching NY-bound bus that's within ~3 mi of home
-    // so the map auto-frames "Jeff + the bus he's about to catch" together.
-    var nearbyBuses = (_lastBuses || []).filter(function (b) {
-      return b && b.lat && b.lon && distMi(HOME, b) <= NEAR_HOME_RADIUS_MI;
-    });
-    var pts = approaching.concat(nearbyBuses);
-    var lats = [HOME.lat].concat(pts.map(function (p) { return p.lat; }));
-    var lngs = [HOME.lon].concat(pts.map(function (p) { return p.lon; }));
-    _smoothZoomBounds(
-      [[Math.min.apply(null, lats), Math.min.apply(null, lngs)],
-       [Math.max.apply(null, lats), Math.max.apply(null, lngs)]],
-      { padding: [30, 30], maxZoom: 16 }
-    );
-  } else {
-    var lats = [HOME.lat].concat(inRange.map(function (l) { return l.lat; }));
-    var lngs = [HOME.lon].concat(inRange.map(function (l) { return l.lon; }));
-    var minLat = Math.min.apply(null, lats);
-    var maxLat = Math.max.apply(null, lats);
-    var minLng = Math.min.apply(null, lngs);
-    var maxLng = Math.max.apply(null, lngs);
-    _smoothZoomBounds([[minLat, minLng], [maxLat, maxLng]], {
-      padding: [20, 20],
-      maxZoom: 15,
-    });
-  }
+  applyMapFrame(frame);
 
   renderAwayInsets(locations, _pipPlan);
 }
@@ -3485,18 +3647,18 @@ function pipZoom(mi) {
 // anyone with a box is described there and is dropped from the pills.
 // No staleness cutoff on purpose (Jeff, 2026-08-01) — the girls' Tiles don't
 // update overnight, so a 13h-old fix can be the freshest thing that exists for
-// them; the age rides on the face instead (see .pip-person). Inside ~2 blocks
-// the wall map has already zoomed onto them, so a close-up is just a copy.
-// Still in Hoboken means still on the main map: the auto-fit above frames HOME
-// plus everyone within AUTO_FIT_RADIUS_MI, so a box for them is a second copy
-// of a dot already on screen. Juno crossing the 2-block line on a walk (Jeff,
-// 2026-08-02) is the case that made this obvious — she was 0.2 mi out, plainly
-// visible on the map, and still took a whole corner.
-function hasAwayInset(l) {
-  if (!l || !isFinite(l.lat) || !isFinite(l.lon)) return false;
+// them; the age rides on the face instead (see .pip-person).
+//
+// The one real test is the frame: a box exists to show someone the main map
+// can't, so anyone the main map DOES show is disqualified — a box for them is
+// a second copy of a dot already on screen. That used to be approximated with
+// at-home / in-Hoboken / 2-block rules that quietly disagreed with the actual
+// auto-fit (Juno 0.2 mi out on a walk took a whole corner, and so did anyone
+// between there and the 5 mi fit edge). planMapFrame() now answers it exactly.
+function hasAwayInset(l, framed) {
+  if (!hasFix(l)) return false;
   if (isAtHome(l)) return false;
-  if (inHoboken(l)) return false;
-  return distMi(HOME, l) > NEAR_HOME_RADIUS_MI;
+  return !framed.has(l.tid);
 }
 
 // How many boxes can be up at once, and how far apart two people can be and
@@ -3511,10 +3673,13 @@ const PIP_SPREAD_MAX_MI = 25;
 // Decides who gets a box and where. Pure — returns the assignment rather than
 // touching the DOM, because renderLocations() needs it BEFORE it builds the
 // pill row (a person with a box is dropped from the pills).
-function planAwayInsets(locations) {
+function planAwayInsets(locations, framed) {
   const groups = { tl: [], tr: [], bl: [], br: [] };
   const shown = new Set();
-  const cands = (locations || []).filter(hasAwayInset).map(function (l) {
+  const inFrame = framed || planMapFrame(locations).framed;
+  const cands = (locations || []).filter(function (l) {
+    return hasAwayInset(l, inFrame);
+  }).map(function (l) {
     return {
       loc: l,
       age: l.received_at ? (Date.now() / 1000 - l.received_at) : Infinity,
@@ -3582,7 +3747,13 @@ function createPipMap(corner) {
   }).setView([HOME.lat, HOME.lon], 13);
   L.tileLayer(MAP_TILE_URL, { maxZoom: 22, subdomains: 'abcd', attribution: '' }).addTo(map);
   const ctx = _pipMaps[corner] = { map: map, markers: {} };
-  setTimeout(function () { map.invalidateSize(); }, 0);
+  // Deferred, so it can outlive the box: a corner that fills and empties inside
+  // the same tick (two polls landing back to back) tore the map down first, and
+  // this fired into a removed Leaflet instance — an uncaught TypeError on the
+  // wall every time someone's box flickered. Only measure a map still in use.
+  setTimeout(function () {
+    if (_pipMaps[corner] && _pipMaps[corner].map === map) map.invalidateSize();
+  }, 0);
   return ctx;
 }
 
