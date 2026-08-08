@@ -247,6 +247,26 @@
     border:1px solid var(--line); color:var(--dim); font-size:9px; font-weight:800;
     letter-spacing:-.2px; box-shadow:0 1px 4px rgba(0,0,0,.4)}
 </style>
+<script>
+// The light palette above shipped with nothing to turn it on: the launcher
+// writes `launcherTheme`, but this page never read it, so a light launcher
+// still framed a black commute board. Must run in <head>, before first paint,
+// or the board flashes dark on every open. Same idiom as the launcher pages.
+(function(){
+  function applyTheme(){
+    var t = null; try { t = localStorage.getItem("launcherTheme"); } catch(e){}
+    var light = t === "light";
+    if (light) document.documentElement.setAttribute("data-theme","light");
+    else document.documentElement.removeAttribute("data-theme");
+    var m = document.getElementsByName("theme-color")[0];
+    if (m) m.content = light ? "#eef2f7" : "#0b0f14";
+  }
+  applyTheme();
+  addEventListener("storage", function(e){
+    if (!e.key || e.key === "launcherTheme") applyTheme();
+  });
+})();
+</script>
 </head>
 <body>
   <div class="top">
@@ -368,17 +388,21 @@ const FERRY = {
   },
 };
 
-// 'bus' | 'ferry'. Default follows who the device belongs to when we can tell:
-// inside the launcher this page is same-origin with it, so `launcherMe` is
-// readable and Jenny's phone opens on the ferry. Standalone on
-// commute.jwarshafsky.com there's no such value, so it falls back to whatever
-// was last chosen on that device, then to bus.
-const MODE_KEY = 'commuteTravelMode';
-let travelMode = 'bus';
+// 'bus' | 'ferry', stored PER PERSON. It used to be one shared
+// `commuteTravelMode`, so a single tap on the Bus tab outranked the identity
+// default forever -- including a tap made while setting the phone up for
+// someone else, which is exactly why Jenny's phone kept opening on the bus.
+// Each identity now carries its own choice, and someone who has never chosen
+// gets their default: ferry for Jenny, bus for everyone else. Standalone on
+// commute.jwarshafsky.com there is no `launcherMe`, so it keys off 'solo'.
+const ME = (function(){
+  try { return localStorage.getItem('launcherMe') || 'solo'; } catch(e){ return 'solo'; }
+})();
+const MODE_KEY = 'commuteTravelMode:' + ME;
+let travelMode = (ME === 'jenny') ? 'ferry' : 'bus';
 try {
   const saved = localStorage.getItem(MODE_KEY);
   if (saved === 'bus' || saved === 'ferry') travelMode = saved;
-  else if (localStorage.getItem('launcherMe') === 'jenny') travelMode = 'ferry';
 } catch(e){}
 
 function isWeekendNow(){ const d = new Date().getDay(); return d === 0 || d === 6; }
