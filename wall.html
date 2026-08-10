@@ -2637,6 +2637,8 @@ const FACE_IMAGES = {
   'SY':  'sydney.jpg',
   'EL':  'elizabeth.jpg',
   'JU':  'juno.jpg',
+  'WG':  'wagon.svg',   // the wagon's Tile — icon, not a face; asset lives in
+                        // /srv like the photos (not in this public repo)
 };
 
 // Display name override per TID (overrides whatever username Owntracks reports)
@@ -2650,6 +2652,7 @@ const PERSON_NAMES = {
   'SY':  'Sydney',
   'EL':  'Elizabeth',
   'JU':  'Juno',
+  'WG':  'Wagon',
 };
 
 // Static home stubs — shown at home until real Tile data arrives.
@@ -3294,8 +3297,10 @@ function _smoothZoomBounds(bounds, opts) {
 //
 // Juno sits out the head-count entirely ("don't worry about Juno's location")
 // — the dog's walk shouldn't decide how the map is framed in either direction.
+// The wagon Tile (WG) sits out for the same reason: it's cargo, not a person,
+// and the proxy already hides it whenever it's at home.
 function isPet(l) {
-  return !!l && (l.tid === 'JU' || PERSON_NAMES[l.tid] === 'Juno');
+  return !!l && (l.tid === 'JU' || l.tid === 'WG' || PERSON_NAMES[l.tid] === 'Juno');
 }
 function hasFix(l) {
   return !!l && isFinite(l.lat) && isFinite(l.lon);
@@ -3415,8 +3420,11 @@ function renderLocations(locations) {
   _lastLocations = locations || [];   // away-insets re-render on view-mode changes
   // Feeds the automatic panel rule. Kids' trackers count: "everyone home"
   // means the whole household, which is exactly when the map is redundant.
+  // The wagon (WG) does NOT count — it only appears in the payload when it's
+  // away, and a wagon left in the car overnight must not hold the wall in map
+  // mode while the whole family is home.
   try {
-    const list = locations || [];
+    const list = (locations || []).filter(function (l) { return l.tid !== 'WG'; });
     _everyoneHome = list.length > 0 && list.every(function (l) { return l.place === 'Home'; });
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
