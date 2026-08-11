@@ -2125,7 +2125,13 @@ function renderLivePredictions(predictions, label) {
   }
   if (Array.isArray(predictions) && predictions.length > 0) {
     let html = `<div class="route-group"><div class="route-label">${label}:</div><div class="dep-row">`;
-    const items = predictions.slice(0, 3);
+    // Order by what we DISPLAY, not by the proxy's order. The proxy sorts on its
+    // bias-corrected `countdown`, but we show the RAW countdown for live rows and
+    // the plain scheduled minutes for schedule-only rows — two scales that differ
+    // by PREDICTION_BIAS. So the proxy order can put a later-displaying bus ahead
+    // of an earlier one (a schedule-only "9 min" above a live "7 min", 2026-08-11).
+    // Re-sort on njtRaw() — the number the user reads — so the column always counts up.
+    const items = predictions.slice().sort((a, b) => njtRaw(a) - njtRaw(b)).slice(0, 3);
     // Compute the absolute arrival time (Unix ms) for each prediction by using
     // the proxy's fetched_at + the countdown that was true at that moment.
     // Then derive mins from current time. Conservative (floor) so we don't show
