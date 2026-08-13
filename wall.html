@@ -3432,6 +3432,10 @@ function renderLocations(locations) {
   try {
     const list = (locations || []).filter(function (l) { return l.tid !== 'WG'; });
     _everyoneHome = list.length > 0 && list.every(function (l) { return l.place === 'Home'; });
+    // Camera gate (Jeff, 2026-08-13): the overlay only matters when a person is
+    // in the house to see it, so pollCameraState() idles otherwise. Pets don't
+    // count as viewers. An empty payload keeps the camera working (fail soft).
+    _anyoneHome = list.length === 0 || list.some(function (l) { return !isPet(l) && l.place === 'Home'; });
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
   if (!_hobokenMap) return;
@@ -4464,6 +4468,7 @@ setInterval(fetchWallMessage, 20000);
 // LOCAL ONLY, like the wall message — the Pages fallback has neither endpoint.
 let _wallCfg = {main: 'auto', hidden: []};
 let _everyoneHome = false;      // set by renderLocations()
+let _anyoneHome = true;         // set by renderLocations(); starts true so the camera works until locations load
 // Current picture is tracked by URL, not by index: /api/artworks is newest-first,
 // so any upload or edit reshuffles every index.
 let _artIds = [], _artCur = null, _artFetchedAt = 0;
@@ -4854,18 +4859,28 @@ function startCamImg(){
 }
 function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; } }
 async function pollCameraState(){
+  const ov = document.getElementById('camOverlay');
+  // Skip the poll while asleep/hidden (like the other pollers) and whenever no
+  // person is home — nobody is in front of the display, so the overlay is moot
+  // and the poll is pure Cloud Run cost (at 1 Hz it was ~81% of ALL proxy
+  // requests). Hide + stop the stream so an active overlay can't stick around.
+  if (document.hidden || isSleeping() || !_anyoneHome){
+    ov.style.display = 'none'; stopCamImg();
+    return;
+  }
   try{
     const tok = localStorage.getItem('calToken') || '';
     const r = await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}});
     const st = await r.json();
-    const ov = document.getElementById('camOverlay');
     if (st.active){
       document.getElementById('camLabel').textContent = st.label || 'Camera';
       ov.style.display = 'block'; startCamImg();
     } else { ov.style.display = 'none'; stopCamImg(); }
   }catch(e){}
 }
-setInterval(pollCameraState, 1000);
+// 5s, not 1s: worst case the overlay appears ~5s after motion, against hold
+// times of 120s/15s. The 1 Hz version dominated the proxy's vCPU bill.
+setInterval(pollCameraState, 5000);
 pollCameraState();
 // fetchLocations reschedules itself dynamically (7s when someone is
 // approaching home inside Hoboken, otherwise 15s). Just kick off the
