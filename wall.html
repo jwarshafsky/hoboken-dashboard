@@ -3108,7 +3108,11 @@ let _approachMode = false;
 
 async function fetchLocations() {
   if (!PROXY_URL) return;
-  if (document.hidden || isSleeping()) return;
+  // This loop is a self-rescheduling setTimeout, so a bare return here KILLS
+  // location updates until a visibility/wake event happens to re-kick it —
+  // and Fully's screen-on doesn't reliably fire one (bit us 2026-08-13 when
+  // the page loaded while the screen was off). Idle cheaply instead.
+  if (document.hidden || isSleeping()) { _scheduleLocationsPoll(DEFAULT_POLL_MS); return; }
   const token = localStorage.getItem('calToken') || '';
   try {
     const url = PROXY_URL + '?mode=locations' + (_approachMode ? '&fast=1' : '');
