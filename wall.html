@@ -4518,9 +4518,16 @@ function inCommuteWindow(){
 // 5 AM counts as late), and it already governs whether panels are on screen.
 function autoMain(){
   if (!_everyoneHome || inCommuteWindow()) return 'map';
-  const day = new Date().getDay();
+  const now = new Date();
+  const day = now.getDay();
   const weekend = day === 0 || day === 6;
   if (weekend && !isLateMode()) return 'art';
+  // Weekday mornings show the full dashboard, not Frame (Jeff 2026-08-17). On a
+  // weekday AM he wants the map/transit/weather glanceable even when everyone's
+  // home. Noon is the cutoff; the 7:00-10:30 commute window already returns
+  // 'map' above, so this covers 10:30-noon (and pre-7 once the screen is on).
+  // Weekday afternoons/evenings still fall through to Frame.
+  if (!weekend && now.getHours() < 12) return 'map';
   return 'frame';
 }
 
