@@ -1045,7 +1045,13 @@
     letter-spacing: 0.04em;
     color: #9a9aa8;
     white-space: nowrap;
-    min-width: 74px;
+    /* Floor must clear the WIDEST label in any card, or a longer label
+       overflows it and shoves that row's chips right while shorter rows stay
+       at the floor — which misaligned the ferry card ("DOWNTOWN:" ~83px vs
+       "14TH ST:" ~74px). 90px floors every current label (bus labels are
+       tabular-digit twins, so they were already mutually aligned) so the
+       departure columns line up. */
+    min-width: 90px;
     flex-shrink: 0;
   }
 
@@ -2644,8 +2650,32 @@ const FACE_IMAGES = {
   'EL':  'elizabeth.jpg',
   'JU':  'juno.jpg',
   'WG':  'wagon.svg',   // the wagon's Tile — icon, not a face; asset lives in
-                        // /srv like the photos (not in this public repo)
+                        // /srv like the photos (not in this public repo).
+                        // NOTE the wall marker draws WAGON_MARKER_SVG inline
+                        // instead of loading this file — see faceMarkerHtml.
 };
+
+// The wagon marker is drawn INLINE, not via <img src="wagon.svg">. The Onn
+// stick's Android WebView renders the SVG-as-image as a blank WHITE DISC (the
+// outer <circle> paints, the inner <g> of wagon paths does not), which read on
+// the map as "just a white circle" (Jeff, 2026-08-18). Inline SVG in the
+// divIcon renders reliably — it's the same path the home marker uses. Keep the
+// geometry in sync with /srv/*/wagon.svg, which the family PWA still loads.
+const WAGON_MARKER_SVG =
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" style="display:block">' +
+  '<circle cx="32" cy="32" r="32" fill="#fff"/>' +
+  '<g fill="#111">' +
+  '<path d="M15 13 h36 a3 3 0 0 1 0 6 h-36 a3 3 0 0 1 0 -6 z"/>' +
+  '<rect x="19" y="19" width="2.6" height="12"/>' +
+  '<rect x="44.4" y="19" width="2.6" height="12"/>' +
+  '<path d="M15.5 32 L7.5 23.5" stroke="#111" stroke-width="2.6" stroke-linecap="round"/>' +
+  '<circle cx="7.5" cy="23.5" r="2.2"/>' +
+  '<path d="M13.5 31 h39 a1.5 1.5 0 0 1 1.45 1.9 l-2.6 10 a2.5 2.5 0 0 1 -2.4 1.85 h-31.9 a2.5 2.5 0 0 1 -2.4 -1.85 l-2.6 -10 A1.5 1.5 0 0 1 13.5 31 z"/>' +
+  '<circle cx="23" cy="49" r="5.2"/>' +
+  '<circle cx="43" cy="49" r="5.2"/>' +
+  '<circle cx="23" cy="49" r="1.7" fill="#fff"/>' +
+  '<circle cx="43" cy="49" r="1.7" fill="#fff"/>' +
+  '</g></svg>';
 
 // Display name override per TID (overrides whatever username Owntracks reports)
 const PERSON_NAMES = {
@@ -2882,6 +2912,7 @@ const MAP_TILE_URL = 'https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?acce
 // (pulled from the public repo 2026-07-26) — on the Pages fallback the jpgs 404,
 // so degrade to the same initials treatment as an unmapped TID.
 function faceMarkerHtml(loc) {
+  if (loc.tid === 'WG') return WAGON_MARKER_SVG;   // inline — WebView blanks the <img>
   const faceUrl = FACE_IMAGES[loc.tid];
   return faceUrl
     ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
