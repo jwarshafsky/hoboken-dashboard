@@ -2382,6 +2382,14 @@ function renderHopEtas(data) {
     setStatus(data && data.error ? 'Error' : '', '#666');
     return;
   }
+  if (data.status === 'starts' && data.startsAt) {
+    // Pre-service: show the first run's time instead of a phantom countdown.
+    timeEl.textContent = 'Starts ' + data.startsAt;
+    timeEl.style.fontSize = '0.9rem';  // shrink so the words fit the chip
+    if (minEl) minEl.style.display = 'none';
+    setStatus('', '#666');
+    return;
+  }
   if (data.status === 'no vehicles' || !Array.isArray(data) || data.length === 0) {
     showNoService();
     return;
@@ -2415,10 +2423,18 @@ async function fetchHop() {
     });
     const data = await resp.json();
 
-    // ETAs
+    // ETAs — gated on the schedule. Before the day's first run PassioGo still
+    // projects a countdown off a bus parked on the loop (observed "8 min" at
+    // 8:53 AM when the first departure was 9:19), and its ETA engine throws
+    // solidETAfailed on every poll, so a small pre-service ETA is a phantom.
+    // Those entries carry scheduleTime "Service starts at H:MM AM" — show that
+    // instead of the fake number.
     const etas = [];
+    let startsAt = null;
     for (const [key, entries] of Object.entries(data.ETAs || {})) {
       for (const entry of entries) {
+        const m = /^Service starts at\s+(.+)$/i.exec(entry.scheduleTime || '');
+        if (m) { startsAt = m[1].trim(); continue; }
         if (entry.eta && entry.eta !== 'no vehicles') {
           etas.push({ eta: entry.eta });
         }
@@ -2426,6 +2442,8 @@ async function fetchHop() {
     }
     if (etas.length > 0) {
       renderHopEtas(etas);
+    } else if (startsAt) {
+      renderHopEtas({ status: 'starts', startsAt: startsAt });
     } else {
       renderHopEtas({ status: 'no vehicles' });
     }
