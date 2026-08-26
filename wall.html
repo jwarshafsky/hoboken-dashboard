@@ -2586,18 +2586,32 @@ async function fetchHop() {
     });
     const data = await resp.json();
 
-    // ETAs — gated on the schedule. Before the day's first run PassioGo still
-    // projects a countdown off a bus parked on the loop (observed "8 min" at
-    // 8:53 AM when the first departure was 9:19), and its ETA engine throws
-    // solidETAfailed on every poll, so a small pre-service ETA is a phantom.
-    // Those entries carry scheduleTime "Service starts at H:MM AM" — show that
-    // instead of the fake number.
+    // ETAs — pre-service gate. ⚠️ scheduleTime "Service starts at H:MM" is
+    // NOT a pre-service flag: it's the next scheduled stop time and persists
+    // all day (logged 2026-08-26 — flipped 9:19→9:49 at 9:19:23 while the bus
+    // was mid-loop). And a moving bus BEFORE the first scheduled run is a real
+    // early loop, not a phantom (H4 claimed "7 min" at 8:58 and its GPS hit
+    // the stop at 9:05, for a 9:19 first run). So only gate when BOTH hold:
+    // the day's first scheduled run (scheduleTimes[0]) hasn't come AND the
+    // bus isn't moving — i.e. it's genuinely parked at the depot.
     const etas = [];
     let startsAt = null;
+    const clockMin = (s) => {
+      const m = /(\d+):(\d+)\s*(AM|PM)/i.exec(s || '');
+      if (!m) return null;
+      let h = parseInt(m[1], 10) % 12;
+      if (/pm/i.test(m[3])) h += 12;
+      return h * 60 + parseInt(m[2], 10);
+    };
+    const nowD = new Date();
+    const nowMin = nowD.getHours() * 60 + nowD.getMinutes();
     for (const [key, entries] of Object.entries(data.ETAs || {})) {
       for (const entry of entries) {
-        const m = /^Service starts at\s+(.+)$/i.exec(entry.scheduleTime || '');
-        if (m) { startsAt = m[1].trim(); continue; }
+        const sched = /^Service starts at\s+(.+)$/i.exec(entry.scheduleTime || '');
+        const first = clockMin(Array.isArray(entry.scheduleTimes) ? entry.scheduleTimes[0] : null);
+        const preWindow = first !== null && nowMin < first;
+        const moving = (parseFloat(entry.speed) || 0) > 1;
+        if (sched && preWindow && !moving) { startsAt = sched[1].trim(); continue; }
         if (entry.eta && entry.eta !== 'no vehicles') {
           // busLatLng = [lat, lng] of the bus this ETA belongs to — feeds the
           // corner label in renderHopEtas.
