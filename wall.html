@@ -2812,12 +2812,29 @@ const NEAR_HOME_RADIUS_MI = 0.15; // ~2 blocks — triggers close-up zoom
 // insets (pixel fan) need the same "these are the same place" threshold.
 const OVERLAP_MI = 0.05;
 
+// The home BLOCK, corner to corner: 13th St (north) down to 12th St (south),
+// Park Ave (west) to Washington St (east). Home sits mid-block between 12th and
+// 13th. The proxy's ~190 ft Home geofence and the old ~75 ft radius were both
+// TIGHTER than a Tile's 100-300 ft jitter, so a tracker sitting in the house
+// kept reading "not home" (Jeff, 2026-08-30: extend the zone up to 13th and
+// down to 12th). A lat/lon box is a slight approximation of the tilted street
+// grid, but it comfortably contains the whole property plus jitter and stops
+// short of the parks/stores on the neighbouring blocks (Trader Joe's/Froggy
+// Park are north of 13th; Kings is east of Washington — all excluded).
+const HOME_ZONE = { latMin: 40.7513, latMax: 40.7527, lonMin: -74.0300, lonMax: -74.0258 };
+function inHomeZone(loc) {
+  return loc && isFinite(loc.lat) && isFinite(loc.lon)
+    && loc.lat >= HOME_ZONE.latMin && loc.lat <= HOME_ZONE.latMax
+    && loc.lon >= HOME_ZONE.lonMin && loc.lon <= HOME_ZONE.lonMax;
+}
 // A person counts as home if the proxy's payload says so ('place' comes from
-// Life360, whose geofence made the home/away call server-side) OR they're
-// inside the tight radius. Radius alone misclassified: Tile fixes jitter
-// 100-300 ft, so a kid on the couch showed "near home" (Jeff, 2026-07-26).
+// Life360, whose geofence made the home/away call server-side), OR they're
+// inside the home block (above), OR inside the tight radius. Radius alone
+// misclassified: Tile fixes jitter 100-300 ft, so a kid on the couch showed
+// "near home" (Jeff, 2026-07-26).
 function isAtHome(loc) {
   if (loc && loc.place === 'Home') return true;
+  if (inHomeZone(loc)) return true;
   return distMi(HOME, loc) < HOME_RADIUS_MI;
 }
 // All of Hoboken — the mile-square, corner to corner: Observer Hwy up to the
@@ -2858,25 +2875,28 @@ const FACE_IMAGES = {
 
 // The wagon marker is drawn INLINE, not via <img src="wagon.svg">. The Onn
 // stick's Android WebView renders the SVG-as-image as a blank WHITE DISC (the
-// outer <circle> paints, the inner <g> of wagon paths does not), which read on
-// the map as "just a white circle" (Jeff, 2026-08-18). Inline SVG in the
-// divIcon renders reliably — it's the same path the home marker uses. Keep the
-// geometry in sync with /srv/*/wagon.svg, which the family PWA still loads.
+// outer <circle> paints, the inner shapes do not), which read on the map as
+// "just a white circle" (Jeff, 2026-08-18). The 2026-08-18 inline rewrite kept
+// the paths inside a single <g fill="#111"> — and the WebView drops exactly
+// that: it paints the root <circle> but not a group whose colour is only
+// inherited, so it STILL showed a white circle (Jeff, 2026-08-30). Fix: no <g>,
+// an explicit xmlns, and a literal fill on EVERY shape so nothing depends on
+// inheritance. Keep the geometry in sync with /srv/*/wagon.svg (the family PWA
+// still loads that file).
 const WAGON_MARKER_SVG =
-  '<svg viewBox="0 0 64 64" width="100%" height="100%" style="display:block">' +
-  '<circle cx="32" cy="32" r="32" fill="#fff"/>' +
-  '<g fill="#111">' +
-  '<path d="M15 13 h36 a3 3 0 0 1 0 6 h-36 a3 3 0 0 1 0 -6 z"/>' +
-  '<rect x="19" y="19" width="2.6" height="12"/>' +
-  '<rect x="44.4" y="19" width="2.6" height="12"/>' +
-  '<path d="M15.5 32 L7.5 23.5" stroke="#111" stroke-width="2.6" stroke-linecap="round"/>' +
-  '<circle cx="7.5" cy="23.5" r="2.2"/>' +
-  '<path d="M13.5 31 h39 a1.5 1.5 0 0 1 1.45 1.9 l-2.6 10 a2.5 2.5 0 0 1 -2.4 1.85 h-31.9 a2.5 2.5 0 0 1 -2.4 -1.85 l-2.6 -10 A1.5 1.5 0 0 1 13.5 31 z"/>' +
-  '<circle cx="23" cy="49" r="5.2"/>' +
-  '<circle cx="43" cy="49" r="5.2"/>' +
-  '<circle cx="23" cy="49" r="1.7" fill="#fff"/>' +
-  '<circle cx="43" cy="49" r="1.7" fill="#fff"/>' +
-  '</g></svg>';
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">' +
+  '<circle cx="32" cy="32" r="32" fill="#ffffff"/>' +
+  '<path fill="#111111" d="M15 13 h36 a3 3 0 0 1 0 6 h-36 a3 3 0 0 1 0 -6 z"/>' +
+  '<rect fill="#111111" x="19" y="19" width="2.6" height="12"/>' +
+  '<rect fill="#111111" x="44.4" y="19" width="2.6" height="12"/>' +
+  '<path fill="none" stroke="#111111" stroke-width="2.6" stroke-linecap="round" d="M15.5 32 L7.5 23.5"/>' +
+  '<circle fill="#111111" cx="7.5" cy="23.5" r="2.2"/>' +
+  '<path fill="#111111" d="M13.5 31 h39 a1.5 1.5 0 0 1 1.45 1.9 l-2.6 10 a2.5 2.5 0 0 1 -2.4 1.85 h-31.9 a2.5 2.5 0 0 1 -2.4 -1.85 l-2.6 -10 A1.5 1.5 0 0 1 13.5 31 z"/>' +
+  '<circle fill="#111111" cx="23" cy="49" r="5.2"/>' +
+  '<circle fill="#111111" cx="43" cy="49" r="5.2"/>' +
+  '<circle fill="#ffffff" cx="23" cy="49" r="1.7"/>' +
+  '<circle fill="#ffffff" cx="43" cy="49" r="1.7"/>' +
+  '</svg>';
 
 // Display name override per TID (overrides whatever username Owntracks reports)
 const PERSON_NAMES = {
@@ -3173,6 +3193,10 @@ function initHobokenMap() {
 
   // Initial view: tight on home (will re-fit once locations arrive)
   _hobokenMap.setView([HOME.lat, HOME.lon], 14);
+  // The grid/fonts settle a beat after init; re-measure so the very first paint
+  // loads a full set of tiles instead of a half-sized gray map ("load properly
+  // at the start", Jeff 2026-08-30).
+  setTimeout(function () { if (_hobokenMap) _hobokenMap.invalidateSize(); }, 400);
 
   // Remote-control zoom: channel-up / channel-down buttons zoom the map.
   // Different TV platforms emit different key identifiers for these buttons,
@@ -3667,11 +3691,14 @@ function renderLocations(locations) {
   // mode while the whole family is home.
   try {
     const list = (locations || []).filter(function (l) { return l.tid !== 'WG'; });
-    _everyoneHome = list.length > 0 && list.every(function (l) { return l.place === 'Home'; });
+    // isAtHome (not raw place==='Home') so the widened home-block zone counts —
+    // a tracker jittering inside the house must read home here too, else auto
+    // art/frame never triggers while someone is plainly on the couch.
+    _everyoneHome = list.length > 0 && list.every(isAtHome);
     // Camera gate (Jeff, 2026-08-13): the overlay only matters when a person is
     // in the house to see it, so pollCameraState() idles otherwise. Pets don't
     // count as viewers. An empty payload keeps the camera working (fail soft).
-    _anyoneHome = list.length === 0 || list.some(function (l) { return !isPet(l) && l.place === 'Home'; });
+    _anyoneHome = list.length === 0 || list.some(function (l) { return !isPet(l) && isAtHome(l); });
     if (typeof applyWallConfig === 'function' && IS_LOCAL) applyWallConfig();
   } catch (e) {}
   if (!_hobokenMap) return;
@@ -4802,6 +4829,18 @@ function applyWallConfig(){
   document.body.classList.toggle('frame-mode', frame);
   document.body.classList.toggle('show-art', !!want);
   if (frame !== wasFrame) moveTicker(frame);
+  // Coming back to the MAP from art/frame: #hobokenMap was display:none, so
+  // Leaflet could never lay it out and the tiles come up gray even though the
+  // face markers are positioned ("map doesn't load fully", Jeff 2026-08-30).
+  // Re-measure once the DOM has flipped to block, then re-fit to the family so
+  // it renders complete immediately instead of waiting for the next poll.
+  if (wasShowing && !want && _hobokenMap) {
+    setTimeout(function () {
+      if (!_hobokenMap) return;
+      _hobokenMap.invalidateSize();
+      if (_lastLocations && _lastLocations.length) renderLocations(_lastLocations);
+    }, 80);
+  }
   if (want) {
     ensureArt();
     // Turning art ON restarts the dwell clock, so the first picture gets its
@@ -5083,7 +5122,11 @@ function fetchWallConfig(){
     .catch(function () { /* keep whatever we last applied */ });
 }
 fetchWallConfig();
-setInterval(fetchWallConfig, 20000);
+// 2s, not 20s: a mode change picked on the Wall Board controller should show on
+// the wall almost immediately ("switching modes should be instant", Jeff
+// 2026-08-30). /api/wall-config is a local loopback service (guarded by
+// IS_LOCAL + skipped while hidden/asleep), so the extra polling is free.
+setInterval(fetchWallConfig, 2000);
 // Re-evaluate the automatic rule on its own clock: "everyone home" and the
 // commute window both change without the config changing.
 setInterval(function(){ if (IS_LOCAL) applyWallConfig(); }, 60000);
