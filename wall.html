@@ -3658,6 +3658,35 @@ function planMapFrame(locations) {
   };
 }
 
+// Anyone whose marker is actually inside the live map viewport is already
+// visible and must NOT also get a corner box — regardless of what the
+// size-based visRadiusMi estimate claimed. visRadiusMi assumes a ~900×500 card;
+// in expanded late-mode the map is far larger, so a person 1+ mi out reads as
+// on-screen while the estimate still says "away" and hands them a redundant box
+// (Jeff, 2026-09-01: Jenny's marker + a PiP for the same fix). This measures the
+// CURRENTLY rendered bounds (this poll's applyMapFrame runs later), which is
+// stable across the 7-15s cadence so it converges within a tick. A small inward
+// inset means a face straddling the edge still earns its box. Rotated views:
+// leaflet-rotate's getBounds returns the axis-aligned box covering the rotated
+// viewport — slightly generous, erring toward "visible → no box", which is the
+// preferred direction here.
+function framedByLiveBounds(locations) {
+  const s = new Set();
+  if (!_hobokenMap || typeof L === 'undefined') return s;
+  let b;
+  try { b = _hobokenMap.getBounds(); } catch (e) { return s; }
+  if (!b) return s;
+  const latPad = (b.getNorth() - b.getSouth()) * 0.08;
+  const lonPad = (b.getEast() - b.getWest()) * 0.08;
+  const inner = L.latLngBounds(
+    [b.getSouth() + latPad, b.getWest() + lonPad],
+    [b.getNorth() - latPad, b.getEast() - lonPad]);
+  (locations || []).forEach(function (l) {
+    if (hasFix(l) && inner.contains([l.lat, l.lon])) s.add(l.tid);
+  });
+  return s;
+}
+
 function applyMapFrame(frame) {
   if (!_hobokenMap || !frame) return;
   if (frame.mode === 'default') { _smoothZoomTo([HOME.lat, HOME.lon], 14); return; }
@@ -3707,6 +3736,10 @@ function renderLocations(locations) {
   // Decide the frame FIRST, then the boxes (only for people the frame leaves
   // out), then the pills (only for people neither one covers).
   const frame = planMapFrame(locations);
+  // Union in anyone actually inside the live viewport (handles the expanded
+  // late-mode map that visRadiusMi under-claims for). A person on the map keeps
+  // their marker and loses the redundant corner box.
+  framedByLiveBounds(locations).forEach(function (t) { frame.framed.add(t); });
   _pipPlan = planAwayInsets(locations, frame.framed);
   const RING_RADIUS_DEG = 0.0003; // ~110 ft for non-home clustering
 
