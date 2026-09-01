@@ -2867,6 +2867,7 @@ const FACE_IMAGES = {
   'SY':  'sydney.jpg',
   'EL':  'elizabeth.jpg',
   'LZ':  'lan.jpg',     // guest — only appears when proximity-gated in by the proxy
+  'DZ':  'david.jpg',   // guest — same gate
   'JU':  'juno.jpg',
   'WG':  'wagon.svg',   // the wagon's Tile — icon, not a face; asset lives in
                         // /srv like the photos (not in this public repo).
@@ -2910,6 +2911,7 @@ const PERSON_NAMES = {
   'SY':  'Sydney',
   'EL':  'Elizabeth',
   'LZ':  'Lan',
+  'DZ':  'David',
   'JU':  'Juno',
   'WG':  'Wagon',
 };
@@ -3725,7 +3727,7 @@ function renderLocations(locations) {
     // isAtHome (not raw place==='Home') so the widened home-block zone counts —
     // a tracker jittering inside the house must read home here too, else auto
     // art/frame never triggers while someone is plainly on the couch.
-    _everyoneHome = list.length > 0 && list.every(isAtHome);
+    setEveryoneHome(list.length > 0 && list.every(isAtHome));
     // Camera gate (Jeff, 2026-08-13): the overlay only matters when a person is
     // in the house to see it, so pollCameraState() idles otherwise. Pets don't
     // count as viewers. An empty payload keeps the camera working (fail soft).
@@ -4765,7 +4767,43 @@ setInterval(fetchWallMessage, 20000);
 //      the kids' artwork instead.
 // LOCAL ONLY, like the wall message — the Pages fallback has neither endpoint.
 let _wallCfg = {main: 'auto', hidden: []};
-let _everyoneHome = false;      // set by renderLocations()
+let _everyoneHome = false;      // set by renderLocations() via setEveryoneHome()
+
+// Everyone-home has to SETTLE before auto hands the wall over to Frame/art
+// (Jeff, 2026-09-01). The switch used to fire on the very first poll that saw
+// the last person arrive, so walking in the door blanked the dashboard while
+// you were still putting your bag down. The state now has to HOLD for
+// EVERYONE_HOME_SETTLE_MS before auto acts on it.
+//
+// The delay is deliberately ONE-SIDED: slow to hide the dashboard, instant to
+// bring it back. The moment anyone leaves, _everyoneHome goes false, the timer
+// clears, and autoMain() returns 'map' on the very next poll — nobody waits
+// 5 minutes to find out where someone is.
+//
+// Persisted so an ordinary reload (the nightly one, or a remote cache-clear
+// after a deploy) doesn't restart the wait and strand the wall on 'map' when
+// everyone has in fact been home for hours. Only a stamp in the past is
+// trusted; anything else falls back to "the clock starts now".
+const EVERYONE_HOME_SETTLE_MS = 5 * 60 * 1000;
+let _everyoneHomeSince = 0;
+
+function setEveryoneHome(v){
+  if (!v){
+    _everyoneHomeSince = 0;
+    try { localStorage.removeItem('everyoneHomeSince'); } catch(e){}
+  } else if (!_everyoneHomeSince){
+    let stored = 0;
+    try { stored = parseInt(localStorage.getItem('everyoneHomeSince') || '0', 10) || 0; } catch(e){}
+    _everyoneHomeSince = (stored > 0 && stored <= Date.now()) ? stored : Date.now();
+    try { localStorage.setItem('everyoneHomeSince', String(_everyoneHomeSince)); } catch(e){}
+  }
+  _everyoneHome = v;
+}
+
+function everyoneHomeSettled(){
+  return _everyoneHome && _everyoneHomeSince > 0 &&
+         (Date.now() - _everyoneHomeSince) >= EVERYONE_HOME_SETTLE_MS;
+}
 let _anyoneHome = true;         // set by renderLocations(); starts true so the camera works until locations load
 // Current picture is tracked by URL, not by index: /api/artworks is newest-first,
 // so any upload or edit reshuffles every index.
@@ -4821,8 +4859,10 @@ function autoMain(){
   // to Frame instead of waiting for the window to end at 8 PM. Sits BEFORE the
   // commute-window test so it wins. Weekday-only on purpose — weekends keep the
   // readable 'art' dashboard until 9 PM (isLateMode), unchanged.
-  if (_everyoneHome && !weekend && now.getHours() >= 19) return 'frame';
-  if (!_everyoneHome || inCommuteWindow()) return 'map';
+  // everyoneHomeSettled(), not _everyoneHome: the last arrival has to have been
+  // home for EVERYONE_HOME_SETTLE_MS before the dashboard gives way to Frame.
+  if (everyoneHomeSettled() && !weekend && now.getHours() >= 19) return 'frame';
+  if (!everyoneHomeSettled() || inCommuteWindow()) return 'map';
   if (weekend && !isLateMode()) return 'art';
   // Weekday mornings show the full dashboard, not Frame (Jeff 2026-08-17). On a
   // weekday AM he wants the map/transit/weather glanceable even when everyone's
