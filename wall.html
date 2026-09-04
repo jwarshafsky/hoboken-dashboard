@@ -695,6 +695,13 @@
     display: flex;
     justify-content: space-between;
     align-items: baseline;
+    /* Guaranteed breathing room between the date label and the clock.
+       Without it, a label that fits with zero slack ("FRIDAY, SEPTEMBER 4")
+       runs straight into "7:30 AM" and reads as "SEPTEMBER 47:30 AM". The gap
+       counts toward scrollWidth, so _autoFitTodayHeader() sees the overflow
+       and steps down to a shorter date form instead. */
+    column-gap: 16px;
+    white-space: nowrap;
   }
 
   .cal-header-time {
@@ -4543,20 +4550,32 @@ function _autoFitTodayHeader() {
   if (!header) return;
   const timeSpan = header.querySelector('.cal-header-time');
   const timeHtml = timeSpan ? timeSpan.outerHTML : '';
+  const realTime = timeSpan ? timeSpan.textContent : '';
   const today = new Date();
   const FORMATS = [
     { weekday: 'long',  month: 'long',  day: 'numeric' }, // WEDNESDAY, DECEMBER 31
     { weekday: 'short', month: 'long',  day: 'numeric' }, // WED, DECEMBER 31
     { weekday: 'short', month: 'short', day: 'numeric' }, // WED, DEC 31
   ];
+  // Measure against the WIDEST clock string, not the current one: this only
+  // runs on calendar render (every 5 min), but the clock ticks every minute
+  // and "9:59 AM" → "10:00 AM" grows a digit. A label chosen at 9:59 would
+  // otherwise crowd the clock at 10:00.
+  const WIDEST_CLOCK = '12:00 PM';
+  let chosen = FORMATS[FORMATS.length - 1];
   for (const fmt of FORMATS) {
     const label = today.toLocaleDateString('en-US', fmt).toUpperCase();
     header.innerHTML = label + timeHtml;
+    const probe = header.querySelector('.cal-header-time');
+    if (probe) probe.textContent = WIDEST_CLOCK;
     // 1px slack for sub-pixel rounding. scrollWidth > clientWidth means
     // content overflowed the header's content box even with nowrap.
-    if (header.scrollWidth <= header.clientWidth + 1) return;
+    if (header.scrollWidth <= header.clientWidth + 1) { chosen = fmt; break; }
   }
-  // All formats overflow (unlikely) — last one (shortest) stays applied.
+  // All formats overflow (unlikely) — shortest stays applied.
+  header.innerHTML = today.toLocaleDateString('en-US', chosen).toUpperCase() + timeHtml;
+  const restored = header.querySelector('.cal-header-time');
+  if (restored) restored.textContent = realTime;
 }
 
 function trimCalendarOverflow() {
