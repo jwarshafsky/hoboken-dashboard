@@ -5229,11 +5229,35 @@ setInterval(function(){ if (IS_LOCAL) applyWallConfig(); }, 60000);
 // the re-renders above.
 armArtTimer();
 
-// --- camera-feed overlay: Front (~4fps) / Lower Door frames, over the weather panel ---
-let camImgTimer = null, camObjUrl = null;
-function startCamImg(){
-  if (camImgTimer) return;
+// --- camera-feed overlay: Front / Lower Door / Parking Spot, over the weather panel ---
+// LOCAL path (IS_LOCAL, 2026-09-05): camfeed.service on the Beelink serves the
+// state at /camfeed/state and a multipart MJPEG stream at /camfeed/stream.mjpeg
+// (Caddy -> 127.0.0.1:5013, gated like /proxy). One <img src> carries the whole
+// stream on the LAN -- no per-frame fetch, no Cloud Run, no egress. The old
+// blob-fetch loop against ?mode=camera_img stays ONLY as the non-local
+// fallback (public GitHub Pages copy); camfeed no longer pushes frames to the
+// proxy unless its cloud_push knob is turned back on, so expect that path to
+// show nothing.
+let camImgTimer = null, camObjUrl = null, camStreamOn = false, camStreamSig = null, camStreamSince = 0;
+function startCamImg(st){
   const img = document.getElementById('camImg');
+  if (IS_LOCAL){
+    // A closed MJPEG stream fires no event -- the <img> just keeps its last
+    // frame -- so camfeed reports a stream generation (bumps on every ffmpeg
+    // restart, incl. a service restart) and its open-client count. Reconnect
+    // when the generation moves, or when the server sees nobody connected
+    // while we think we are (allowing a few seconds for the connect itself).
+    const sig = (st.camera || '') + ':' + (st.gen || 0);
+    const orphaned = camStreamOn && st.clients === 0 && (Date.now() - camStreamSince) > 4000;
+    if (camStreamOn && camStreamSig === sig && !orphaned) return;
+    camStreamOn = true; camStreamSig = sig; camStreamSince = Date.now();
+    img.onerror = function(){                            // Caddy/camfeed hiccup: retry while still wanted
+      if (camStreamOn) setTimeout(function(){ if (camStreamOn) img.src = '/camfeed/stream.mjpeg?t=' + Date.now(); }, 1500);
+    };
+    img.src = '/camfeed/stream.mjpeg?t=' + Date.now();
+    return;
+  }
+  if (camImgTimer) return;
   const tok = localStorage.getItem('calToken') || '';
   camImgTimer = setInterval(async function(){          // fetch WITH auth header, show as blob
     try{
@@ -5245,24 +5269,35 @@ function startCamImg(){
     }catch(e){}
   }, 250);
 }
-function stopCamImg(){ if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; } if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; } }
+function stopCamImg(){
+  if (camStreamOn){                                     // dropping src aborts the open MJPEG connection
+    camStreamOn = false; camStreamSig = null;
+    const img = document.getElementById('camImg'); img.onerror = null; img.removeAttribute('src');
+  }
+  if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; }
+  if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; }
+}
 async function pollCameraState(){
   const ov = document.getElementById('camOverlay');
   // Skip the poll while asleep/hidden (like the other pollers) and whenever no
-  // person is home — nobody is in front of the display, so the overlay is moot
-  // and the poll is pure Cloud Run cost (at 1 Hz it was ~81% of ALL proxy
-  // requests). Hide + stop the stream so an active overlay can't stick around.
+  // person is home — nobody is in front of the display, so the overlay is moot.
+  // (Local poll is free; the gate still matters for the cloud fallback and
+  // keeps the Beelink from encoding for an empty room.)
   if (document.hidden || isSleeping() || !_anyoneHome){
     ov.style.display = 'none'; stopCamImg();
     return;
   }
   try{
-    const tok = localStorage.getItem('calToken') || '';
-    const r = await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}});
-    const st = await r.json();
+    let st;
+    if (IS_LOCAL){
+      st = await (await fetch('/camfeed/state', {cache:'no-store'})).json();
+    } else {
+      const tok = localStorage.getItem('calToken') || '';
+      st = await (await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}})).json();
+    }
     if (st.active){
       document.getElementById('camLabel').textContent = st.label || 'Camera';
-      ov.style.display = 'block'; startCamImg();
+      ov.style.display = 'block'; startCamImg(st);
     } else { ov.style.display = 'none'; stopCamImg(); }
   }catch(e){}
 }
