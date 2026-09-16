@@ -1265,6 +1265,11 @@
     .cam-overlay{position:absolute;inset:0;background:#000;z-index:30;border-radius:inherit;overflow:hidden}
     .cam-overlay img{width:100%;height:100%;object-fit:cover;display:block}
     .cam-label{position:absolute;left:8px;bottom:8px;padding:2px 9px;border-radius:7px;background:rgba(0,0,0,.62);color:#fff;font-weight:700;font-size:13px;letter-spacing:.2px}
+    /* While Frame mode is on the overlay lives inside #frameMode (see
+       placeCamOverlay) and floats over the mat, sized to the camera's 16:9 at
+       the stick's 930x539 so object-fit:cover crops almost nothing. */
+    body.frame-mode #camOverlay.cam-in-frame{inset:13vh 12vw;border-radius:14px;z-index:1600;box-shadow:0 18px 60px rgba(0,0,0,.45)}
+    body.frame-mode #camOverlay.cam-in-frame .cam-label{font-size:16px;left:12px;bottom:12px}
 </style>
 </head>
 <body>
@@ -4922,7 +4927,7 @@ function applyWallConfig(){
   const wasFrame = document.body.classList.contains('frame-mode');
   document.body.classList.toggle('frame-mode', frame);
   document.body.classList.toggle('show-art', !!want);
-  if (frame !== wasFrame) moveTicker(frame);
+  if (frame !== wasFrame) { moveTicker(frame); placeCamOverlay(); }
   // Coming back to the MAP from art/frame: #hobokenMap was display:none, so
   // Leaflet could never lay it out and the tiles come up gray even though the
   // face markers are positioned ("map doesn't load fully", Jeff 2026-08-30).
@@ -5277,13 +5282,32 @@ function stopCamImg(){
   if (camImgTimer){ clearInterval(camImgTimer); camImgTimer = null; }
   if (camObjUrl){ URL.revokeObjectURL(camObjUrl); camObjUrl = null; }
 }
+// Frame mode hides every grid card with !important -- the weather card and
+// this overlay inside it included -- so a camera would be invisible exactly
+// when someone asks for it from the phone in the evening. While Frame is on,
+// the overlay is moved into #frameMode (the one element Frame leaves on
+// screen) and floats over the mat; it goes back to the weather card when Frame
+// ends. Same reparenting trick as moveTicker(): one overlay, one stream, no
+// duplicate. Reparenting an <img> does not restart its MJPEG connection.
+function placeCamOverlay(){
+  const ov = document.getElementById('camOverlay');
+  if (!ov) return;
+  const frame = document.body.classList.contains('frame-mode');
+  const dest = document.getElementById(frame ? 'frameMode' : 'weatherCard');
+  if (dest && ov.parentNode !== dest) {
+    if (frame) dest.appendChild(ov); else dest.insertBefore(ov, dest.firstChild);
+  }
+  ov.classList.toggle('cam-in-frame', frame);
+}
 async function pollCameraState(){
   const ov = document.getElementById('camOverlay');
-  // Skip the poll while asleep/hidden (like the other pollers) and whenever no
-  // person is home — nobody is in front of the display, so the overlay is moot.
-  // (Local poll is free; the gate still matters for the cloud fallback and
-  // keeps the Beelink from encoding for an empty room.)
-  if (document.hidden || isSleeping() || !_anyoneHome){
+  // Skip the poll while asleep/hidden (like the other pollers). On the cloud
+  // fallback also skip whenever no person is home — that poll is billable and
+  // nobody is in front of the display. The LOCAL poll is free, and it has to
+  // run regardless because a MANUAL hold (the Wall Board page's "front
+  // camera" button, 2026-09-16) must show even when the location feed thinks
+  // the house is empty: someone tapped the button, so someone is looking.
+  if (document.hidden || isSleeping() || (!_anyoneHome && !IS_LOCAL)){
     ov.style.display = 'none'; stopCamImg();
     return;
   }
@@ -5295,8 +5319,11 @@ async function pollCameraState(){
       const tok = localStorage.getItem('calToken') || '';
       st = await (await fetch(PROXY_URL + '?mode=camera', {headers:{'X-Cal-Token':tok}})).json();
     }
-    if (st.active){
+    // Automatic holds (motion, an approach) still need a person home; a manual
+    // one does not — see above.
+    if (st.active && (_anyoneHome || st.manual)){
       document.getElementById('camLabel').textContent = st.label || 'Camera';
+      placeCamOverlay();
       ov.style.display = 'block'; startCamImg(st);
     } else { ov.style.display = 'none'; stopCamImg(); }
   }catch(e){}
