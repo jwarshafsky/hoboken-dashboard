@@ -1307,7 +1307,7 @@
 
 <!-- Row 2: Weather (below clock, left) -->
 <div class="card weather-card" id="weatherCard">
-      <div id="camOverlay" class="cam-overlay" style="display:none"><img id="camImg" alt="camera"><div id="camLabel" class="cam-label"></div></div>
+      <div id="camOverlay" class="cam-overlay" style="display:none"><img id="camImg" alt="camera"><div id="camLabel" class="cam-label"></div><audio id="camAudio" preload="none"></audio></div>
   <div class="weather-main">
     <!-- Hero row: desc + hi/lo + rain (left) | icon (center) | temp (right) -->
     <div class="weather-top">
@@ -5274,7 +5274,36 @@ function startCamImg(st){
     }catch(e){}
   }, 250);
 }
+// Sound (2026-09-16): a manual hold from the Wall Board page can carry sound.
+// The tile is MJPEG, so audio is its own stream -- camfeed's /audio.mp3, a
+// per-connection MP3 transcode of the camera's mic, served only while the
+// hold's audio flag is on (404 otherwise). Plain <audio src> + play(): Fully
+// has autoplay enabled, so no gesture is needed. Expect the sound to run a
+// second or two behind the picture; that is the MP3 buffering, not a bug.
+let camAudioSig = null;
+function startCamAudio(st){
+  const a = document.getElementById('camAudio');
+  if (!a) return;
+  const sig = (st.camera || '') + ':' + (st.gen || 0);
+  if (camAudioSig === sig && a.getAttribute('src') && !a.error && !a.ended) return;
+  camAudioSig = sig;
+  const connect = function(){
+    if (!camAudioSig) return;
+    a.src = '/camfeed/audio.mp3?t=' + Date.now();
+    a.play().catch(function(){});
+  };
+  // A dropped stream ends or errors; retry while sound is still wanted.
+  a.onerror = a.onended = function(){ if (camAudioSig) setTimeout(connect, 2000); };
+  connect();
+}
+function stopCamAudio(){
+  const a = document.getElementById('camAudio');
+  if (!a) return;
+  camAudioSig = null; a.onerror = a.onended = null;
+  if (a.getAttribute('src')){ a.pause(); a.removeAttribute('src'); a.load(); }
+}
 function stopCamImg(){
+  stopCamAudio();
   if (camStreamOn){                                     // dropping src aborts the open MJPEG connection
     camStreamOn = false; camStreamSig = null;
     const img = document.getElementById('camImg'); img.onerror = null; img.removeAttribute('src');
@@ -5325,6 +5354,7 @@ async function pollCameraState(){
       document.getElementById('camLabel').textContent = st.label || 'Camera';
       placeCamOverlay();
       ov.style.display = 'block'; startCamImg(st);
+      if (st.audio) startCamAudio(st); else stopCamAudio();
     } else { ov.style.display = 'none'; stopCamImg(); }
   }catch(e){}
 }
