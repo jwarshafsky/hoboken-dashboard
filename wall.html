@@ -2883,34 +2883,23 @@ const FACE_IMAGES = {
   'JU':  'juno.jpg',
   'WG':  'wagon.svg',   // the wagon's Tile — icon, not a face; asset lives in
                         // /srv like the photos (not in this public repo).
-                        // NOTE the wall marker draws WAGON_MARKER_SVG inline
-                        // instead of loading this file — see faceMarkerHtml.
+                        // NOTE the wall marker uses the WAGON_MARKER_PNG data
+                        // URI instead of this file — see faceMarkerHtml.
 };
 
-// The wagon marker is drawn INLINE, not via <img src="wagon.svg">. The Onn
-// stick's Android WebView renders the SVG-as-image as a blank WHITE DISC (the
-// outer <circle> paints, the inner shapes do not), which read on the map as
-// "just a white circle" (Jeff, 2026-08-18). The 2026-08-18 inline rewrite kept
-// the paths inside a single <g fill="#111"> — and the WebView drops exactly
-// that: it paints the root <circle> but not a group whose colour is only
-// inherited, so it STILL showed a white circle (Jeff, 2026-08-30). Fix: no <g>,
-// an explicit xmlns, and a literal fill on EVERY shape so nothing depends on
-// inheritance. Keep the geometry in sync with /srv/*/wagon.svg (the family PWA
-// still loads that file).
-const WAGON_MARKER_SVG =
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">' +
-  '<circle cx="32" cy="32" r="32" fill="#ffffff"/>' +
-  '<path fill="#111111" d="M15 13 h36 a3 3 0 0 1 0 6 h-36 a3 3 0 0 1 0 -6 z"/>' +
-  '<rect fill="#111111" x="19" y="19" width="2.6" height="12"/>' +
-  '<rect fill="#111111" x="44.4" y="19" width="2.6" height="12"/>' +
-  '<path fill="none" stroke="#111111" stroke-width="2.6" stroke-linecap="round" d="M15.5 32 L7.5 23.5"/>' +
-  '<circle fill="#111111" cx="7.5" cy="23.5" r="2.2"/>' +
-  '<path fill="#111111" d="M13.5 31 h39 a1.5 1.5 0 0 1 1.45 1.9 l-2.6 10 a2.5 2.5 0 0 1 -2.4 1.85 h-31.9 a2.5 2.5 0 0 1 -2.4 -1.85 l-2.6 -10 A1.5 1.5 0 0 1 13.5 31 z"/>' +
-  '<circle fill="#111111" cx="23" cy="49" r="5.2"/>' +
-  '<circle fill="#111111" cx="43" cy="49" r="5.2"/>' +
-  '<circle fill="#ffffff" cx="23" cy="49" r="1.7"/>' +
-  '<circle fill="#ffffff" cx="43" cy="49" r="1.7"/>' +
-  '</svg>';
+// The wagon marker is a PNG (data URI), NOT an SVG in any form. The Onn stick's
+// Android WebView has now mangled three SVG variants: <img src="wagon.svg">
+// painted a blank white disc (2026-08-18); inline SVG with a <g fill> dropped
+// the group (2026-08-30); and inline SVG with a literal fill on every shape
+// still drew the black shapes so faint on the TV that it read as "a white
+// circle, not a wagon" (Jeff, 2026-09-25 — the stick's own screenshot showed
+// light-grey shapes on white while desktop Chromium drew them black). Raster
+// images are what the faces use and they have never failed, so the wagon is a
+// 132px PNG rasterized from the old inline SVG (white disc, black wagon; same
+// geometry as /srv/*/wagon.svg, which the family PWA still loads). Don't go
+// back to SVG for this marker.
+const WAGON_MARKER_PNG = 'data:image/png;base64,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'
+const WAGON_MARKER_HTML = '<img src="' + WAGON_MARKER_PNG + '" alt="Wagon"/>';
 
 // Display name override per TID (overrides whatever username Owntracks reports)
 const PERSON_NAMES = {
@@ -3149,7 +3138,7 @@ const MAP_TILE_URL = 'https://{s}.tile.jawg.io/jawg-dark/{z}/{x}/{y}{r}.png?acce
 // (pulled from the public repo 2026-07-26) — on the Pages fallback the jpgs 404,
 // so degrade to the same initials treatment as an unmapped TID.
 function faceMarkerHtml(loc) {
-  if (loc.tid === 'WG') return WAGON_MARKER_SVG;   // inline — WebView blanks the <img>
+  if (loc.tid === 'WG') return WAGON_MARKER_HTML;  // PNG data URI — the WebView mangles SVG
   const faceUrl = FACE_IMAGES[loc.tid];
   return faceUrl
     ? '<img src="' + faceUrl + '" alt="' + displayName(loc) +
