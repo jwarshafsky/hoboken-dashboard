@@ -1426,13 +1426,17 @@ function trimOverflow(container) {
   }
 }
 
-// fetch with abort timeout — prevents hung TCP from piling up callbacks
+// fetch with abort timeout — prevents hung TCP from piling up callbacks.
+// The timer is deliberately NOT cleared when the headers arrive: it must also
+// cover res.json()/res.text(). Clearing it on headers left the body read with
+// no timeout, and a WiFi stall mid-body hung fetchLocations()'s await forever —
+// its loop never rescheduled and the family map froze for an hour (2026-09-28).
+// Aborting an exchange that already finished is a no-op.
 function fetchT(url, opts, ms) {
   ms = ms || 15000;
   const c = new AbortController();
-  const id = setTimeout(function() { c.abort(); }, ms);
-  return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }))
-    .finally(function() { clearTimeout(id); });
+  setTimeout(function() { c.abort(); }, ms);
+  return fetch(url, Object.assign({}, opts || {}, { signal: c.signal }));
 }
 
 // ============================================================
@@ -3373,12 +3377,14 @@ async function fetchLocations() {
   // location updates until a visibility/wake event happens to re-kick it —
   // and Fully's screen-on doesn't reliably fire one (bit us 2026-08-13 when
   // the page loaded while the screen was off). Idle cheaply instead.
+  _locationsLastRun = Date.now();
   if (document.hidden || isSleeping()) { _scheduleLocationsPoll(DEFAULT_POLL_MS); return; }
   const token = localStorage.getItem('calToken') || '';
+  let next = DEFAULT_POLL_MS;
   try {
     const url = PROXY_URL + '?mode=locations' + (_approachMode ? '&fast=1' : '');
     const res = await fetchT(url, { headers: { 'X-Cal-Token': token } });
-    if (!res.ok) { markFail('locations'); return; }
+    if (!res.ok) { markFail('locations'); return; }   // finally still reschedules
     const data = await res.json();
     markOk('locations');
     applyHomeFromProxy(data.home);     // real coords before anything measures distance
@@ -3398,19 +3404,32 @@ async function fetchLocations() {
       if (l.lat != null && l.lon != null) _prevDistToHome[l.tid] = distMi(HOME, l);
     }
     _approachMode = approaching;
-    _scheduleLocationsPoll(approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS);
+    next = approaching ? APPROACH_POLL_MS : DEFAULT_POLL_MS;
   } catch (e) {
     console.error('Locations fetch error:', e);
     markFail('locations');
-    _scheduleLocationsPoll(DEFAULT_POLL_MS);
+  } finally {
+    // The ONE place the chain continues — every exit path passes through here.
+    _scheduleLocationsPoll(next);
   }
 }
 
 let _locationsPollTimer = null;
+let _locationsLastRun = 0;
 function _scheduleLocationsPoll(ms) {
   if (_locationsPollTimer) clearTimeout(_locationsPollTimer);
   _locationsPollTimer = setTimeout(fetchLocations, ms);
 }
+
+// Watchdog: fetchLocations() runs at least every 15s (even asleep/hidden, where
+// it idles without network). If it hasn't run in 60s the chain died some way we
+// didn't foresee — restart it rather than leave the map frozen until a reload.
+setInterval(function () {
+  if (_locationsLastRun && Date.now() - _locationsLastRun > 60000) {
+    console.warn('Locations loop stalled; restarting');
+    fetchLocations();
+  }
+}, 30000);
 
 function renderTiles(tiles) {
   if (!_hobokenMap) return;
