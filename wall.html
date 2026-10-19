@@ -909,6 +909,14 @@
     border-width: 1.5px;
   }
 
+  /* The wagon as a hub, when people are with it: shrinks to the home badge's
+     footprint so their small faces orbit it the way they orbit the house. */
+  .person-marker.wagon-hub {
+    width: 24px !important;
+    height: 24px !important;
+    line-height: 22px;
+  }
+
   .home-marker {
     width: 24px !important;
     height: 24px !important;
@@ -3735,6 +3743,23 @@ function applyMapFrame(frame) {
   );
 }
 
+// Who is WITH the wagon (Jeff, 2026-10-19: "when we are in the same location as
+// the wagon, show us around the wagon similar to how we show around the house").
+// Pure. Returns the away wagon plus everyone within OVERLAP_MI of it — the map's
+// one "these are the same place" threshold — or null when nobody is. At-home
+// people are left out (they orbit the house), and so is a wagon the client reads
+// as home (HOME_ZONE is wider than the proxy's geofence), so the two hubs never
+// compete for the same faces.
+function planWagonGroup(locations) {
+  const list = (locations || []).filter(hasFix);
+  const wagon = list.find(function (l) { return l.tid === 'WG'; });
+  if (!wagon || isAtHome(wagon)) return null;
+  const members = list.filter(function (l) {
+    return l.tid !== 'WG' && !isAtHome(l) && distMi(wagon, l) < OVERLAP_MI;
+  });
+  return members.length ? { wagon: wagon, members: members } : null;
+}
+
 function renderLocations(locations) {
   _lastLocations = locations || [];   // away-insets re-render on view-mode changes
   // Feeds the automatic panel rule. Kids' trackers count: "everyone home"
@@ -3768,40 +3793,52 @@ function renderLocations(locations) {
   // Split into at-home vs elsewhere
   const atHome = locations.filter(function (l) { return isAtHome(l); });
   const elsewhere = locations.filter(function (l) { return !isAtHome(l); });
+  const wagonGroup = planWagonGroup(locations);
 
   // At-home people: pinned to HOME lat/lng, positioned by iconAnchor (pixel offset
   // from home). Smaller icon so they look like satellites orbiting the home badge.
+  // People with the wagon orbit the wagon the same way, the wagon shrunk to a
+  // hub badge at its own fix.
   const HOME_FACE_SIZE = 28;
   const HOME_ORBIT_RADIUS = 22; // px from home center to face center
-  const homeIconConfig = {};
-  atHome.forEach(function (l, idx) {
-    const angle = (idx / Math.max(atHome.length, 1)) * 2 * Math.PI - Math.PI / 2;
-    const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
-    const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
-    // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
-    // the icon's visual center by (dx, dy), we offset the anchor by (-dx, -dy)
-    // from the icon's natural center (size/2).
-    homeIconConfig[l.tid] = {
-      latlng: [HOME.lat, HOME.lon],
-      iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
-      iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
-      className: 'person-marker small',
-    };
-  });
+  const WAGON_HUB_SIZE = 24;    // same footprint as the home badge
+  const orbitIconConfig = {};
+  function orbit(people, latlng) {
+    people.forEach(function (l, idx) {
+      const angle = (idx / Math.max(people.length, 1)) * 2 * Math.PI - Math.PI / 2;
+      const dx = Math.cos(angle) * HOME_ORBIT_RADIUS;
+      const dy = Math.sin(angle) * HOME_ORBIT_RADIUS;
+      // iconAnchor positions the (x,y) point of the icon at the latlng. To shift
+      // the icon's visual center by (dx, dy), we offset the anchor by (-dx, -dy)
+      // from the icon's natural center (size/2).
+      orbitIconConfig[l.tid] = {
+        latlng: latlng,
+        iconSize: [HOME_FACE_SIZE, HOME_FACE_SIZE],
+        iconAnchor: [HOME_FACE_SIZE / 2 - dx, HOME_FACE_SIZE / 2 - dy],
+        className: 'person-marker small',
+      };
+    });
+  }
+  orbit(atHome, [HOME.lat, HOME.lon]);
+  if (wagonGroup) orbit(wagonGroup.members, [wagonGroup.wagon.lat, wagonGroup.wagon.lon]);
 
-  // Cluster elsewhere people who happen to be near each other
+  // Cluster elsewhere people who happen to be near each other. The wagon and
+  // its orbit are already placed, so they sit this out.
+  const loose = elsewhere.filter(function (l) {
+    return !orbitIconConfig[l.tid] && !(wagonGroup && l.tid === 'WG');
+  });
   const positions = {};
-  for (const loc of elsewhere) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
+  for (const loc of loose) positions[loc.tid] = { lat: loc.lat, lon: loc.lon };
   const handled = new Set();
-  for (let i = 0; i < elsewhere.length; i++) {
-    if (handled.has(elsewhere[i].tid)) continue;
-    const cluster = [elsewhere[i]];
-    handled.add(elsewhere[i].tid);
-    for (let j = i + 1; j < elsewhere.length; j++) {
-      if (handled.has(elsewhere[j].tid)) continue;
-      if (distMi(elsewhere[i], elsewhere[j]) < OVERLAP_MI) {
-        cluster.push(elsewhere[j]);
-        handled.add(elsewhere[j].tid);
+  for (let i = 0; i < loose.length; i++) {
+    if (handled.has(loose[i].tid)) continue;
+    const cluster = [loose[i]];
+    handled.add(loose[i].tid);
+    for (let j = i + 1; j < loose.length; j++) {
+      if (handled.has(loose[j].tid)) continue;
+      if (distMi(loose[i], loose[j]) < OVERLAP_MI) {
+        cluster.push(loose[j]);
+        handled.add(loose[j].tid);
       }
     }
     if (cluster.length > 1) {
@@ -3830,12 +3867,21 @@ function renderLocations(locations) {
     else if (ageSec >= 180)                        staleClass = ' stale-recent';
 
     let latlng, iconSize, iconAnchor, className;
-    if (homeIconConfig[loc.tid]) {
-      const cfg = homeIconConfig[loc.tid];
+    // Hub badges sit BEHIND the faces orbiting them (the house does it with
+    // -500); everything sharing a latlng ties on y, so the offset decides.
+    let zOffset = 10000;
+    if (orbitIconConfig[loc.tid]) {
+      const cfg = orbitIconConfig[loc.tid];
       latlng = cfg.latlng;
       iconSize = cfg.iconSize;
       iconAnchor = cfg.iconAnchor;
       className = cfg.className + staleClass;
+    } else if (wagonGroup && loc.tid === 'WG') {
+      latlng = [loc.lat, loc.lon];
+      iconSize = [WAGON_HUB_SIZE, WAGON_HUB_SIZE];
+      iconAnchor = [WAGON_HUB_SIZE / 2, WAGON_HUB_SIZE / 2];
+      className = 'person-marker wagon-hub' + staleClass;
+      zOffset = 9500;
     } else {
       const pos = positions[loc.tid] || { lat: loc.lat, lon: loc.lon };
       latlng = [pos.lat, pos.lon];
@@ -3854,8 +3900,9 @@ function renderLocations(locations) {
     if (_personMarkers[loc.tid]) {
       _personMarkers[loc.tid].setLatLng(latlng);
       _personMarkers[loc.tid].setIcon(icon);
+      _personMarkers[loc.tid].setZIndexOffset(zOffset);
     } else {
-      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon, zIndexOffset: 10000 }).addTo(_hobokenMap);
+      _personMarkers[loc.tid] = L.marker(latlng, { icon: icon, zIndexOffset: zOffset }).addTo(_hobokenMap);
     }
   }
   // Remove markers for people no longer in the list
