@@ -3951,7 +3951,11 @@ function renderLocations(locations) {
         let cls = '';
         if (!newest.received_at || ageSec >= 10800) cls = ' ms-pill--cold';
         else if (ageSec >= 1800)                    cls = ' ms-pill--warm';
-        const names = joinNames(g.people.map(displayName));
+        // The wagon trails the people it's with — "Elizabeth, Sydney & Wagon",
+        // never "Elizabeth, Wagon & Sydney" (Jeff, 2026-10-19).
+        const ordered = g.people.filter(function (l) { return l.tid !== 'WG'; })
+          .concat(g.people.filter(function (l) { return l.tid === 'WG'; }));
+        const names = joinNames(ordered.map(displayName));
         if (g.home) {
           return '<span class="ms-pill' + cls + '"><span class="ms-name">' +
             names + '</span></span>';
