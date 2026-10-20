@@ -1417,7 +1417,7 @@
 // route, which injects X-Cal-Token server-side — the device holds no
 // credential. Served from GitHub Pages (public fallback), we talk to Cloud
 // Run directly and the localStorage token flow below still applies.
-const LOCAL_HOSTS = ['192.168.4.50', 'beelink.tailed2e3c.ts.net', '100.124.112.83'];
+const LOCAL_HOSTS = ['192.168.1.183', 'beelink.tailed2e3c.ts.net', '100.124.112.83'];
 const IS_LOCAL = LOCAL_HOSTS.indexOf(location.hostname) !== -1;
 const PROXY_URL = IS_LOCAL ? '/proxy' : 'https://proxy-105885243706.us-east1.run.app';
 
@@ -4805,7 +4805,7 @@ setInterval(fetchAlerts,   300000);
 // ============================================================
 // WALL MESSAGE
 // ============================================================
-// A note Jeff or Jenny types at http://192.168.4.50/message.html (home WiFi,
+// A note Jeff or Jenny types at http://192.168.1.183/message.html (home WiFi,
 // no Tailscale needed). Served by wall-message.service via Caddy. LOCAL ONLY:
 // the GitHub Pages fallback has no /api/message route, so we never even try
 // there — a 404 every 20s would be noise, not information.
