@@ -1476,7 +1476,7 @@
   var Q = { scale: 1, div: 1, hz: 60, tick: 0, prevRaf: 0, n: 0, t0: 0, fps: 0, low: 0, since: 0 };
   var seenId = 0, nextAuto = 0, bubT = 0;
   // ?fishdbg=a,b on the wall URL switches pieces off to find what the stick
-  // can't afford (norays, nocaus, nofish, noplants, nofloor, nobg, s1, s05, noadapt).
+  // can't afford (norays, nocaus, nofish, noplants, nofloor, nobg, s15, s05, noadapt).
   var DBG = {};
   try { (new URLSearchParams(location.search).get('fishdbg') || '').split(',').forEach(function (k) { if (k) DBG[k] = 1; }); } catch (e) {}
   var PROF = [0, 0, 0, 0, 0, 0], PROFN = 0, PROFOUT = '';
@@ -1534,17 +1534,18 @@
     el.appendChild(cvs);
     el.appendChild(glass);
     ctx = cvs.getContext('2d', { alpha: false });
-    Q.scale = Math.min(window.devicePixelRatio || 1, 1.5);
-    if (DBG.s1) Q.scale = 1;
-    if (DBG.s05) Q.scale = 0.5;
-    Q.maxScale = Q.scale;
+    // Canvas resolution is fixed for the life of the page. Changing it at run
+    // time (the old quality ladder stepped 1.5 -> 1.25 -> 1) froze the Onn
+    // stick for ~2 s per step, nearly all of it GPU-side re-allocation, and
+    // the stick always ended at 1 anyway. ?fishdbg=s15 tries 1.5 on purpose.
+    Q.scale = DBG.s05 ? 0.5 : DBG.s15 ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
     setLevel(0, performance.now());
   }
 
   function start(el) {
     if (!host) { if (!el) return; mount(el); }
     if (running) return;
-    running = true; last = 0; Q.t0 = 0; Q.since = performance.now();
+    running = true; last = 0; Q.t0 = 0; Q.prevRaf = 0; Q.since = performance.now();
     raf = requestAnimationFrame(frame);
   }
   function stop() { running = false; cancelAnimationFrame(raf); }
@@ -1556,6 +1557,7 @@
     // The refresh interval is the SHORTEST gap seen (slowly forgotten); the
     // average would just measure our own frame time when frames run long.
     var gap = now - Q.prevRaf;
+    if (Q.prevRaf && gap > (Q.gmax || 0)) Q.gmax = gap;   // worst stall, for the report
     // Forgotten by time (~6%/min), held to 48-62 Hz: uncapped long frames
     // never show a single-refresh gap and would otherwise drag hz down.
     if (Q.prevRaf && gap > 6 && gap < 60) {
@@ -1570,13 +1572,17 @@
     last = now;
     var w = host.clientWidth, h = host.clientHeight;
     if (w < 40 || h < 40) return;
-    if (w !== W || h !== H || S !== Q.scale) { resize(w, h); Q.since = now; Q.t0 = 0; }
+    var js0 = performance.now(), why = '';
+    if (w !== W || h !== H || S !== Q.scale) { resize(w, h); Q.since = now; Q.t0 = 0; why = 'r'; }
     perf(now);
     var t0 = performance.now();
     step(dt);
     PROF[0] += performance.now() - t0;
+    Q.cb = 0;
     render();
     PROFN++;
+    var jd = performance.now() - js0;                // worst JS frame, and what it did
+    if (jd > (Q.jmax || 0)) { Q.jmax = jd; Q.jwhy = why + (Q.cb ? 'c' : ''); }
   }
 
   function perf(now) {
@@ -1585,21 +1591,21 @@
     var el = now - Q.t0;
     if (el < 2000) return;
     Q.fps = Q.n * 1000 / el; Q.t0 = now; Q.n = 0;
-    if (PROFN) { PROFOUT = PROF.map(function (v) { return (v / PROFN).toFixed(1); }).join('_') + '_b' + (Q.build || 0) + '_hz' + Math.round(Q.hz); PROF = [0, 0, 0, 0, 0, 0]; PROFN = 0; }
+    if (PROFN) { PROFOUT = PROF.map(function (v) { return (v / PROFN).toFixed(1); }).join('_') + '_b' + (Q.build || 0) + '_hz' + Math.round(Q.hz) + '_g' + Math.round(Q.gmax || 0) + '_j' + Math.round(Q.jmax || 0) + (Q.jwhy || ''); Q.gmax = Q.jmax = 0; Q.jwhy = ''; PROF = [0, 0, 0, 0, 0, 0]; PROFN = 0; }
     if (DBG.noadapt) return;
     if (now - Q.since < 6000) return;            // let a (re)build settle first
     adapt(now);
   }
 
-  // Quality ladder, best first. An even half rate (30 on a 60 Hz TV) reads
-  // smoother than a ragged 28, but a half rate that keeps missing its slot
-  // drops to ~20, so uncapped full rate sits below every half-rate level. No
-  // third-rate rung: on the stick a 20 cap delivered 18-19, below uncapped.
-  // Visitors are expensive and temporary, so the ladder steps back up once the
-  // scene has headroom, with a growing back-off if the step up fails.
-  var LADDER = [[2, 1.5], [2, 1.25], [2, 1], [1, 1]];
+  // Frame-rate ladder (refreshes per frame), best first. An even half rate (30
+  // on a 60 Hz TV) reads smoother than a ragged 28, but a half rate that keeps
+  // missing its slot drops to ~20, so it falls back to uncapped. No third-rate
+  // rung: on the stick a 20 cap delivered 18-19, below uncapped. Steps only
+  // change pacing, never the canvas, so they cost nothing; the step back up
+  // after visitors leave has a growing back-off if it doesn't hold.
+  var LADDER = [2, 1];
   function setLevel(i, now) {
-    Q.lvl = i; Q.div = LADDER[i][0]; Q.scale = Math.min(LADDER[i][1], Q.maxScale || 1.5);
+    Q.lvl = i; Q.div = LADDER[i];
     Q.since = now; Q.low = Q.high = 0;
   }
   function adapt(now) {
@@ -1749,18 +1755,17 @@
     var r = mulberry(77);
     Lyr.bg = layer(); paintWater(Lyr.bg.x, r);
     Lyr.floor = layer(); paintFloor(Lyr.floor.x, r);
-    if (!Lyr.caustic) Lyr.caustic = causticTiles();
     // The light only lands on solid things: mask = the floor layer's own
     // coverage (sand, rock, coral), faded in from the top of the reef.
     var mc = document.createElement('canvas');
     mc.width = Math.ceil(W); mc.height = Math.max(8, Math.ceil(H - G.cTop));
-    var mx = mc.getContext('2d'), sy = Math.max(0, Math.floor(G.cTop * S));
+    var mx = mc.getContext('2d', { willReadFrequently: true }), sy = Math.max(0, Math.floor(G.cTop * S));
     mx.drawImage(Lyr.floor.cv, 0, sy, Lyr.floor.cv.width, Lyr.floor.cv.height - sy, 0, 0, mc.width, mc.height);
     mx.globalCompositeOperation = 'destination-in';
     var m = mx.createLinearGradient(0, 0, 0, mc.height);
     m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(0.3, 'rgba(0,0,0,0.6)'); m.addColorStop(0.55, 'rgba(0,0,0,1)'); m.addColorStop(1, 'rgba(0,0,0,0.8)');
     mx.fillStyle = m; mx.fillRect(0, 0, mc.width, mc.height);
-    Lyr.cmask = mc; Lyr.cframes = [];
+    Lyr.cmask = mc; Lyr.cmaskA = null; Lyr.cframes = []; Lyr.bk = { y: 0 }; Lyr.ctDone = Lyr.ctDone || [];
     if (!Lyr.bub) {
       Lyr.bub = sprite(64, function (c, h) {
         var g = c.createRadialGradient(h, h, h * 0.5, h, h, h);
@@ -1801,27 +1806,27 @@
   // edges, baked at CAUSTIC_PHASES positions of its seed points so the frame
   // loop can cross-fade around the cycle and make the web wobble in place.
   var CAUSTIC_PHASES = 12;
-  function causticTiles() {
-    var N = 128, r = mulberry(5), P = [], tiles = [], i;
-    for (i = 0; i < 14; i++) P.push([r() * N, r() * N, r() * TAU, 2 + r() * 3]);
-    for (var ph = 0; ph < CAUSTIC_PHASES; ph++) {
-      var d = new Uint8Array(N * N), a = ph / CAUSTIC_PHASES * TAU;
-      var Q = P.map(function (p) { return [p[0] + Math.cos(a + p[2]) * p[3], p[1] + Math.sin(a + p[2]) * p[3]]; });
-      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
-        var wx = x + 3.2 * Math.sin(y / N * TAU * 2 + a), wy = y + 3.2 * Math.sin(x / N * TAU * 3 - a);
-        var f1 = 1e9, f2 = 1e9;
-        for (var k = 0; k < Q.length; k++) {
-          var dx = Math.abs(wx - Q[k][0]) % N; if (dx > N / 2) dx = N - dx;
-          var dy = Math.abs(wy - Q[k][1]) % N; if (dy > N / 2) dy = N - dy;
-          var dd = Math.sqrt(dx * dx + dy * dy);
-          if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) f2 = dd;
-        }
-        var e = Math.max(0, 1 - (f2 - f1) / 4); e = e * e * (0.55 + 0.45 * Math.min(1, f1 / 14));
-        d[y * N + x] = e * 255;
+  // One phase of the 128px caustic web (a warped Voronoi edge pattern), rows
+  // y0..y1 only, so the bake can be spread over many frames.
+  var CAUSTIC_N = 128;
+  function tileRows(ph, y0, y1) {
+    var N = CAUSTIC_N, i;
+    if (!Lyr.cpts) { var r = mulberry(5); Lyr.cpts = []; for (i = 0; i < 14; i++) Lyr.cpts.push([r() * N, r() * N, r() * TAU, 2 + r() * 3]); }
+    if (!Lyr.caustic) Lyr.caustic = [];
+    var d = Lyr.caustic[ph] || (Lyr.caustic[ph] = new Uint8Array(N * N)), a = ph / CAUSTIC_PHASES * TAU;
+    var C = Lyr.cpts.map(function (p) { return [p[0] + Math.cos(a + p[2]) * p[3], p[1] + Math.sin(a + p[2]) * p[3]]; });
+    for (var y = y0; y < y1; y++) for (var x = 0; x < N; x++) {
+      var wx = x + 3.2 * Math.sin(y / N * TAU * 2 + a), wy = y + 3.2 * Math.sin(x / N * TAU * 3 - a);
+      var f1 = 1e9, f2 = 1e9;
+      for (var k = 0; k < C.length; k++) {
+        var dx = Math.abs(wx - C[k][0]) % N; if (dx > N / 2) dx = N - dx;
+        var dy = Math.abs(wy - C[k][1]) % N; if (dy > N / 2) dy = N - dy;
+        var dd = Math.sqrt(dx * dx + dy * dy);
+        if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) f2 = dd;
       }
-      tiles.push(d);
+      var e = Math.max(0, 1 - (f2 - f1) / 4); e = e * e * (0.55 + 0.45 * Math.min(1, f1 / 14));
+      d[y * N + x] = e * 255;
     }
-    return tiles;
   }
 
   function ridge(c, r, y0, amp, col) {
@@ -2720,13 +2725,12 @@
   // frames, each a morph step of the web plus 1/CAUSTIC_PHASES of a tile of
   // drift, so the last frame flows back into the first. Built one per
   // animation frame (each costs one of those stalls), shown once complete.
-  function causticFrame(i) {
-    var n = 128, w = Lyr.cmask.width, h = Lyr.cmask.height, s = 0.8 * U, sv = s * 0.62;
-    if (!Lyr.cmaskA) Lyr.cmaskA = Lyr.cmask.getContext('2d').getImageData(0, 0, w, h).data;
-    var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    var x = cv.getContext('2d'), img = x.createImageData(w, h), d = img.data, m = Lyr.cmaskA, tile = Lyr.caustic[i];
+  function frameRows(i, img, y0, y1) {
+    var n = CAUSTIC_N, w = Lyr.cmask.width, s = 0.8 * U, sv = s * 0.62;
+    if (!Lyr.cmaskA) Lyr.cmaskA = Lyr.cmask.getContext('2d').getImageData(0, 0, w, Lyr.cmask.height).data;
+    var d = img.data, m = Lyr.cmaskA, tile = Lyr.caustic[i];
     var ox = i / CAUSTIC_PHASES * n, oy = i / CAUSTIC_PHASES * n * 0.5;
-    for (var y = 0, o = 0; y < h; y++) {
+    for (var y = y0, o = y0 * w * 4; y < y1; y++) {
       var row = ((((y / sv + oy) | 0) % n) + n) % n * n;
       for (var xx = 0; xx < w; xx++, o += 4) {
         var ma = m[o + 3];
@@ -2735,16 +2739,39 @@
         d[o + 3] = tile[row + ((xx / s + ox) | 0) % n] * ma / 255;
       }
     }
-    x.putImageData(img, 0, 0);
-    return cv;
+  }
+  // Baking the whole loop at once froze the Onn stick for ~3 s, so tiles and
+  // frames are built a few rows at a time inside a small per-frame budget.
+  // The light fades in once the loop is complete, a few seconds after start.
+  var CAUSTIC_BUDGET = 6;
+  function bakeCaustics() {
+    var t0 = performance.now(), B = Lyr.bk, N = CAUSTIC_N;
+    Q.cb = 1;
+    while (Lyr.cframes.length < CAUSTIC_PHASES && performance.now() - t0 < CAUSTIC_BUDGET) {
+      var ph = Lyr.cframes.length;
+      if (!Lyr.ctDone[ph]) {
+        tileRows(ph, B.y, Math.min(N, B.y + 4)); B.y += 4;
+        if (B.y >= N) { Lyr.ctDone[ph] = 1; B.y = 0; }
+        continue;
+      }
+      var w = Lyr.cmask.width, h = Lyr.cmask.height;
+      if (!B.img) B.img = new ImageData(w, h);
+      frameRows(ph, B.img, B.y, Math.min(h, B.y + 24)); B.y += 24;
+      if (B.y >= h) {
+        var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        cv.getContext('2d').putImageData(B.img, 0, 0);
+        Lyr.cframes.push(cv); B.y = 0; B.img = null;
+        if (Lyr.cframes.length === CAUSTIC_PHASES) Lyr.cAt = T;
+      }
+    }
   }
   function caustics(c) {
     var F = Lyr.cframes;
-    if (F.length < CAUSTIC_PHASES) { F.push(causticFrame(F.length)); return; }
-    var u = (T / 0.6) % CAUSTIC_PHASES, i0 = u | 0, f = u - i0;
+    if (F.length < CAUSTIC_PHASES) { bakeCaustics(); return; }
+    var u = (T / 0.6) % CAUSTIC_PHASES, i0 = u | 0, f = u - i0, k = 0.34 * Math.min(1, (T - (Lyr.cAt || 0)) / 2);
     c.save(); c.globalCompositeOperation = 'lighter';
-    c.globalAlpha = 0.34 * (1 - f); c.drawImage(F[i0], 0, G.cTop, W, H - G.cTop);
-    c.globalAlpha = 0.34 * f; c.drawImage(F[(i0 + 1) % CAUSTIC_PHASES], 0, G.cTop, W, H - G.cTop);
+    c.globalAlpha = k * (1 - f); c.drawImage(F[i0], 0, G.cTop, W, H - G.cTop);
+    c.globalAlpha = k * f; c.drawImage(F[(i0 + 1) % CAUSTIC_PHASES], 0, G.cTop, W, H - G.cTop);
     c.restore();
   }
 
