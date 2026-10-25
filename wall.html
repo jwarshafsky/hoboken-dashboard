@@ -3473,6 +3473,9 @@
   // Unprompted visitors, every 10-20 minutes: only the gentle ones. A shark or a
   // diver arriving unasked is a jump-scare; those only come when someone sends them.
   var AUTO = ['turtle', 'jelly', 'whale', 'dolphins'];
+  var QUEUE_MAX = 2;     // requests waiting for a slot; older ones are dropped
+  var MIN_STAY = 6;      // seconds a visitor is guaranteed before it can be faded
+  var FADE = 1.2;        // seconds a visitor takes to fade out when making room
 
   function trigger(type) {
     if (!W) { if (pending.length < 8) pending.push(type); return; }
@@ -3481,9 +3484,31 @@
     if (type === 'treasure') return treasure();
     var Mk = MAKERS[type];
     if (!Mk) return;
-    for (var i = 0; i < visitors.length; i++) if (visitors[i].type === type) return;
-    if (visitors.length >= 3) { if (queue.length < 6) queue.push(type); return; }
+    for (var i = 0; i < visitors.length; i++) if (visitors[i].type === type && visitors[i].fade == null) return;
+    // A full tank used to queue requests first-come (6 deep) behind visitors that
+    // stay 16-120 s, so a kid pressing Mermaid watched minutes of earlier presses
+    // swim by instead (Jeff, 2026-10-25: "we pressed mermaid and other things came
+    // instead"). Now the NEWEST request goes to the front, only QUEUE_MAX wait,
+    // and step() fades the oldest visitor out to make room for each of them.
+    if (visitors.length >= 3) {
+      var qi = queue.indexOf(type);
+      if (qi >= 0) queue.splice(qi, 1);
+      queue.unshift(type);
+      if (queue.length > QUEUE_MAX) queue.length = QUEUE_MAX;
+      return;
+    }
     visitors.push(new Mk());
+  }
+  // Fade the longest-staying visitor that has had MIN_STAY on screen, so a
+  // queued request gets its slot within seconds without anyone vanishing the
+  // moment they arrive.
+  function makeRoom() {
+    var oldest = null;
+    for (var i = 0; i < visitors.length; i++) {
+      var v = visitors[i];
+      if (v.fade == null && v.t >= MIN_STAY && (!oldest || v.t > oldest.t)) oldest = v;
+    }
+    if (oldest) oldest.fade = 1;
   }
 
   // ---- frame ------------------------------------------------------------------------
@@ -3491,9 +3516,21 @@
     T += dt;
     G.cur = Math.sin(T * 0.11) * 0.6 + Math.sin(T * 0.043 + 1) * 0.4;
     var i, scary = false;
-    for (i = visitors.length - 1; i >= 0; i--) if (!visitors[i].update(dt)) visitors.splice(i, 1);
-    if (queue.length && visitors.length < 3) trigger(queue.shift());
-    if (T > nextAuto) { trigger(pick(AUTO)); nextAuto = T + rr(600, 1200); }
+    var leaving = 0;
+    for (i = visitors.length - 1; i >= 0; i--) {
+      var vi = visitors[i], alive = vi.update(dt);
+      if (vi.fade != null) {
+        vi.fade -= dt / FADE;
+        if (vi.items) for (var k = 0; k < vi.items.length; k++) vi.items[k].a = Math.max(0, vi.fade);
+        if (vi.fade <= 0) alive = false; else leaving++;
+      }
+      if (!alive) visitors.splice(i, 1);
+    }
+    while (queue.length && visitors.length < 3) trigger(queue.shift());
+    if (queue.length > leaving) makeRoom();
+    // Unprompted visitors only drop into a tank with room; they never queue or
+    // push out something a person asked for.
+    if (T > nextAuto) { if (visitors.length < 3 && !queue.length) trigger(pick(AUTO)); nextAuto = T + rr(600, 1200); }
     threats.length = 0;
     for (i = 0; i < visitors.length; i++) {
       var v = visitors[i];
@@ -3516,6 +3553,12 @@
   }
 
   function byDepth(a, b) { return b.d - a.d; }
+  // A visitor making room fades with v.fade (1 -> 0). Jellies are drawn as
+  // separate items that set their own alpha, so step() writes it into item.a.
+  function drawItem(c, it) {
+    if (it.fade == null) return it.render(c);
+    c.globalAlpha = Math.max(0, it.fade); it.render(c); c.globalAlpha = 1;
+  }
   function render() {
     var c = ctx, i, p0 = performance.now(), p1;
     atlasBudget = 2;
@@ -3531,7 +3574,7 @@
     }
     drawList.sort(byDepth);
     if (DBG.nofish) drawList.length = 0;
-    for (i = 0; i < drawList.length && drawList[i].d >= 0.7; i++) drawList[i].render(c);
+    for (i = 0; i < drawList.length && drawList[i].d >= 0.7; i++) drawItem(c, drawList[i]);
     var sy = Math.max(0, Math.floor(G.cTop * S));
     if (!DBG.nofloor) c.drawImage(Lyr.floor.cv, 0, sy, Lyr.floor.cv.width, Lyr.floor.cv.height - sy, 0, sy / S, W, H - sy / S);
     if (!DBG.nocaus) caustics(c);
@@ -3548,7 +3591,7 @@
     for (; i < drawList.length; i++) {
       var di = drawList[i].d;
       if (di < bd) { if (!DBG.nobub) drawBubbles(c, di, bd); bd = di; }
-      drawList[i].render(c);
+      drawItem(c, drawList[i]);
     }
     if (!DBG.nobub) drawBubbles(c, -1, bd);
     p1 = performance.now(); PROF[4] += p1 - p0; p0 = p1;
@@ -3570,6 +3613,11 @@
     quality: function () { return { cap: Math.round(Q.hz / Q.div), scale: Q.scale }; },
     prof: function () { return PROFOUT; },
     trigger: function (type) { trigger(type); },
+    // Read-only snapshot for the harnesses (who is on screen, who is waiting).
+    state: function () {
+      return { visitors: visitors.map(function (v) { return { type: v.type, t: Math.round(v.t * 10) / 10, fade: v.fade == null ? null : Math.round(v.fade * 100) / 100 }; }),
+               queue: queue.slice() };
+    },
     events: function (blk) {
       if (!blk || !blk.events) return;
       var now = blk.now || Date.now() / 1000;
