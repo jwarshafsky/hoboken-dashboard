@@ -1449,6 +1449,13 @@
   }
   var rnd = Math.random;
   function rr(a, b) { return a + (b - a) * rnd(); }
+  // Which way a new visitor swims. trigger() sets forceDir when a combo partner
+  // is already on screen and only one side of the tank lets them meet.
+  var forceDir = 0;
+  function rdir() { return forceDir || (rnd() < 0.5 ? 1 : -1); }
+  // Moves a facing value (-1..1) toward the way it should face; passing through
+  // 0 squashes the drawing flat, which reads as turning round.
+  function turnToward(f, to, step) { return f < to ? Math.min(to, f + step) : Math.max(to, f - step); }
   function pick(a) { return a[(rnd() * a.length) | 0]; }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function lerp(a, b, t) { return a + (b - a) * t; }
@@ -1483,6 +1490,7 @@
   var chest = { lid: 0, want: 0, open: 0, peek: 0, next: 40, burst: 0 };
   var crab = { x: -1, tx: 0, ph: 0, pause: 3, claw: 0, meal: null };
   var retract = 0;
+  var scenes = [], flash = 0, lastTreasure = -99, lastFeed = -99, lastFeedX = 0;
 
   // ---- species --------------------------------------------------------------
   // Lengths are in design units (U = panel height / 500). ht/hb = half-height of
@@ -2485,6 +2493,7 @@
   var FOOD_C = ['#c8742a', '#d99a3e', '#8a5a2b', '#7a8f2f', '#c4532c', '#e0b050'];
   function feed() {
     var x0 = rr(0.25, 0.75) * W;
+    lastFeed = T; lastFeedX = x0;
     for (var i = 0; i < 38; i++) {
       food.push({ x: x0 + rr(-55, 55) * U, y: G.surf + rr(1, 4) * U, vx: rr(-12, 12) * U, vy: 0, st: 0,
         t: rr(0.3, 3.2), r: rr(1.5, 2.8) * U, a: rr(0, TAU), va: rr(-2, 2), c: pick(FOOD_C), ph: rr(0, TAU), gone: false });
@@ -2581,9 +2590,14 @@
       if (e.kind === 'coin') {
         if (!e.down) { e.vy += 40 * U * dt; e.x += e.vx * dt; e.y += e.vy * dt; e.rot += dt * 7; var fl = floorAt(e.x) - 1.5 * U; if (e.y > fl) { e.y = fl; e.down = true; } }
       } else if (e.kind === 'ink') {
-        e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 1 - dt * 0.6; e.vy *= 1 - dt * 0.6; e.r += e.grow * dt;
+        var dr = Math.min(1, dt * (e.dr || 0.6));
+        e.x += e.vx * dt; e.y += e.vy * dt; e.vx *= 1 - dr; e.vy *= 1 - dr; e.r += e.grow * dt;
       } else if (e.kind === 'spark') {
         e.y += e.vy * dt; e.x += e.vx * dt;
+      } else if (e.kind === 'note') {
+        e.y += e.vy * dt; e.x += (e.vx + Math.sin(T * 3 + e.ph) * 12 * U) * dt;
+      } else if (e.kind === 'ring') {
+        e.r += e.grow * dt;
       }
     }
   }
@@ -2594,6 +2608,17 @@
       var a = Math.min(1, e.life / Math.min(1.5, e.max * 0.5));
       if (kind === 'ink') {
         c.globalAlpha = a * 0.85; c.drawImage(Lyr.ink, e.x - e.r, e.y - e.r, e.r * 2, e.r * 2);
+      } else if (kind === 'note') {
+        // a quaver: head, stem, flag
+        var s = e.r;
+        c.globalAlpha = a; c.fillStyle = e.col; c.strokeStyle = e.col; c.lineWidth = Math.max(1, s * 0.28);
+        c.beginPath(); c.ellipse(e.x, e.y, s, s * 0.72, -0.4, 0, TAU); c.fill();
+        c.beginPath(); c.moveTo(e.x + s * 0.85, e.y - s * 0.2); c.lineTo(e.x + s * 0.85, e.y - s * 3.2);
+        c.quadraticCurveTo(e.x + s * 2.2, e.y - s * 2.6, e.x + s * 1.9, e.y - s * 1.5); c.stroke();
+      } else if (kind === 'ring') {
+        if (e.r <= 0) continue;                    // a delayed ring hasn't started yet
+        c.globalAlpha = a * 0.5; c.strokeStyle = e.col; c.lineWidth = Math.max(1, 2.2 * U);
+        c.beginPath(); c.arc(e.x, e.y, e.r, 0, TAU); c.stroke();
       } else if (kind === 'coin') {
         c.globalAlpha = a; c.save(); c.translate(e.x, e.y); c.scale(Math.max(0.15, Math.abs(Math.cos(e.rot))), 1);
         c.fillStyle = '#f2c230'; c.beginPath(); c.arc(0, 0, e.r, 0, TAU); c.fill();
@@ -2609,6 +2634,13 @@
       }
     }
     c.globalAlpha = 1;
+  }
+  function note(x, y, col, r) {
+    if (fx.length > 260) return;
+    fx.push({ kind: 'note', x: x, y: y, r: r || rr(4, 6) * U, col: col, vx: rr(-8, 8) * U, vy: rr(-30, -18) * U, ph: rr(0, TAU), life: rr(2.2, 3), max: 3 });
+  }
+  function ring(x, y, col, delay) {
+    fx.push({ kind: 'ring', x: x, y: y, r: 6 * U - (delay || 0) * 70 * U, grow: 70 * U, col: col, life: 1.6 + (delay || 0), max: 1.6 });
   }
   function spark(x, y, r, gold, life) {
     if (fx.length > 260) return;
@@ -2811,7 +2843,7 @@
   // treasure chest: a permanent ornament that "breathes" bubbles now and then,
   // and opens properly on request
   function treasure() {
-    chest.open = 9; chest.burst = 1.6;
+    chest.open = 9; chest.burst = 1.6; lastTreasure = T;
     for (var i = 0; i < 12; i++) fx.push({ kind: 'coin', x: G.chest.x + rr(-8, 8) * U, y: G.chest.y - 24 * U, vx: rr(-38, 38) * U, vy: rr(-70, -35) * U, r: rr(2.2, 3.2) * U, rot: rr(0, TAU), life: 12, max: 12 });
   }
   function updateChest(dt) {
@@ -2910,26 +2942,33 @@
   // {x, y, r, s} that the fish flee from.
   function Shark() {
     this.type = 'shark'; this.d = 0.26; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = Math.min(W * 0.7, H * 1.15);
     this.x = this.dir > 0 ? -this.L * 0.6 : W + this.L * 0.6;
     this.y0 = H * rr(0.34, 0.5); this.y = this.y0;
     this.v = (W + this.L * 1.2) / 16; this.ph = 0;
+    // combo controls: face (turning), boost/bt (speed and its target), oy
+    // (lifted toward food), wob (dizzy), jaw (a bite), jolt (startled)
+    this.face = this.dir; this.boost = 1; this.bt = 1; this.oy = 0; this.wob = 0; this.jaw = 0; this.jolt = 0;
     this.threat = { x: 0, y: 0, r: 0, s: 1.2 };
     var h = 0.13;
     this.p = { top: hz('#5c6c79', h), mid: hz('#8796a2', h), belly: hz('#eef3f5', h), fin: hz('#55636f', h), tip: hz('#15191d', h), gill: hz('#36414a', h, 0.55) };
   }
   Shark.prototype.update = function (dt) {
-    this.t += dt; this.x += this.dir * this.v * dt;
-    this.y = this.y0 + Math.sin(this.t * 0.4) * H * 0.04;
-    this.ph += dt * TAU * 0.6;
+    this.t += dt;
+    this.boost += (this.bt - this.boost) * Math.min(1, dt * 2.5);
+    this.face = turnToward(this.face, this.dir, dt * 3);
+    this.x += this.dir * this.v * this.boost * dt;
+    this.jolt = Math.max(0, this.jolt - dt * 2.5); this.jaw = Math.max(0, this.jaw - dt * 2.2);
+    this.y = this.y0 + Math.sin(this.t * 0.4) * H * 0.04 + this.oy - Math.sin(this.jolt * PI) * H * 0.035;
+    this.ph += dt * TAU * 0.6 * clamp(this.boost, 0.5, 2.6);
     this.threat.x = this.x + this.dir * this.L * 0.15; this.threat.y = this.y; this.threat.r = this.L * 0.62;
     return this.dir > 0 ? this.x < W + this.L * 0.62 : this.x > -this.L * 0.62;
   };
   Shark.prototype.render = function (c) {
     var L = this.L, p = this.p, yaw = Math.sin(this.ph);
-    c.save(); c.translate(this.x, this.y); c.scale(this.dir, 1);
-    c.rotate(Math.cos(this.t * 0.4) * 0.06 - yaw * 0.012);
+    c.save(); c.translate(this.x, this.y); c.scale(this.face, 1);
+    c.rotate(Math.cos(this.t * 0.4) * 0.06 - yaw * 0.012 + this.wob * Math.sin(this.t * 8) * 0.16);
     // far pectoral
     c.fillStyle = p.tip; c.beginPath(); c.moveTo(0.1 * L, 0.05 * L); c.quadraticCurveTo(0.05 * L, 0.1 * L, -0.06 * L, 0.15 * L); c.quadraticCurveTo(0, 0.07 * L, 0.02 * L, 0.04 * L); c.closePath(); c.fill();
     // tail
@@ -2966,6 +3005,14 @@
     c.fillStyle = 'rgba(255,255,255,0.7)'; c.beginPath(); c.arc(0.384 * L, -0.026 * L, 0.004 * L, 0, TAU); c.fill();
     c.strokeStyle = 'rgba(40,45,50,0.5)'; c.lineWidth = Math.max(0.8, 0.003 * L); c.beginPath();
     c.moveTo(0.35 * L, 0.052 * L); c.quadraticCurveTo(0.41 * L, 0.046 * L, 0.455 * L, 0.03 * L); c.stroke();
+    if (this.jaw > 0.03) {                          // a bite: the mouth drops open, teeth showing
+      var jw = Math.sin(Math.min(1, this.jaw) * PI) * 0.05 * L;
+      c.fillStyle = '#2a0f12'; c.beginPath(); c.moveTo(0.47 * L, 0.028 * L);
+      c.quadraticCurveTo(0.4 * L, 0.05 * L + jw, 0.33 * L, 0.05 * L); c.quadraticCurveTo(0.4 * L, 0.04 * L, 0.47 * L, 0.028 * L); c.fill();
+      c.fillStyle = '#f4f4f0'; c.beginPath();
+      for (var tt = 0; tt < 5; tt++) { var tx = 0.36 * L + tt * 0.022 * L; c.moveTo(tx, 0.046 * L); c.lineTo(tx + 0.008 * L, 0.046 * L + 0.012 * L); c.lineTo(tx + 0.016 * L, 0.046 * L); }
+      c.fill();
+    }
     // near pectoral
     c.save(); c.translate(0.15 * L, 0.05 * L); c.rotate(0.12 + Math.sin(this.t * 1.5) * 0.05);
     c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(-0.04 * L, 0.06 * L, -0.16 * L, 0.15 * L); c.quadraticCurveTo(-0.07 * L, 0.06 * L, -0.07 * L, 0); c.closePath();
@@ -2978,40 +3025,53 @@
   // A diver swims in, stops to wave at the kitchen, breathes out bubbles, and leaves.
   function Diver() {
     this.type = 'diver'; this.d = 0.42; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = Math.min(W * 0.48, H * 0.8); this.k = this.L / 100;
     this.x = this.dir > 0 ? -this.L * 0.6 : W + this.L * 0.6;
     this.y0 = H * rr(0.3, 0.42); this.y = this.y0;
     this.stopX = W * rr(0.45, 0.58); this.state = 0; this.st = 0; this.v = W * 0.11;
     this.kick = 0; this.wave = 0; this.breath = 1.2; this.exhale = 0;
     this.threat = { x: 0, y: 0, r: this.L * 0.45, s: 0.55 };
-    var h = 0.18;
-    this.p = { suit: hz('#1d2127', h), suitFar: hz('#121418', h), stripe: hz('#19b3c6', h), tank: hz('#f5c518', h), tankD: hz('#a87d00', h),
-      fin: hz('#ffd43b', h), finFar: hz('#c79c18', h), bcd: hz('#383e46', h), mask: hz('#9fdcff', h), reg: hz('#40464d', h) };
+    // combo controls: ctl (a scene moves it), face (turning), hold (far hand
+    // gripping the whale), wipe/cam (near-arm poses), ink (on the mask)
+    this.k0 = this.k; this.face = this.dir; this.ctl = false; this.hold = 0; this.wipe = 0; this.cam = 0; this.ink = 0;
+    this.paint(0.18);
   }
+  // Colours fade toward the water's blue with distance (h); the whale ride
+  // repaints them as the diver swims out to the whale.
+  Diver.prototype.paint = function (h) {
+    this.haze = h;
+    this.p = { suit: hz('#1d2127', h), suitFar: hz('#121418', h), stripe: hz('#19b3c6', h), tank: hz('#f5c518', h), tankD: hz('#a87d00', h),
+      fin: hz('#ffd43b', h), finFar: hz('#c79c18', h), bcd: hz('#383e46', h), mask: hz('#9fdcff', h), reg: hz('#40464d', h),
+      maskHi: hz('#e6f7ff', h), maskLo: hz('#3a7ca8', h), hose: hz('#2a2a2a', h), visor: hz('#0b0c0e', h) };
+  };
   Diver.prototype.update = function (dt) {
     var k = this.k;
     this.t += dt; this.st += dt;
-    var sp;
-    if (this.state === 0) {
-      var rem = Math.abs(this.stopX - this.x);
-      sp = this.v * clamp(rem / (W * 0.15), 0.15, 1);
-      if (rem < 4 * U) { this.state = 1; this.st = 0; }
-    } else if (this.state === 1) {
-      sp = 0; this.wave = Math.min(1, this.wave + dt * 1.5);
-      if (this.st > 7) { this.state = 2; this.st = 0; }
-    } else { sp = this.v * Math.min(1, this.st * 0.5 + 0.1); this.wave = Math.max(0, this.wave - dt * 2); }
-    this.x += this.dir * sp * dt;
-    this.y = this.y0 + Math.sin(this.t * 0.8) * 5 * U;
+    this.face = turnToward(this.face, this.dir, dt * 3.5);
+    if (!this.ctl) {
+      var sp;
+      if (this.state === 0) {
+        var rem = Math.abs(this.stopX - this.x);
+        sp = this.v * clamp(rem / (W * 0.15), 0.15, 1);
+        if (rem < 4 * U) { this.state = 1; this.st = 0; }
+      } else if (this.state === 1) {
+        sp = 0; this.wave = Math.min(1, this.wave + dt * 1.5);
+        holdFor(this, 6.9, dt);
+        if (this.st > 7) { this.state = 2; this.st = 0; }
+      } else { sp = this.v * Math.min(1, this.st * 0.5 + 0.1); this.wave = Math.max(0, this.wave - dt * 2); }
+      this.x += this.dir * sp * dt;
+      this.y = this.y0 + Math.sin(this.t * 0.8) * 5 * U;
+    }
     this.kick += dt * TAU * (this.state === 1 ? 0.45 : 1.3);
     this.breath -= dt;
     if (this.breath < 0) { this.breath = rr(3, 4); this.exhale = 0.7; }
     if (this.exhale > 0) {
       this.exhale -= dt;
-      if (rnd() < dt * 26) addBubble(this.x + this.dir * 33 * k, this.y + 2 * k, rr(1.4, 4.2) * U, 1.15, this.d);
+      if (rnd() < dt * 26) addBubble(this.x + this.face * 33 * k, this.y + 2 * k, rr(1.4, 4.2) * U * k / this.k0, 1.15, this.d);
     }
     this.threat.x = this.x; this.threat.y = this.y;
-    return this.state < 2 || (this.dir > 0 ? this.x < W + this.L * 0.6 : this.x > -this.L * 0.6);
+    return this.ctl || this.state < 2 || (this.dir > 0 ? this.x < W + this.L * 0.6 : this.x > -this.L * 0.6);
   };
   function limb(c, x, y, a, len) { var x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len; c.moveTo(x, y); c.lineTo(x2, y2); return [x2, y2]; }
   Diver.prototype.leg = function (c, near) {
@@ -3031,15 +3091,23 @@
   Diver.prototype.arm = function (c, near) {
     var k = this.k, p = this.p, sh = [16 * k, near ? 3 * k : 0], w = near ? this.wave : 0;
     var a1 = lerp(2.55, -1.05, w), a2 = lerp(3.05, -1.45 + Math.sin(this.t * 7) * 0.5, w);
-    if (!near) { a1 = 2.65; a2 = 3.1; }
+    if (!near) { a1 = lerp(2.65, 1.75, this.hold); a2 = lerp(3.1, 1.45, this.hold); }      // reaching down to grip
+    else if (this.wipe > 0) {                                                             // rubbing the mask clean
+      a1 = lerp(a1, -0.9, this.wipe); a2 = lerp(a2, 0.95 + Math.sin(this.t * 13) * 0.4, this.wipe);
+    } else if (this.cam > 0) { a1 = lerp(a1, -0.35, this.cam); a2 = lerp(a2, -0.25, this.cam); }  // camera up
     c.strokeStyle = near ? p.suit : p.suitFar; c.lineCap = 'round';
     c.lineWidth = 5.6 * k; c.beginPath(); var el = limb(c, sh[0], sh[1], a1, 13 * k); c.stroke();
     c.lineWidth = 4.8 * k; c.beginPath(); var hd = limb(c, el[0], el[1], a2, 12 * k); c.stroke();
     c.fillStyle = near ? p.suit : p.suitFar; c.beginPath(); c.arc(hd[0], hd[1], 3 * k, 0, TAU); c.fill();
+    if (near && this.cam > 0.3) {                                                         // an underwater camera
+      c.fillStyle = '#20262c'; c.fillRect(hd[0] - 2 * k, hd[1] - 4.5 * k, 8 * k, 7 * k);
+      c.fillStyle = '#f5c518'; c.fillRect(hd[0] - 2 * k, hd[1] - 4.5 * k, 8 * k, 1.6 * k);
+      c.fillStyle = '#7fc8f0'; c.beginPath(); c.arc(hd[0] + 6.6 * k, hd[1] - 1 * k, 2.2 * k, 0, TAU); c.fill();
+    }
   };
   Diver.prototype.render = function (c) {
     var k = this.k, p = this.p;
-    c.save(); c.translate(this.x, this.y); c.scale(this.dir, 1); c.rotate(Math.sin(this.t * 0.8) * 0.03);
+    c.save(); c.translate(this.x, this.y); c.scale(this.face, 1); c.rotate(Math.sin(this.t * 0.8) * 0.03);
     this.arm(c, false); this.leg(c, false);
     c.strokeStyle = p.suit; c.lineCap = 'round'; c.lineWidth = 15 * k;
     c.beginPath(); c.moveTo(-13 * k, 1 * k); c.lineTo(16 * k, -1 * k); c.stroke();
@@ -3050,13 +3118,18 @@
     c.fillStyle = tg; c.beginPath();
     c.moveTo(-10 * k, -13 * k); c.lineTo(13 * k, -13 * k); c.quadraticCurveTo(17 * k, -9 * k, 13 * k, -5 * k); c.lineTo(-10 * k, -5 * k); c.quadraticCurveTo(-13 * k, -9 * k, -10 * k, -13 * k); c.fill();
     c.fillStyle = p.reg; c.fillRect(15 * k, -11 * k, 4 * k, 3.5 * k);
-    c.strokeStyle = '#2a2a2a'; c.lineWidth = 1.4 * k; c.beginPath(); c.moveTo(18 * k, -9 * k); c.quadraticCurveTo(33 * k, -11 * k, 31 * k, 4 * k); c.stroke();
+    c.strokeStyle = p.hose; c.lineWidth = 1.4 * k; c.beginPath(); c.moveTo(18 * k, -9 * k); c.quadraticCurveTo(33 * k, -11 * k, 31 * k, 4 * k); c.stroke();
     this.leg(c, true);
     c.fillStyle = p.suit; c.beginPath(); c.arc(25 * k, -1.5 * k, 6.8 * k, 0, TAU); c.fill();
-    c.fillStyle = '#0b0c0e'; c.beginPath(); c.ellipse(29.5 * k, 0.8 * k, 3.6 * k, 4.2 * k, 0.25, 0, TAU); c.fill();
+    c.fillStyle = p.visor; c.beginPath(); c.ellipse(29.5 * k, 0.8 * k, 3.6 * k, 4.2 * k, 0.25, 0, TAU); c.fill();
     var mg = c.createLinearGradient(28 * k, -2 * k, 32 * k, 4 * k);
-    mg.addColorStop(0, '#e6f7ff'); mg.addColorStop(0.5, p.mask); mg.addColorStop(1, '#3a7ca8');
+    mg.addColorStop(0, p.maskHi); mg.addColorStop(0.5, p.mask); mg.addColorStop(1, p.maskLo);
     c.fillStyle = mg; c.beginPath(); c.ellipse(30 * k, 0.8 * k, 2.7 * k, 3.2 * k, 0.25, 0, TAU); c.fill();
+    if (this.ink > 0.01) {                          // inked: the mask blacked out, a drip or two
+      c.fillStyle = 'rgba(14,10,22,' + Math.min(0.93, this.ink).toFixed(3) + ')';
+      c.beginPath(); c.ellipse(29.8 * k, 0.8 * k, 4.2 * k, 4.8 * k, 0.25, 0, TAU);
+      c.ellipse(24 * k, -4.5 * k, 4 * k, 3 * k, 0, 0, TAU); c.ellipse(31 * k, 6.5 * k, 1.3 * k, 2.6 * k, 0, 0, TAU); c.fill();
+    }
     c.strokeStyle = p.stripe; c.lineWidth = 1 * k; c.beginPath(); c.moveTo(27 * k, -2.5 * k); c.lineTo(20 * k, -3 * k); c.stroke();
     c.fillStyle = p.reg; c.beginPath(); c.arc(31.5 * k, 5 * k, 2.1 * k, 0, TAU); c.fill();
     this.arm(c, true);
@@ -3065,21 +3138,23 @@
 
   function Turtle() {
     this.type = 'turtle'; this.d = 0.38; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = Math.min(W * 0.34, H * 0.5);
     this.x0 = this.dir > 0 ? -this.L * 0.6 : W + this.L * 0.6; this.x1 = this.dir > 0 ? W + this.L * 0.6 : -this.L * 0.6;
     this.y0 = H * rr(0.55, 0.66); this.y1 = H * rr(0.2, 0.36);
     this.dur = 28; this.ph = 0; this.x = this.x0; this.y = this.y0; this.pitch = 0;
+    this.rate = 1; this.oy = 0; this.chomp = 0;      // combo: hurry along its path, veer, snap
     this.threat = { x: 0, y: 0, r: this.L * 0.4, s: 0.35 };
     var h = 0.18;
     this.p = { skin: hz('#8e8b5c', h), skinD: hz('#5f5d3a', h), shell: hz('#7a6a2c', h), shellD: hz('#3b2f12', h), scute: hz('#f2dca0', h, 0.35), plast: hz('#d9c79a', h), spot: hz('#d8d3a8', h, 0.45) };
   }
   Turtle.prototype.update = function (dt) {
-    this.t += dt;
+    this.t += dt * this.rate;
     var u = this.t / this.dur, ox = this.x, oy = this.y;
-    this.ph += dt * TAU / 3.4;
+    this.ph += dt * TAU / 3.4 * this.rate;
+    this.chomp = Math.max(0, this.chomp - dt * 2);
     this.x = lerp(this.x0, this.x1, u) + this.dir * Math.pow(Math.sin(this.ph), 2) * 6 * U;
-    this.y = lerp(this.y0, this.y1, ease(u)) + Math.sin(u * TAU) * H * 0.03;
+    this.y = lerp(this.y0, this.y1, ease(u)) + Math.sin(u * TAU) * H * 0.03 + this.oy;
     var tp = Math.atan2(this.y - oy, Math.abs(this.x - ox) + 1e-3);
     this.pitch += (clamp(tp, -0.35, 0.35) - this.pitch) * Math.min(1, dt * 2);
     this.threat.x = this.x; this.threat.y = this.y;
@@ -3096,6 +3171,7 @@
     c.save(); c.translate(this.x, this.y); c.scale(this.dir, 1); c.rotate(this.pitch);
     this.flipper(c, 0.16 * L, -0.02 * L, -0.5 + s * 0.75, 0.38 * L, 0.06 * L, p.skinD);
     this.flipper(c, -0.26 * L, 0.02 * L, 0.25 - s * 0.25, 0.14 * L, 0.04 * L, p.skinD);
+    c.save(); c.translate(Math.sin(this.chomp * PI) * 0.05 * L, 0);   // the head lunges on a snap
     c.fillStyle = p.skin; c.beginPath(); c.ellipse(0.38 * L, 0.0, 0.12 * L, 0.055 * L, 0.05, 0, TAU); c.fill();
     c.beginPath(); c.ellipse(0.47 * L, -0.005 * L, 0.085 * L, 0.06 * L, 0.1, 0, TAU); c.fill();
     c.strokeStyle = p.spot; c.lineWidth = Math.max(0.6, L * 0.004); c.beginPath();
@@ -3103,7 +3179,8 @@
     c.stroke();
     c.fillStyle = '#121212'; c.beginPath(); c.arc(0.5 * L, -0.022 * L, 0.014 * L, 0, TAU); c.fill();
     c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(0.504 * L, -0.026 * L, 0.005 * L, 0, TAU); c.fill();
-    c.strokeStyle = p.skinD; c.lineWidth = Math.max(0.8, L * 0.006); c.beginPath(); c.moveTo(0.545 * L, 0.012 * L); c.quadraticCurveTo(0.52 * L, 0.025 * L, 0.49 * L, 0.02 * L); c.stroke();
+    c.strokeStyle = p.skinD; c.lineWidth = Math.max(0.8, L * 0.006); c.beginPath(); c.moveTo(0.545 * L, 0.012 * L); c.quadraticCurveTo(0.52 * L, 0.025 * L + this.chomp * 0.02 * L, 0.49 * L, 0.02 * L); c.stroke();
+    c.restore();
     c.fillStyle = p.plast; c.beginPath(); c.ellipse(0, 0.035 * L, 0.33 * L, 0.085 * L, 0, 0, TAU); c.fill();
     var g = c.createRadialGradient(-0.05 * L, -0.12 * L, 0.02 * L, 0, -0.02 * L, 0.38 * L);
     g.addColorStop(0, '#9c8a46'); g.addColorStop(0.55, p.shell); g.addColorStop(1, p.shellD);
@@ -3126,7 +3203,7 @@
   // pulsing to stay up and sinking a little between beats, and drifts out.
   function Jellies() {
     this.type = 'jelly'; this.t = 0; this.items = [];
-    var dir = rnd() < 0.5 ? 1 : -1;
+    var dir = rdir();
     for (var i = 0; i < 5; i++) {
       var d = rr(0.15, 0.8), R = rr(22, 36) * U * (1 - 0.4 * d);
       this.items.push({ d: d, R: R, x: dir > 0 ? -R * 2 - i * rr(40, 90) * U : W + R * 2 + i * rr(40, 90) * U,
@@ -3138,11 +3215,12 @@
     this.t += dt;
     var alive = false;
     for (var i = 0; i < this.items.length; i++) {
-      var j = this.items[i], sc = 1 - 0.4 * j.d;
-      j.ph += dt * TAU / 1.9;
+      var j = this.items[i], sc = 1 - 0.4 * j.d, zip = j.zip > 0;
+      if (zip) j.zip -= dt;                          // escaping the turtle: hard, fast pulses
+      j.ph += dt * TAU / 1.9 * (zip ? 3 : 1);
       var con = Math.pow(Math.max(0, Math.sin(j.ph)), 2);
       j.con = con;
-      var lift = j.y > H * 0.62 ? 1.4 : j.y < H * 0.25 ? 0.4 : 1;
+      var lift = (j.y > H * 0.62 ? 1.4 : j.y < H * 0.25 ? 0.4 : 1) * (zip ? 2 : 1);
       j.vy += ((7 - 34 * con * lift) * U * sc - j.vy) * Math.min(1, dt * 2.5);
       j.y += j.vy * dt; j.x += (j.vx + G.cur * 5 * U) * dt;
       j.tilt += (clamp(j.vx / (40 * U), -0.25, 0.25) - j.tilt) * Math.min(1, dt);
@@ -3188,13 +3266,21 @@
 
   function Octopus() {
     this.type = 'octopus'; this.d = 0.3; this.t = 0; this.st = 0; this.state = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.m = 15 * U * 1.25;
     this.x = this.dir > 0 ? -this.m * 2.5 : W + this.m * 2.5;
     this.stopX = W * rr(0.4, 0.58); this.y = floorAt(this.x);
-    this.cam = 0; this.vx = 0; this.vy = 0; this.ang = 0;
+    this.cam = 0; this.vx = 0; this.vy = 0; this.ang = 0; this.coin = 0;
     this.threat = { x: 0, y: 0, r: 120 * U, s: 0.5 };
   }
+  // Squirt ink and shoot off along (vx, vy). Its own exit is up and away from
+  // the middle; the combos aim it (away from a shark, up past a diver).
+  Octopus.prototype.jet = function (vx, vy) {
+    var m = this.m;
+    this.state = 2; this.st = 0; this.vx = vx; this.vy = vy;
+    for (var i = 0; i < 30; i++) fx.push({ kind: 'ink', x: this.x + rr(-12, 12) * U, y: this.y - m * rr(0.5, 1.6), vx: rr(-25, 25) * U - this.vx * 0.1, vy: rr(-15, 10) * U, r: rr(8, 16) * U, grow: rr(6, 14) * U, life: rr(5, 8), max: 8 });
+    this.threat.r = 220 * U; this.threat.s = 1;
+  };
   Octopus.prototype.update = function (dt) {
     var m = this.m;
     this.t += dt; this.st += dt;
@@ -3203,20 +3289,16 @@
       this.y = floorAt(this.x) - m * 0.35;
       if (Math.abs(this.x - this.stopX) < 4 * U) { this.state = 1; this.st = 0; }
     } else if (this.state === 1) {
+      holdFor(this, 4, dt);                          // stays hidden while a combo partner is coming
       this.cam = this.st < 4.2 ? ease((this.st - 0.8) / 1.6) : ease(1 - (this.st - 4.2) / 1.2);
-      if (this.st > 6.4) {
-        this.state = 2; this.st = 0;
-        var away = this.x < W / 2 ? 1 : -1;
-        this.vx = away * W * 0.32; this.vy = -H * 0.42;
-        for (var i = 0; i < 30; i++) fx.push({ kind: 'ink', x: this.x + rr(-12, 12) * U, y: this.y - m * rr(0.5, 1.6), vx: rr(-25, 25) * U - this.vx * 0.1, vy: rr(-15, 10) * U, r: rr(8, 16) * U, grow: rr(6, 14) * U, life: rr(5, 8), max: 8 });
-        this.threat.r = 220 * U; this.threat.s = 1;
-      }
+      if (this.st > 6.4) this.jet((this.x < W / 2 ? 1 : -1) * W * 0.32, -H * 0.42);
     } else {
       this.x += this.vx * dt; this.y += this.vy * dt;
       this.vx *= 1 - dt * 0.25; this.vy *= 1 - dt * 0.25;
       if (this.st > 1) this.threat.s = 0.3;
     }
     this.threat.x = this.x; this.threat.y = this.y - m;
+    if (this.coin && rnd() < dt * 1.5) spark(this.x + this.dir * m * 1.25, this.y - m * 0.1, rr(2, 3.5) * U, true, 0.9);
     return this.state < 2 || (this.y > -m * 5 && this.x > -m * 5 && this.x < W + m * 5);
   };
   Octopus.prototype.render = function (c) {
@@ -3256,21 +3338,32 @@
     c.fillStyle = css(mixRgb(base, [255, 255, 255], 0.15)); c.beginPath(); c.arc(m * 0.38, -m * 0.5, m * 0.22, 0, TAU); c.fill();
     c.fillStyle = '#e9d27a'; c.beginPath(); c.arc(m * 0.4, -m * 0.5, m * 0.14, 0, TAU); c.fill();
     c.fillStyle = '#111'; c.fillRect(m * 0.31, -m * 0.53, m * 0.18, m * 0.06);
+    if (this.coin) {                                 // the gold coin it took from the chest
+      c.fillStyle = '#f2c230'; c.beginPath(); c.arc(m * 1.25, -m * 0.1, m * 0.34, 0, TAU); c.fill();
+      c.strokeStyle = '#b8860b'; c.lineWidth = m * 0.08; c.stroke();
+    }
     c.restore();
   };
 
   function Whale() {
     this.type = 'whale'; this.d = 1; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = W * 1.2; this.x = this.dir > 0 ? -this.L * 0.55 : W + this.L * 0.55;
-    this.y = H * rr(0.27, 0.34); this.v = (W + this.L * 1.1) / 32; this.ph = 0;
+    this.y = H * rr(0.27, 0.34); this.v = (W + this.L * 1.1) / 32; this.ph = 0; this.boost = 1; this.bt = 1;
     var h = 0.52;
     this.p = { body: hz('#1f2a35', h), belly: hz('#d5dde2', h), fin: hz('#e9eef1', h), groove: hz('#f0f4f6', h, 0.4),
       knob: hz('#56677a', h, 0.7), line: hz('#0e151b', h) };
   }
   Whale.prototype.update = function (dt) {
-    this.t += dt; this.x += this.dir * this.v * dt; this.ph += dt * TAU * 0.2;
+    this.boost += (this.bt - this.boost) * Math.min(1, dt * 1.5);
+    this.t += dt; this.x += this.dir * this.v * this.boost * dt; this.ph += dt * TAU * 0.2;
     return this.dir > 0 ? this.x < W + this.L * 0.55 : this.x > -this.L * 0.55;
+  };
+  // A point on the whale in its own units (1 = L/100, x toward the head,
+  // y down), where render() puts it this frame.
+  Whale.prototype.at = function (ox, oy) {
+    var k = this.L / 100;
+    return { x: this.x + this.dir * ox * k, y: this.y + Math.sin(this.t * 0.25) * 6 * U + oy * k };
   };
   Whale.prototype.render = function (c) {
     var k = this.L / 100, p = this.p, b = Math.sin(this.ph), i;
@@ -3322,17 +3415,20 @@
 
   function Dolphins() {
     this.type = 'dolphins'; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = Math.min(W * 0.28, H * 0.42);
     this.x = this.dir > 0 ? -this.L * 0.8 : W + this.L * 0.8;
     this.v = (W + this.L * 3.5) / 6.5; this.y0 = H * rr(0.3, 0.45);
+    this.boost = 1; this.bt = 1; this.yt = this.y0;   // combo: speed and the height to swim at
     this.items = [];
     var h = 0.12, p = { top: hz('#566774', h), mid: hz('#8d9ea9', h), belly: hz('#e6ecef', h), fin: hz('#4c5c68', h) };
     for (var i = 0; i < 3; i++) this.items.push({ d: 0.18 + i * 0.07, off: -i * this.L * 0.75 - rr(0, 0.2) * this.L, oy: (i === 1 ? -1 : i === 2 ? 1 : 0) * H * 0.09, ph: rr(0, TAU), x: 0, y: 0, pitch: 0, p: p, L: this.L * (1 - i * 0.05), dir: this.dir, render: renderDolphin });
     this.threat = { x: 0, y: 0, r: this.L * 1.1, s: 0.9 };
   }
   Dolphins.prototype.update = function (dt) {
-    this.t += dt; this.x += this.dir * this.v * dt;
+    this.boost += (this.bt - this.boost) * Math.min(1, dt * 2);
+    this.y0 += (this.yt - this.y0) * Math.min(1, dt * 0.9);
+    this.t += dt; this.x += this.dir * this.v * this.boost * dt;
     for (var i = 0; i < this.items.length; i++) {
       var o = this.items[i], u = (this.x + this.dir * o.off) / W;
       o.x = this.x + this.dir * o.off;
@@ -3340,6 +3436,7 @@
       o.y = this.y0 + o.oy + Math.sin(u * arc + o.ph) * H * 0.06;
       o.pitch = Math.atan(Math.cos(u * arc + o.ph) * H * 0.06 * arc / W * this.dir) * this.dir;
       o.beat = this.t * TAU * 2.2 + o.ph;
+      if (o.flip != null) { o.flip += dt / 0.9; if (o.flip >= 1) { o.flip = null; o.flipped = true; } }
     }
     this.threat.x = this.items[0].x; this.threat.y = this.items[0].y;
     var lastX = this.items[2].x;
@@ -3347,7 +3444,7 @@
   };
   function renderDolphin(c) {
     var o = this, L = o.L, p = o.p, b = Math.sin(o.beat), bend = b * 0.035 * L;
-    c.save(); c.translate(o.x, o.y); c.scale(o.dir, 1); c.rotate(o.pitch);
+    c.save(); c.translate(o.x, o.y); c.scale(o.dir, 1); c.rotate(o.pitch - (o.flip != null ? TAU * ease(o.flip) : 0));
     c.save(); c.translate(-0.44 * L, bend); c.rotate(b * 0.35);
     c.fillStyle = p.fin; c.beginPath(); c.moveTo(0.02 * L, 0); c.quadraticCurveTo(-0.05 * L, -0.02 * L, -0.1 * L, -0.08 * L);
     c.quadraticCurveTo(-0.07 * L, 0, -0.1 * L, 0.08 * L); c.quadraticCurveTo(-0.05 * L, 0.02 * L, 0.02 * L, 0); c.fill(); c.restore();
@@ -3372,37 +3469,47 @@
 
   function Mermaid() {
     this.type = 'mermaid'; this.d = 0.34; this.t = 0;
-    this.dir = rnd() < 0.5 ? 1 : -1;
+    this.dir = rdir();
     this.L = Math.min(W * 0.44, H * 0.72); this.k = this.L / 100;
     this.x = this.dir > 0 ? -this.L * 0.6 : W + this.L * 0.6;
     this.y0 = H * rr(0.3, 0.44); this.y = this.y0;
     this.stopX = W * rr(0.45, 0.58); this.state = 0; this.st = 0; this.v = W * 0.12;
     this.ph = 0; this.wave = 0; this.amp = 1;
+    // combo controls: ctl (a scene moves her), face (turning), sc (smaller when
+    // she rides a dolphin, which is farther back), tilt, reach (arm forward to
+    // a fin or into the chest), crown, sing (mouth open)
+    this.face = this.dir; this.ctl = false; this.sc = 1; this.tilt = 0; this.reach = 0; this.crown = 0; this.sing = 0;
     var h = 0.12;
     this.p = { skin: hz('#e8b48a', h), skinD: hz('#c98c62', h), hair: hz('#6b2a8c', h), hairL: hz('#9b59b6', h),
       tail1: hz('#18b59a', h), tail2: hz('#138d90', h), tail3: hz('#7d3c98', h), fluke: hz('#b388d6', h, 0.85), shell: hz('#f2a7c3', h) };
   }
   Mermaid.prototype.update = function (dt) {
     this.t += dt; this.st += dt;
-    var sp;
-    if (this.state === 0) {
-      var rem = Math.abs(this.stopX - this.x);
-      sp = this.v * clamp(rem / (W * 0.15), 0.12, 1);
-      if (rem < 4 * U) { this.state = 1; this.st = 0; }
-    } else if (this.state === 1) {
-      sp = 0; this.wave = Math.min(1, this.wave + dt * 1.5);
-      if (this.st > 6) { this.state = 2; this.st = 0; }
-    } else { sp = this.v * Math.min(1, this.st * 0.6 + 0.1); this.wave = Math.max(0, this.wave - dt * 2); }
-    this.amp += ((this.state === 1 ? 0.35 : 1) - this.amp) * Math.min(1, dt * 2);
-    this.x += this.dir * sp * dt;
-    this.y = this.y0 + Math.sin(this.t * 0.9) * 6 * U;
-    this.ph += dt * TAU * (this.state === 1 ? 0.5 : 1.1);
-    if (rnd() < dt * 10) spark(this.x - this.dir * 50 * this.k + rr(-6, 6) * U, this.y + rr(-6, 6) * U, rr(1.5, 3) * U, false, rr(0.8, 1.6));
-    return this.state < 2 || (this.dir > 0 ? this.x < W + this.L * 0.6 : this.x > -this.L * 0.6);
+    this.face = turnToward(this.face, this.dir, dt * 3.5);
+    var sp = 0;
+    if (!this.ctl) {
+      if (this.state === 0) {
+        var rem = Math.abs(this.stopX - this.x);
+        sp = this.v * clamp(rem / (W * 0.15), 0.12, 1);
+        if (rem < 4 * U) { this.state = 1; this.st = 0; }
+      } else if (this.state === 1) {
+        sp = 0; this.wave = Math.min(1, this.wave + dt * 1.5);
+        holdFor(this, 5.9, dt);
+        if (this.st > 6) { this.state = 2; this.st = 0; }
+      } else { sp = this.v * Math.min(1, this.st * 0.6 + 0.1); this.wave = Math.max(0, this.wave - dt * 2); }
+      this.x += this.dir * sp * dt;
+      this.y = this.y0 + Math.sin(this.t * 0.9) * 6 * U;
+    }
+    this.amp += ((this.state === 1 && !this.ctl ? 0.35 : 1) - this.amp) * Math.min(1, dt * 2);
+    this.ph += dt * TAU * (this.state === 1 && !this.ctl ? 0.5 : 1.1);
+    var k = this.k * this.sc;
+    if (rnd() < dt * 10) spark(this.x - this.face * 50 * k + rr(-6, 6) * U, this.y + rr(-6, 6) * U, rr(1.5, 3) * U, false, rr(0.8, 1.6));
+    if (this.crown && rnd() < dt * 1.2) spark(this.x + this.face * 30 * k, this.y - 10 * k, rr(1.5, 2.6) * U, true, 0.8);
+    return this.ctl || this.state < 2 || (this.dir > 0 ? this.x < W + this.L * 0.6 : this.x > -this.L * 0.6);
   };
   Mermaid.prototype.render = function (c) {
     var k = this.k, p = this.p, i, j;
-    c.save(); c.translate(this.x, this.y); c.scale(this.dir, 1); c.rotate(Math.sin(this.t * 0.9) * 0.03);
+    c.save(); c.translate(this.x, this.y); c.scale(this.face * this.sc, this.sc); c.rotate(Math.sin(this.t * 0.9) * 0.03 + this.tilt);
     c.lineCap = 'round';
     for (i = 0; i < 6; i++) {                     // hair streaming back
       c.strokeStyle = i % 3 === 2 ? p.hairL : p.hair; c.lineWidth = (4.6 - i * 0.4) * k; c.beginPath();
@@ -3458,9 +3565,20 @@
     c.closePath(); c.fill();
     c.fillStyle = '#2b1a14'; c.beginPath(); c.ellipse(hx + hr * 0.5, hy - hr * 0.05, hr * 0.12, hr * 0.17, 0, 0, TAU); c.fill();
     c.fillStyle = 'rgba(240,120,140,0.35)'; c.beginPath(); c.arc(hx + hr * 0.42, hy + hr * 0.38, hr * 0.22, 0, TAU); c.fill();
-    c.strokeStyle = '#8c3b3b'; c.lineWidth = 0.6 * k; c.beginPath(); c.arc(hx + hr * 0.62, hy + hr * 0.42, hr * 0.2, 0.3, 1.9); c.stroke();
+    if (this.sing > 0.05) {                          // singing: an open "o"
+      c.fillStyle = '#8c3b3b'; c.beginPath(); c.ellipse(hx + hr * 0.6, hy + hr * 0.45, hr * 0.13, hr * 0.2 * this.sing, 0, 0, TAU); c.fill();
+    } else { c.strokeStyle = '#8c3b3b'; c.lineWidth = 0.6 * k; c.beginPath(); c.arc(hx + hr * 0.62, hy + hr * 0.42, hr * 0.2, 0.3, 1.9); c.stroke(); }
+    if (this.crown) {                                // from the treasure chest
+      var cy = hy - hr * 0.92, cw = hr * 0.75;
+      c.fillStyle = '#f5c518'; c.beginPath(); c.moveTo(hx - cw, cy);
+      c.lineTo(hx - cw * 1.1, cy - hr * 0.75); c.lineTo(hx - cw * 0.45, cy - hr * 0.35); c.lineTo(hx, cy - hr * 0.95);
+      c.lineTo(hx + cw * 0.45, cy - hr * 0.35); c.lineTo(hx + cw * 1.1, cy - hr * 0.75); c.lineTo(hx + cw, cy); c.closePath(); c.fill();
+      c.fillStyle = '#e8355a'; c.beginPath(); c.arc(hx, cy - hr * 0.22, hr * 0.13, 0, TAU); c.fill();
+      c.fillStyle = '#4fc3f7'; c.beginPath(); c.arc(hx - cw * 0.6, cy - hr * 0.16, hr * 0.09, 0, TAU); c.arc(hx + cw * 0.6, cy - hr * 0.16, hr * 0.09, 0, TAU); c.fill();
+    }
     // near arm: along her side while she swims, straight up and waving when she stops
     var wv = this.wave, a1 = lerp(2.85, -1.75, wv), a2 = lerp(3.0, -1.75 + Math.sin(this.t * 7) * 0.55, wv);
+    if (this.reach > 0) { a1 = lerp(a1, 0.6, this.reach); a2 = lerp(a2, 0.9, this.reach); }   // forward and down
     c.strokeStyle = p.skin; c.lineCap = 'round'; c.lineWidth = 3.2 * k; c.beginPath();
     var el = limb(c, 21 * k, 0.5 * k, a1, 10 * k); c.stroke();
     c.lineWidth = 2.8 * k; c.beginPath(); var hd = limb(c, el[0], el[1], a2, 9 * k); c.stroke();
@@ -3477,7 +3595,495 @@
   var MIN_STAY = 6;      // seconds a visitor is guaranteed before it can be faded
   var FADE = 1.2;        // seconds a visitor takes to fade out when making room
 
-  function trigger(type) {
+  // ---- combos ------------------------------------------------------------------------
+  // Jeff, 2026-10-25: "certain combinations of visitors interact in unique ways",
+  // e.g. the diver riding the whale. Each combo is a short scene that takes over
+  // two visitors that happen to be in the tank together (or a visitor plus the
+  // chest or the food), then hands them back to their own routine or carries
+  // them off. A visitor plays each combo once per visit and one scene at a time.
+  // Scenes only steer visitors that are already here, so they add nothing to the
+  // Onn's GPU bill beyond a few sparks, notes and ink.
+  var PARTNERS = { diver: ['whale', 'octopus', 'shark'], whale: ['diver', 'mermaid'], dolphins: ['shark', 'mermaid'],
+    shark: ['dolphins', 'octopus', 'diver'], mermaid: ['dolphins', 'whale'], octopus: ['shark', 'diver'],
+    turtle: ['jelly'], jelly: ['turtle'] };
+  function gone(v) { return !v || v.dead || visitors.indexOf(v) < 0; }
+  function idle(v) { return !v.scene && v.fade == null && !v.dead; }
+  function onScreen(x, m) { return x > W * m && x < W * (1 - m); }
+  function present(type) {
+    for (var i = 0; i < visitors.length; i++) if (visitors[i].type === type && idle(visitors[i])) return visitors[i];
+    return null;
+  }
+  function comboWith(a, b) {
+    for (var i = 0; i < COMBOS.length; i++) {
+      var c = COMBOS[i];
+      if ((c.a === a && c.b === b) || (c.a === b && c.b === a)) return c;
+    }
+    return null;
+  }
+  // Is a partner for one of v's combos queued, or here and still free?
+  function awaiting(v) {
+    var ps = PARTNERS[v.type] || [];
+    for (var i = 0; i < ps.length; i++) {
+      var c = comboWith(v.type, ps[i]);
+      if (!c || v.done[c.id]) continue;
+      if (queue.indexOf(ps[i]) >= 0) return true;
+      for (var j = 0; j < visitors.length; j++) {
+        var o = visitors[j];
+        if (o !== v && o.type === ps[i] && idle(o) && !o.done[c.id]) return true;
+      }
+    }
+    return false;
+  }
+  // A stopped visitor (diver, mermaid, octopus) holds its pose up to 12 s longer
+  // while a partner is on the way, so a combo isn't missed by a few seconds.
+  function holdFor(v, at, dt) {
+    if (v.st > at && (v.waited || 0) < 12 && awaiting(v)) { v.st = at; v.waited = (v.waited || 0) + dt; }
+  }
+  // Which way a new visitor should swim so it meets a partner already here.
+  // Only where one side can't work; elsewhere either side meets.
+  function arrangeDir(type) {
+    var o;
+    if (type === 'diver' && (o = present('whale') || present('shark'))) return -o.dir;   // head-on
+    if (type === 'octopus' && (o = present('shark'))) return -o.dir;                     // into its path
+    // The turtle outswims the drifting jellies, so they must meet head-on.
+    if (type === 'turtle' && (o = present('jelly'))) return -o.items[0].dir;
+    if (type === 'jelly' && (o = present('turtle'))) return -o.dir;
+    return 0;
+  }
+
+  // -- the scenes. can() is checked every frame; play() starts the scene and
+  //    returns {step(dt)}, which runs until it returns false. --
+  function sharkHead(S) { return S.x + S.dir * S.L * 0.45; }
+  function sharkMouth(S) { return { x: S.x + S.face * S.L * 0.46, y: S.y + S.L * 0.035 }; }
+  function treasureOn() { return chest.open > 0 || T - lastTreasure < 12; }
+  function feedOn() {
+    if (T - lastFeed < 20) return true;
+    for (var i = 0; i < food.length; i++) if (!food[i].gone && food[i].st < 2) return true;
+    return false;
+  }
+  function inkAt(x, y, n, spread, life) {
+    life = life || 7;
+    for (var i = 0; i < n; i++) fx.push({ kind: 'ink', x: x + rr(-1, 1) * spread, y: y + rr(-0.7, 0.7) * spread, vx: rr(-14, 14) * U, vy: rr(-10, 8) * U, r: rr(9, 17) * U, grow: rr(7, 13) * U, life: life * rr(0.7, 1), max: life });
+  }
+  // Key moments, for the harnesses (FishTank.state().beats).
+  var beats = [];
+  function beat(name) { beats.push(name); if (beats.length > 60) beats.shift(); }
+  function sparkle(x, y, n, spread, gold) {
+    for (var i = 0; i < n; i++) spark(x + rr(-1, 1) * spread, y + rr(-1, 1) * spread, rr(2.5, 5) * U, gold, rr(0.8, 1.6));
+  }
+
+  // Whale ride. The whale is far behind the glass, so the diver swims out into
+  // the blue, shrinking and fading with the distance, takes hold on its back
+  // and rides it out of the tank, waving now and then.
+  var SEAT = [8, -9.6], SEAT_K = 0.15, RIDE_SWIM = 3;   // seat in whale units; diver size against the whale
+  function canRide(d, w) {
+    if (d.state > 1 || !onScreen(d.x, 0.05)) return false;
+    var s = w.at(SEAT[0], SEAT[1]), left = w.dir > 0 ? W - s.x : s.x;
+    return onScreen(s.x, 0.06) && left > W * 0.3 && Math.abs(s.x - d.x) < W * 0.5;
+  }
+  function playRide(d, w) {
+    var x0 = d.x, y0 = d.y, k0 = d.k, h0 = d.haze, d0 = d.d;
+    d.ctl = true; d.dir = w.dir; d.wave = 0; d.state = 0;
+    return { step: function (dt) {
+      if (gone(w)) { d.dead = true; return false; }
+      if (w.fade != null) d.fade = w.fade;
+      var s = w.at(SEAT[0], SEAT[1]), u = ease(this.t / RIDE_SWIM);
+      d.x = lerp(x0, s.x, u); d.y = lerp(y0, s.y, u) - Math.sin(u * PI) * H * 0.04;
+      if (this.t <= RIDE_SWIM + 0.1) {
+        d.k = lerp(k0, w.L / 100 * SEAT_K, u); d.d = lerp(d0, 0.99, u);
+        d.paint(lerp(h0, 0.52, u)); d.threat.s = 0.55 * (1 - u);
+      } else {
+        if (d.state !== 1) beat('ride:seated');
+        d.state = 1; d.hold = Math.min(1, d.hold + dt * 2);
+        var waving = (this.t - RIDE_SWIM) % 5 < 2.4;
+        d.wave = waving ? Math.min(1, d.wave + dt * 2) : Math.max(0, d.wave - dt * 2);
+      }
+      return true;
+    } };
+  }
+
+  // Dolphins chase the shark off: the pod closes from behind, the shark turns
+  // tail (or just bolts if it was already heading away) and the pod sees it out.
+  function canChase(D, S) {
+    var l = D.items[0], ahead = (S.x - l.x) * D.dir;
+    return (D.dir > 0 ? l.x > -W * 0.25 : l.x < W * 1.25) && onScreen(S.x, -0.1) && ahead > W * 0.1 && ahead < W * 1.15;
+  }
+  function playChase(D, S) {
+    var seen = -1;
+    return { step: function (dt) {
+      if (gone(S)) { if (!gone(D)) D.bt = 1.3; sparkle(G.school.x, G.school.y, 10, 50 * U, true); return false; }
+      if (gone(D)) { S.bt = 1.6; return false; }
+      var gap0 = (S.x - D.items[0].x) * D.dir;
+      if (seen < 0) {
+        // Coming head-on at a shark still entering, the pod hangs back until it
+        // is properly in the tank, or the whole chase happens at the edge.
+        var inView = onScreen(S.x, 0.2) || S.dir === D.dir;
+        D.bt = inView || gap0 < W * 0.3 ? 1 : 0.3;
+        if (inView || gap0 < W * 0.3) seen = this.t;
+        return true;
+      }
+      if (this.t - seen < 0.5) return true;          // the shark notices them
+      if (S.bt !== 2.2) beat('chase:flee');
+      S.dir = D.dir; S.bt = 2.2;
+      var tail = S.x - S.dir * S.L * 0.45, gap = (tail - D.items[0].x) * D.dir;
+      D.bt = clamp((S.v * S.boost + (gap - W * 0.1) * 1.2) / D.v, 0.6, 2.2);
+      D.yt = clamp(S.y, G.surf + H * 0.18, H * 0.6);
+      return true;
+    } };
+  }
+
+  // Mermaid rides a dolphin: the pod slows as it reaches her, she turns to
+  // them, takes the far dolphin's dorsal fin and they speed off together.
+  var FIN_SEAT = [-0.24, -0.15];                       // on the dolphin's back, in dolphin lengths
+  function dolphinSeat(o) {
+    var c = Math.cos(o.pitch), s = Math.sin(o.pitch), lx = FIN_SEAT[0] * o.L, ly = FIN_SEAT[1] * o.L;
+    return { x: o.x + o.dir * (lx * c - ly * s), y: o.y + lx * s + ly * c };
+  }
+  function canDolphRide(M, D) {
+    if (M.state > 1 || M.ctl || !onScreen(M.x, 0.1)) return false;
+    var gap = (M.x - D.items[2].x) * D.dir;
+    return gap > W * 0.05 && gap < W * 1.4;
+  }
+  function playDolphRide(M, D) {
+    var o = D.items[2], phase = 0, g0 = 0, x0 = 0, y0 = 0;
+    return { step: function (dt) {
+      if (gone(D)) { if (phase) M.dead = true; return false; }
+      if (phase === 0) {
+        M.state = 1; M.st = Math.min(M.st, 2); M.dir = D.dir;   // she turns to watch them come
+        var gap = (M.x - o.x) * D.dir;
+        D.bt = gap < W * 0.45 ? 0.32 : 1;
+        if (gap < W * 0.08) { phase = 1; g0 = this.t; x0 = M.x; y0 = M.y; M.ctl = true; M.wave = 0; }
+        return true;
+      }
+      if (D.fade != null) M.fade = D.fade;
+      var u = ease((this.t - g0) / 1.0), st = dolphinSeat(o);
+      M.x = lerp(x0, st.x, u); M.y = lerp(y0, st.y, u);
+      M.sc = lerp(1, 0.62, u); M.d = lerp(0.34, o.d - 0.005, u); M.tilt = o.pitch * u; M.reach = u;
+      if (u >= 1) { if (!M.riding) { M.riding = true; beat('dolphride:riding'); } D.bt = Math.min(1.25, D.bt + dt * 0.6); }
+      return true;
+    } };
+  }
+
+  // Octopus vs shark: as the shark bears down the octopus squirts ink into its
+  // path and jets off; the shark swims into the cloud, wobbles about dizzy with
+  // stars round its head, then turns and bolts back the way it came.
+  function canInkShark(O, S) {
+    if (O.state > 1 || !onScreen(O.x, 0.05)) return false;
+    var gap = (O.x - sharkHead(S)) * S.dir;
+    return gap > 0 && gap < W * 0.35;
+  }
+  function playInkShark(O, S) {
+    var cx = sharkHead(S) + S.dir * W * 0.12, cy = S.y, phase = 0, t1 = 0;
+    O.jet(S.dir * W * 0.3, -H * 0.4);
+    for (var i = 0; i < 20; i++) {                   // the squirt: from the octopus up into the shark's path
+      // with drag dr the particle travels v/dr in all, so v = distance * dr lands it there
+      var f = rr(0.8, 1.2);
+      fx.push({ kind: 'ink', x: O.x, y: O.y - O.m, vx: (cx - O.x) * f * 2.5, vy: (cy - O.y + O.m) * f * 2.5, dr: 2.5, r: rr(9, 16) * U, grow: rr(8, 14) * U, life: rr(5, 7), max: 7 });
+    }
+    return { step: function (dt) {
+      if (gone(S)) return false;
+      if (phase === 0 && (sharkHead(S) - cx) * S.dir > -W * 0.03) { phase = 1; t1 = this.t; S.bt = 0.3; beat('inkshark:dizzy'); }
+      if (phase === 1) {
+        S.wob = Math.min(1, S.wob + dt * 3);
+        if (rnd() < dt * 18) {                       // dizzy stars circling over its head
+          var a = T * 6 + rr(-0.3, 0.3), hx = sharkHead(S) - S.dir * S.L * 0.15;
+          spark(hx + Math.cos(a) * S.L * 0.08, S.y - S.L * 0.14 + Math.sin(a) * S.L * 0.03, rr(4, 6) * U, true, 0.6);
+        }
+        if (this.t - t1 > 1.9) { phase = 2; S.dir = -S.dir; S.bt = 2.7; }
+      }
+      if (phase === 2) { S.wob = Math.max(0, S.wob - dt * 0.8); if (S.wob <= 0) return false; }
+      return true;
+    } };
+  }
+
+  // Mermaid + treasure: she dives to the open chest, comes up wearing a crown
+  // and keeps it on for the rest of her visit.
+  function canCrown(M) { return M.state < 2 && !M.ctl && !M.crown && onScreen(M.x, 0.08) && treasureOn(); }
+  function playCrown(M) {
+    var phase = 0, t1 = 0;
+    M.ctl = true; M.wave = 0;
+    return { step: function (dt) {
+      if (phase === 0) {                             // swim down to the chest
+        M.dir = G.chest.x > M.x ? 1 : -1;
+        var tx = G.chest.x - M.face * 30 * M.k, ty = G.chest.y - 34 * U, dx = tx - M.x, dy = ty - M.y;
+        var dd = Math.sqrt(dx * dx + dy * dy), v = W * 0.17 * dt;
+        M.tilt += (clamp(Math.atan2(dy, Math.abs(dx) + 1), -0.6, 0.6) * 0.6 - M.tilt) * Math.min(1, dt * 3);
+        if (dd < v) { M.x = tx; M.y = ty; phase = 1; t1 = this.t; }
+        else { M.x += dx / dd * v; M.y += dy / dd * v; }
+      } else if (phase === 1) {                      // reach in
+        chest.open = Math.max(chest.open, 2);
+        M.tilt *= 1 - Math.min(1, dt * 3); M.reach = Math.min(1, M.reach + dt * 2);
+        if (rnd() < dt * 10) spark(G.chest.x + rr(-14, 14) * U, G.chest.y - rr(20, 36) * U, rr(2, 4) * U, true);
+        if (!M.crown && this.t - t1 > 1.4) { M.crown = 1; beat('crown:crowned'); sparkle(M.x + M.face * 30 * M.k, M.y - 9 * M.k, 14, 14 * U, true); }
+        if (this.t - t1 > 2.3) phase = 2;
+      } else {                                       // back up to where she swims, then her own routine
+        var home = M.y0 + Math.sin(M.t * 0.9) * 6 * U, dy2 = home - M.y, v2 = H * 0.13 * dt;
+        M.reach = Math.max(0, M.reach - dt * 2);
+        M.tilt += (clamp(dy2 / H * 3, -0.4, 0.4) - M.tilt) * Math.min(1, dt * 3);
+        if (Math.abs(dy2) <= v2 + 0.5 * U) { M.y = home; M.tilt = 0; M.ctl = false; M.state = 1; M.st = 1; return false; }
+        M.y += (dy2 > 0 ? 1 : -1) * v2;
+      }
+      return true;
+    } };
+  }
+
+  // Octopus + treasure: it creeps over to the open chest, takes a gold coin and
+  // hides beside the chest (the coin still glinting) before jetting off with it.
+  function canCoin(O) { return O.state < 2 && !O.coin && onScreen(O.x, 0.02) && treasureOn(); }
+  function playCoin(O) {
+    var tx = G.chest.x + (O.x < G.chest.x ? -1 : 1) * 30 * U;
+    O.state = 0; O.st = 0; O.cam = 0; O.stopX = tx; O.dir = tx > O.x ? 1 : -1;
+    return { step: function () {
+      if (gone(O) || O.state > 1) return false;
+      if (O.state === 1) {                           // arrived and settling in: take the coin
+        O.coin = 1; chest.open = Math.max(chest.open, 2.5); beat('coin:taken');
+        sparkle(G.chest.x, G.chest.y - 26 * U, 8, 12 * U, true);
+        return false;
+      }
+      return true;
+    } };
+  }
+
+  // Octopus + diver: the hiding octopus shoots up past the diver and inks their
+  // mask; the diver wipes it clean, then carries on.
+  function canInkDiver(O, Dv) {
+    return O.state === 1 && O.st > 1.5 && Dv.state < 2 && !Dv.ctl && onScreen(Dv.x, 0.08) && Math.abs(Dv.x - O.x) < W * 0.4;
+  }
+  function playInkDiver(O, Dv) {
+    var hx = Dv.x + Dv.face * 30 * Dv.k, hy = Dv.y, inked = false;
+    O.jet((hx - O.x) / 0.7, (hy - O.y + O.m) / 0.7);
+    return { step: function (dt) {
+      if (gone(Dv)) return false;
+      Dv.state = 1; Dv.st = Math.min(Dv.st, 2);
+      if (!inked && this.t > 0.55) {
+        inked = true; Dv.ink = 1;
+        inkAt(Dv.x + Dv.face * 30 * Dv.k, Dv.y, 10, 14 * U, 1.8);   // short-lived, so the wipe shows
+        beat('inkdiver:inked');
+      }
+      if (inked) {
+        if (Dv.ink > 0) Dv.wipe = Math.min(1, Dv.wipe + dt * 3);
+        if (this.t > 1.4) Dv.ink = Math.max(0, Dv.ink - dt * 0.55);
+        if (Dv.ink <= 0) { Dv.wipe = Math.max(0, Dv.wipe - dt * 3); if (Dv.wipe <= 0) { Dv.st = 2; return false; } }
+      }
+      return true;
+    } };
+  }
+
+  // Diver + shark: the diver turns to face it, raises a camera and -- flash! --
+  // the startled shark jumps and speeds off.
+  function canPhoto(Dv, S) {
+    if (Dv.state > 1 || Dv.ctl || !onScreen(Dv.x, 0.1)) return false;
+    var gap = (Dv.x - sharkHead(S)) * S.dir;
+    return gap > W * 0.05 && gap < W * 0.42 && Math.abs(S.y - Dv.y) < H * 0.35;
+  }
+  function playPhoto(Dv, S) {
+    var shot = -1;
+    Dv.dir = -S.dir; Dv.state = 1;
+    return { step: function (dt) {
+      if (gone(Dv)) return false;
+      Dv.state = 1; Dv.st = Math.min(Dv.st, 2);
+      if (shot < 0) {
+        Dv.cam = Math.min(1, Dv.cam + dt * 2);
+        var gap = gone(S) ? 0 : (Dv.x - sharkHead(S)) * S.dir;
+        if (Dv.cam >= 1 && (gap < W * 0.22 || this.t > 2.6)) {
+          shot = this.t; flash = 0.65; beat('photo:flash');
+          sparkle(Dv.x + Dv.face * 40 * Dv.k, Dv.y - 5 * Dv.k, 14, 16 * U, false);
+          if (!gone(S)) { S.bt = 3; S.jolt = 1; }
+        }
+      } else if (this.t - shot > 0.9) {
+        Dv.cam = Math.max(0, Dv.cam - dt * 3);
+        if (Dv.cam <= 0) { Dv.st = 3; return false; }
+      }
+      return true;
+    } };
+  }
+
+  // Turtle + jellyfish: sea turtles eat jellies, so it hurries after one; the
+  // jelly pulses hard and zips away just in time, and the turtle snaps at water.
+  function turtleHead(Tu) { return { x: Tu.x + Tu.dir * Tu.L * 0.5, y: Tu.y }; }
+  function canJellyChase(Tu, J) {
+    if (Tu.t < 2) return false;
+    var h = turtleHead(Tu);
+    for (var i = 0; i < J.items.length; i++) {
+      var j = J.items[i], dx = (j.x - h.x) * Tu.dir;
+      if (dx > W * 0.04 && dx < W * 0.42 && Math.abs(j.y - h.y) < H * 0.3 && onScreen(j.x, 0.05)) { Tu.prey = j; return true; }
+    }
+    return false;
+  }
+  function playJellyChase(Tu) {
+    var j = Tu.prey, phase = 0;
+    return { step: function (dt) {
+      if (gone(Tu)) return false;
+      var h = turtleHead(Tu);
+      if (phase === 0) {
+        Tu.rate = Math.min(2.4, Tu.rate + dt * 2);
+        Tu.oy += (clamp(j.y - (h.y - Tu.oy), -H * 0.28, H * 0.28) - Tu.oy) * Math.min(1, dt * 1.2);
+        var dx = j.x - h.x, dy = j.y - h.y;
+        if (dx * dx + dy * dy < Math.pow(Math.max(j.R * 1.5, W * 0.045), 2) || this.t > 7 || dx * Tu.dir < 0) {
+          phase = 1; Tu.chomp = 1; beat('jellychase:snap');
+          var away = j.x > Tu.x ? 1 : -1;
+          j.zip = 2.6; j.dir = away; j.vx = away * rr(32, 42) * U * (1 - 0.4 * j.d); j.vy = -55 * U;
+          sparkle(j.x, j.y, 6, j.R, false);
+        }
+      } else {
+        Tu.rate += (1 - Tu.rate) * Math.min(1, dt * 1.5);
+        Tu.oy *= 1 - Math.min(1, dt * 0.6);
+        if (Math.abs(Tu.rate - 1) < 0.02 && Math.abs(Tu.oy) < U) { Tu.rate = 1; Tu.oy = 0; return false; }
+      }
+      return true;
+    } };
+  }
+
+  // Whale + mermaid: the whale sings (rings and notes from its head, slowing to
+  // listen), she turns and sings back, twice each.
+  var SONG = [0, 2.2, 4.4, 6.4];
+  function canSong(Wh, M) {
+    var h = Wh.at(44, 2);
+    return M.state < 2 && !M.ctl && onScreen(M.x, 0.1) && onScreen(h.x, 0.14);
+  }
+  function playSong(Wh, M) {
+    var turn = -1;
+    Wh.bt = 0.5;
+    return { step: function (dt) {
+      if (gone(Wh) || gone(M)) { if (!gone(Wh)) Wh.bt = 1; return false; }
+      M.state = 1; M.st = Math.min(M.st, 2);
+      var h = Wh.at(44, 2);
+      M.dir = h.x > M.x ? 1 : -1;
+      while (turn + 1 < SONG.length && this.t >= SONG[turn + 1]) {
+        turn++;
+        if (turn % 2 === 0) for (var r = 0; r < 3; r++) ring(h.x, h.y, 'rgba(225,240,255,1)', r * 0.35);
+      }
+      var since = this.t - SONG[Math.max(0, turn)], whaleTurn = turn % 2 === 0;
+      if (whaleTurn && since < 1.6 && rnd() < dt * 4) note(h.x + rr(-10, 10) * U, h.y - rr(0, 10) * U, '#dff1ff', rr(6, 8) * U);
+      var herTurn = !whaleTurn && since < 1.8;
+      if (herTurn && M.sing === 0) beat('song:reply');
+      M.sing = herTurn ? Math.min(1, M.sing + dt * 5) : Math.max(0, M.sing - dt * 5);
+      if (herTurn && rnd() < dt * 4.5) note(M.x + M.face * 34 * M.k * M.sc, M.y - 2 * M.k, pick(['#ff8fc8', '#ffd84a']));
+      if (this.t > 9) { Wh.bt = 1; M.st = 2; return false; }
+      return true;
+    } };
+  }
+
+  // Feed + shark: it rises to the falling food, opens wide and takes a big
+  // mouthful (the school has already scattered), then sinks back to its line.
+  function canSnack(S) {
+    if (S.t < 1) return false;
+    var m = sharkMouth(S);
+    for (var i = 0; i < food.length; i++) {
+      var p = food[i], dx = (p.x - m.x) * S.dir;
+      if (!p.gone && p.st === 1 && p.y > G.surf + S.L * 0.2 && dx > W * 0.05 && dx < W * 0.7) { S.prey = p; return true; }
+    }
+    return false;
+  }
+  function snackAhead(S) {
+    var m = sharkMouth(S), best = null, bd = 1e9;
+    for (var i = 0; i < food.length; i++) {
+      var p = food[i], dx = (p.x - m.x) * S.dir;
+      if (p.gone || p.st > 1 || p.y < G.surf + S.L * 0.2 || dx < -W * 0.02 || dx > W * 0.7) continue;
+      var d = dx + Math.abs(p.y - m.y);
+      if (d < bd) { bd = d; best = p; }
+    }
+    return best;
+  }
+  function playSnack(S) {
+    var p = S.prey, phase = 0;
+    S.bt = 1.5;
+    return { step: function (dt) {
+      if (gone(S)) return false;
+      var m = sharkMouth(S);
+      // The school often gets to its piece first: go for the next one in reach.
+      if (phase === 0 && (p.gone || (p.x - m.x) * S.dir < -W * 0.02 || this.t > 9)) { p = snackAhead(S); if (!p || this.t > 9) { phase = 1; p = p || food[0]; } }
+      if (phase === 0) {
+        var base = S.y - S.oy, want = clamp(p.y - S.L * 0.035 - base, G.surf + S.L * 0.2 - base, H * 0.2);
+        S.oy += (want - S.oy) * Math.min(1, dt * 1.6);
+        var dx = p.x - m.x, dy = p.y - m.y;
+        if (dx * dx + dy * dy < Math.pow(W * 0.07, 2)) {
+          S.jaw = 1; phase = 1; beat('snack:bite');
+          for (var i = 0; i < food.length; i++) {
+            var q = food[i], ex = q.x - m.x, ey = q.y - m.y;
+            if (!q.gone && ex * ex + ey * ey < Math.pow(W * 0.1, 2)) q.gone = true;
+          }
+          for (var b = 0; b < 10; b++) addBubble(m.x + rr(-8, 8) * U, m.y + rr(-6, 6) * U, rr(1.5, 4) * U, 1.2, S.d);
+        }
+      } else {
+        S.bt = 1; S.oy *= 1 - Math.min(1, dt * 0.7);
+        if (Math.abs(S.oy) < U) { S.oy = 0; return false; }
+      }
+      return true;
+    } };
+  }
+
+  // Feed + dolphins: each dolphin does a backflip as it passes over the food.
+  function canFlips(D) {
+    if (!feedOn()) return false;
+    for (var i = 0; i < D.items.length; i++) if ((lastFeedX - D.items[i].x) * D.dir > W * 0.05) return true;
+    return false;
+  }
+  function playFlips(D) {
+    return { step: function () {
+      if (gone(D)) return false;
+      var left = 0;
+      for (var i = 0; i < D.items.length; i++) {
+        var o = D.items[i];
+        if (o.flipped) continue;
+        left++;
+        if (o.flip == null && Math.abs(o.x - lastFeedX) < W * 0.07) { o.flip = 0; beat('flips:flip'); }
+      }
+      return left > 0;
+    } };
+  }
+
+  // b is a visitor type, or 'treasure' / 'feed' for the chest and the food.
+  var COMBOS = [
+    { id: 'ride', a: 'diver', b: 'whale', can: canRide, play: playRide },
+    { id: 'chase', a: 'dolphins', b: 'shark', can: canChase, play: playChase },
+    { id: 'dolphride', a: 'mermaid', b: 'dolphins', can: canDolphRide, play: playDolphRide },
+    { id: 'inkshark', a: 'octopus', b: 'shark', can: canInkShark, play: playInkShark },
+    { id: 'crown', a: 'mermaid', b: 'treasure', can: canCrown, play: playCrown },
+    { id: 'coin', a: 'octopus', b: 'treasure', can: canCoin, play: playCoin },
+    { id: 'inkdiver', a: 'octopus', b: 'diver', can: canInkDiver, play: playInkDiver },
+    { id: 'photo', a: 'diver', b: 'shark', can: canPhoto, play: playPhoto },
+    { id: 'jellychase', a: 'turtle', b: 'jelly', can: canJellyChase, play: playJellyChase },
+    { id: 'song', a: 'whale', b: 'mermaid', can: canSong, play: playSong },
+    { id: 'snack', a: 'shark', b: 'feed', can: canSnack, play: playSnack },
+    { id: 'flips', a: 'dolphins', b: 'feed', can: canFlips, play: playFlips }
+  ];
+
+  function directScenes(dt) {
+    var i, j, k;
+    for (i = scenes.length - 1; i >= 0; i--) {
+      var s = scenes[i];
+      s.t += dt;
+      if (!s.step(dt)) {
+        if (s.a && s.a.scene === s) s.a.scene = null;
+        if (s.b && s.b.scene === s) s.b.scene = null;
+        scenes.splice(i, 1);
+      }
+    }
+    for (i = 0; i < visitors.length; i++) {
+      var a = visitors[i];
+      if (!idle(a)) continue;
+      for (k = 0; k < COMBOS.length && !a.scene; k++) {
+        var cb = COMBOS[k];
+        if (cb.a !== a.type || a.done[cb.id]) continue;
+        if (cb.b === 'treasure' || cb.b === 'feed') { if (cb.can(a)) startScene(cb, a, null); continue; }
+        for (j = 0; j < visitors.length; j++) {
+          var b = visitors[j];
+          if (b === a || b.type !== cb.b || !idle(b) || b.done[cb.id]) continue;
+          if (cb.can(a, b)) { startScene(cb, a, b); break; }
+        }
+      }
+    }
+  }
+  function startScene(cb, a, b) {
+    var s = cb.play(a, b);
+    s.id = cb.id; s.t = 0; s.a = a; s.b = b;
+    a.scene = s; a.done[cb.id] = true;
+    if (b) { b.scene = s; b.done[cb.id] = true; }
+    scenes.push(s);
+  }
+
+  function trigger(type, dir) {
     if (!W) { if (pending.length < 8) pending.push(type); return; }
     if (type === 'surprise') type = pick(SURPRISES);
     if (type === 'feed') return feed();
@@ -3497,18 +4103,28 @@
       if (queue.length > QUEUE_MAX) queue.length = QUEUE_MAX;
       return;
     }
-    visitors.push(new Mk());
+    forceDir = dir || arrangeDir(type);
+    var v = new Mk();
+    forceDir = 0;
+    v.done = {}; v.scene = null;
+    visitors.push(v);
   }
   // Fade the longest-staying visitor that has had MIN_STAY on screen, so a
   // queued request gets its slot within seconds without anyone vanishing the
   // moment they arrive.
+  // Prefers a visitor that isn't in a combo scene or waiting for a partner
+  // that's in the queue, so pressing Diver then Whale doesn't fade the diver.
   function makeRoom() {
-    var oldest = null;
+    var oldest = null, any = null;
     for (var i = 0; i < visitors.length; i++) {
       var v = visitors[i];
-      if (v.fade == null && v.t >= MIN_STAY && (!oldest || v.t > oldest.t)) oldest = v;
+      if (v.fade != null || v.t < MIN_STAY) continue;
+      if (!any || v.t > any.t) any = v;
+      var busy = !!v.scene, ps = PARTNERS[v.type] || [];
+      for (var j = 0; j < ps.length && !busy; j++) if (queue.indexOf(ps[j]) >= 0) busy = true;
+      if (!busy && (!oldest || v.t > oldest.t)) oldest = v;
     }
-    if (oldest) oldest.fade = 1;
+    if (oldest || any) (oldest || any).fade = 1;
   }
 
   // ---- frame ------------------------------------------------------------------------
@@ -3524,13 +4140,15 @@
         if (vi.items) for (var k = 0; k < vi.items.length; k++) vi.items[k].a = Math.max(0, vi.fade);
         if (vi.fade <= 0) alive = false; else leaving++;
       }
-      if (!alive) visitors.splice(i, 1);
+      if (!alive || vi.dead) { vi.dead = true; visitors.splice(i, 1); }
     }
     while (queue.length && visitors.length < 3) trigger(queue.shift());
     if (queue.length > leaving) makeRoom();
     // Unprompted visitors only drop into a tank with room; they never queue or
     // push out something a person asked for.
     if (T > nextAuto) { if (visitors.length < 3 && !queue.length) trigger(pick(AUTO)); nextAuto = T + rr(600, 1200); }
+    directScenes(dt);
+    flash = Math.max(0, flash - dt * 1.8);
     threats.length = 0;
     for (i = 0; i < visitors.length; i++) {
       var v = visitors[i];
@@ -3598,9 +4216,11 @@
     drawFx(c, 'ink');
     drawFood(c, false);
     drawFx(c, 'spark');
+    drawFx(c, 'ring'); drawFx(c, 'note');
     if (!DBG.noplants) drawPlants(c, true);
     if (!DBG.nosnow) drawSnow(c);
     if (!DBG.nosurf) surface(c);
+    if (flash > 0) { c.globalAlpha = flash; c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H); c.globalAlpha = 1; }
     PROF[5] += performance.now() - p0;
   }
 
@@ -3612,12 +4232,16 @@
     fps: function () { return Math.round(Q.fps); },
     quality: function () { return { cap: Math.round(Q.hz / Q.div), scale: Q.scale }; },
     prof: function () { return PROFOUT; },
-    trigger: function (type) { trigger(type); },
+    trigger: function (type, dir) { trigger(type, dir); },   // dir: harnesses only (1 / -1)
     // Read-only snapshot for the harnesses (who is on screen, who is waiting).
     state: function () {
-      return { visitors: visitors.map(function (v) { return { type: v.type, t: Math.round(v.t * 10) / 10, fade: v.fade == null ? null : Math.round(v.fade * 100) / 100 }; }),
-               queue: queue.slice() };
+      return { visitors: visitors.map(function (v) { return { type: v.type, t: Math.round(v.t * 10) / 10, fade: v.fade == null ? null : Math.round(v.fade * 100) / 100,
+                 scene: v.scene ? v.scene.id : null, done: Object.keys(v.done || {}), x: Math.round(v.x || 0), y: Math.round(v.y || 0), dir: v.dir, state: v.state }; }),
+               queue: queue.slice(), scenes: scenes.map(function (sc) { return sc.id; }), beats: beats.slice(), W: W, H: H };
     },
+    // Harness only: run the simulation forward without waiting for frames.
+    advance: function (secs) { while (secs > 0 && W) { var d = Math.min(1 / 30, secs); step(d); secs -= d; } },
+    seed: function (n) { rnd = mulberry(n); },
     events: function (blk) {
       if (!blk || !blk.events) return;
       var now = blk.now || Date.now() / 1000;
