@@ -4419,10 +4419,14 @@ async function fetchProxy() {
     // failed" both look like normal {error: ...} objects — the dashboard
     // used to silently fall through to BUS_*_SCHEDULE static fallback
     // without firing markFail, so the panel-stale dimmer never engaged.
+    // Match "auth failed", not bare "auth": the proxy reports a dark PANYNJ
+    // sensor as "no data from Port Authority", and /auth/i matched
+    // "Authority" — one dead tunnel reading flagged all of transit offline
+    // and dimmed live bus times (2026-10-25).
     const transitDegraded = (
       (data.stops && Object.values(data.stops).some(s =>
         s && s.predictions && s.predictions.error === 'NJT auth failed')) ||
-      (data.tunnel && data.tunnel.error && /auth/i.test(data.tunnel.error || ''))
+      (data.tunnel && data.tunnel.error && /auth failed/i.test(data.tunnel.error || ''))
     );
     if (transitDegraded) markFail('transit'); else markOk('transit');
 
