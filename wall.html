@@ -971,8 +971,8 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.5);
   }
   .leaflet-tooltip.bus-tip::before { display: none; }
-  /* NJT bus marker — NJTbus.png logo + direction arrow above (NY-bound) or
-     below (return). Sizes are written inline by _busSvg() based on the
+  /* NJT bus marker — NJTbus.png logo + load-colored arrow above (only
+     NY-bound 126s are drawn). Sizes are written inline by _busSvg() based on the
      map-zoom-derived scale, so we just provide the layout primitives here
      (column flex, centered, body clipped to a circle). */
   .bus-marker .nbm-wrap {
@@ -5667,6 +5667,7 @@ function _slideTo(id, marker, lat, lon) {
 let _tileMarkers = {};
 let _homeMarker = null;
 let _lastBuses = [];  // cached for personStatus() narrative
+let _shownBuses = []; // the subset renderBuses draws (NY-bound 126s)
 
 // Tile device display config — map the device name (as set in the Tile app)
 // to a display icon and label. Update once you have the devices set up.
@@ -6351,28 +6352,25 @@ function busLoadColor(passload) {
   return '#7090a0';
 }
 
-function _busSvg(arrowColor, toNYC, scale) {
-  // NJT bus marker: NJTbus.png logo as the body, with a colored direction
-  // arrow stacked above (NY-bound) or below (return). Arrow color encodes
-  // passenger load (see busLoadColor). All sizes are written inline so the
-  // marker scales with map zoom — _busIconScale() returns the factor (1.0
-  // at zoom 15+, dropping to 0.4 at zoom <= 11).
-  // toNYC null = direction not known yet: the arrow slot stays, empty, so
-  // the marker keeps its size and anchor and nothing jumps when it fills in.
+function _busSvg(arrowColor, scale) {
+  // NJT bus marker: NJTbus.png logo as the body, with a colored arrow above.
+  // Only NY-bound 126s are drawn (see renderBuses), so the arrow always
+  // points up; its color encodes passenger load (see busLoadColor). All
+  // sizes are written inline so the marker scales with map zoom —
+  // _busIconScale() returns the factor (1.0 at zoom 15+, dropping to 0.4 at
+  // zoom <= 11).
   scale = scale || 1;
   const W  = Math.round(26 * scale);   // marker width & body height (body is square)
   const AH = Math.round(14 * scale);   // arrow height
-  const pts = toNYC ? '13,1 1,13 25,13' : '13,13 1,1 25,1';
   const arrow =
     '<svg class="nbm-arrow" width="' + W + '" height="' + AH + '" viewBox="0 0 26 14">' +
-      (toNYC === null ? '' :
-      '<polygon points="' + pts + '" fill="' + arrowColor + '"' +
-        ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>') +
+      '<polygon points="13,1 1,13 25,13" fill="' + arrowColor + '"' +
+        ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>' +
     '</svg>';
   const img = '<img src="NJTbus.png" class="nbm-body" alt=""' +
               ' style="width:' + W + 'px;height:' + W + 'px;">';
   return '<div class="nbm-wrap" style="width:' + W + 'px;height:' + (W + AH) + 'px;">' +
-         (toNYC ? arrow + img : img + arrow) + '</div>';
+         arrow + img + '</div>';
 }
 
 // ── Which way is each bus going? Read from its movement, not its label ──
@@ -6386,7 +6384,8 @@ function _busSvg(arrowColor, toNYC, scale) {
 // and points south and west of it, so on the NJ side a bus closing on the
 // tunnel portal is NY-bound; in Manhattan, one closing on Port Authority is;
 // crossing the river eastward is, westward isn't. The label is only a first
-// guess until the bus has moved, and a blank label shows no arrow at all.
+// guess until the bus has moved; a bus with no label that hasn't moved yet
+// counts as unknown, and renderBuses doesn't draw it.
 //
 // A ratchet, not a step-by-step comparison: the routes jog and loop (cross
 // streets, the circuit at Hoboken Terminal), and comparing each fix with the
@@ -6466,6 +6465,11 @@ function _busIconScale() {
   return 0.4;
 }
 
+// Only the 126, and only NY-bound: Jeff's commute (2026-10-26, "I only need
+// to show 126 and only those going the direction of my commute"). Every 126
+// is still tracked, so one turning around at Hoboken Terminal appears as soon
+// as it heads north. _lastBuses keeps the FULL list on purpose: the "on 126"
+// / "on 119" riding status reads it and has to work in either direction.
 function renderBuses(buses) {
   _lastBuses = buses || [];
   if (!_hobokenMap) return;
@@ -6476,14 +6480,16 @@ function renderBuses(buses) {
   const seen = new Set();
   const now = Date.now();
   _pruneBusTrack(now);
-  for (const b of buses) {
+  const shown = [];
+  for (const b of _lastBuses) {
+    if (b.route !== '126' || busToNYC(b, now) !== true) continue;
+    shown.push(b);
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
     seen.add(key);
-    const toNYC = busToNYC(b, now);
     const arrowColor = busLoadColor(b.passload);
     const icon = L.divIcon({
       className: 'bus-marker',
-      html: _busSvg(arrowColor, toNYC, scale),
+      html: _busSvg(arrowColor, scale),
       iconSize: [W, H],
       iconAnchor: [Math.round(W / 2), Math.round(H / 2)],
     });
@@ -6503,6 +6509,7 @@ function renderBuses(buses) {
         .addTo(_hobokenMap);
     }
   }
+  _shownBuses = shown;
   for (const key of Object.keys(_busMarkers)) {
     if (!seen.has(key)) {
       _hobokenMap.removeLayer(_busMarkers[key]);
@@ -6677,7 +6684,7 @@ function applyMapFrame(frame) {
   if (frame.mode === 'approach') {
     // Also include any approaching NY-bound bus that's within ~3 mi of home
     // so the map auto-frames "Jeff + the bus he's about to catch" together.
-    const nearbyBuses = (_lastBuses || []).filter(function (b) {
+    const nearbyBuses = (_shownBuses || []).filter(function (b) {
       return b && b.lat && b.lon && distMi(HOME, b) <= NEAR_HOME_RADIUS_MI;
     });
     pts = frame.approaching.concat(nearbyBuses);
