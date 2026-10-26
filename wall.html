@@ -6357,19 +6357,98 @@ function _busSvg(arrowColor, toNYC, scale) {
   // passenger load (see busLoadColor). All sizes are written inline so the
   // marker scales with map zoom — _busIconScale() returns the factor (1.0
   // at zoom 15+, dropping to 0.4 at zoom <= 11).
+  // toNYC null = direction not known yet: the arrow slot stays, empty, so
+  // the marker keeps its size and anchor and nothing jumps when it fills in.
   scale = scale || 1;
   const W  = Math.round(26 * scale);   // marker width & body height (body is square)
   const AH = Math.round(14 * scale);   // arrow height
   const pts = toNYC ? '13,1 1,13 25,13' : '13,13 1,1 25,1';
   const arrow =
     '<svg class="nbm-arrow" width="' + W + '" height="' + AH + '" viewBox="0 0 26 14">' +
+      (toNYC === null ? '' :
       '<polygon points="' + pts + '" fill="' + arrowColor + '"' +
-        ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>' +
+        ' stroke="rgba(20,30,40,0.8)" stroke-width="1" stroke-linejoin="round"/>') +
     '</svg>';
   const img = '<img src="NJTbus.png" class="nbm-body" alt=""' +
               ' style="width:' + W + 'px;height:' + W + 'px;">';
   return '<div class="nbm-wrap" style="width:' + W + 'px;height:' + (W + AH) + 'px;">' +
          (toNYC ? arrow + img : img + arrow) + '</div>';
+}
+
+// ── Which way is each bus going? Read from its movement, not its label ──
+// NJT stopped sending destinations on 2026-10-01; the proxy fills them from
+// the trips listed at OUR three stops, so most buses come back blank (46 of
+// 56 at 8:35 on 2026-10-26), and blank used to draw a "to Hoboken" arrow on
+// buses plainly driving north to the tunnel. The labels that do arrive are
+// wrong too: a bus keeps reporting its last trip number after the trip ends,
+// so a 126 leaving Port Authority westbound still reads "126 NEW YORK".
+// Movement is the ground truth. Both routes run between the Lincoln Tunnel
+// and points south and west of it, so on the NJ side a bus closing on the
+// tunnel portal is NY-bound; in Manhattan, one closing on Port Authority is;
+// crossing the river eastward is, westward isn't. The label is only a first
+// guess until the bus has moved, and a blank label shows no arrow at all.
+//
+// A ratchet, not a step-by-step comparison: the routes jog and loop (cross
+// streets, the circuit at Hoboken Terminal), and comparing each fix with the
+// last flipped arrows back and forth on those stretches. Instead remember the
+// closest the bus has come to its goal (or the farthest it has got from it)
+// and flip only once it has gone BUS_FLIP_M back the other way. Real
+// turnarounds happen at the terminals, so the cost is a short delay there.
+const BUS_LT_PORTAL_NJ = [40.7630, -74.0165];  // Lincoln Tunnel, Weehawken
+const BUS_PABT         = [40.7570, -73.9910];  // Port Authority Bus Terminal
+const BUS_HUDSON_LON   = -74.012;              // east of this = NY side / tube
+const BUS_FIRST_M      = 60;     // first call: GPS jitter at a stop stays below
+const BUS_FLIP_M       = 150;    // reversal needed to flip an established call
+const BUS_TRACK_TTL_MS = 10 * 60 * 1000;
+let _busTrack = {};   // vehicle_id -> {ny, ext, toNYC, seen}
+
+function _metersBetween(lat1, lon1, lat2, lon2) {
+  const dN = (lat2 - lat1) * 111320;
+  const dE = (lon2 - lon1) * 111320 * Math.cos(lat1 * Math.PI / 180);
+  return Math.hypot(dN, dE);
+}
+
+function _busLabelToNYC(b) {
+  const d = (b.destination || '').toUpperCase();
+  if (!d) return null;
+  return d.includes('NEW YORK');
+}
+
+function _busGoalDist(b, ny) {
+  const g = ny ? BUS_PABT : BUS_LT_PORTAL_NJ;
+  return _metersBetween(b.lat, b.lon, g[0], g[1]);
+}
+
+// Returns true (NY-bound), false (heading away from NY) or null (unknown).
+function busToNYC(b, now) {
+  const id = b.vehicle_id;
+  if (!id) return _busLabelToNYC(b);
+  const ny = b.lon > BUS_HUDSON_LON;
+  const d = _busGoalDist(b, ny);
+  let t = _busTrack[id];
+  if (!t) {
+    // ext = distance to the goal where the current call was last confirmed
+    // (for an unknown, where the bus was first seen).
+    t = _busTrack[id] = { ny, ext: d, toNYC: null, seen: now };
+  } else if (t.ny !== ny) {
+    t.ny = ny; t.ext = d; t.toNYC = ny;  // crossed the river
+  } else if (t.toNYC === null) {
+    if (Math.abs(d - t.ext) >= BUS_FIRST_M) { t.toNYC = d < t.ext; t.ext = d; }
+  } else if (t.toNYC) {
+    t.ext = Math.min(t.ext, d);
+    if (d - t.ext >= BUS_FLIP_M) { t.toNYC = false; t.ext = d; }
+  } else {
+    t.ext = Math.max(t.ext, d);
+    if (t.ext - d >= BUS_FLIP_M) { t.toNYC = true; t.ext = d; }
+  }
+  t.seen = now;
+  return t.toNYC !== null ? t.toNYC : _busLabelToNYC(b);
+}
+
+function _pruneBusTrack(now) {
+  for (const id of Object.keys(_busTrack)) {
+    if (now - _busTrack[id].seen > BUS_TRACK_TTL_MS) delete _busTrack[id];
+  }
 }
 
 // Bus icon size scales with map zoom — at the close-in Hoboken view (zoom
@@ -6395,10 +6474,12 @@ function renderBuses(buses) {
   const AH = Math.round(14 * scale);
   const H = W + AH;  // body W + arrow AH — match what _busSvg builds
   const seen = new Set();
+  const now = Date.now();
+  _pruneBusTrack(now);
   for (const b of buses) {
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
     seen.add(key);
-    const toNYC = (b.destination || '').toUpperCase().includes('NEW YORK');
+    const toNYC = busToNYC(b, now);
     const arrowColor = busLoadColor(b.passload);
     const icon = L.divIcon({
       className: 'bus-marker',
