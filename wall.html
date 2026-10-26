@@ -5666,8 +5666,9 @@ function _slideTo(id, marker, lat, lon) {
 
 let _tileMarkers = {};
 let _homeMarker = null;
-let _lastBuses = [];  // cached for personStatus() narrative
+let _lastBuses = [];  // proxy's full list (126 + 119), for personStatus() narrative
 let _shownBuses = []; // the subset renderBuses draws (NY-bound 126s)
+let _feedBuses = null; // live 126s from the Beelink's bus-feed; null = not fresh
 
 // Tile device display config — map the device name (as set in the Tile app)
 // to a display icon and label. Update once you have the devices set up.
@@ -6077,7 +6078,7 @@ function initHobokenMap() {
   // 40+ buses don't pile into a cluttered mess. _busIconScale() picks the
   // factor; _lastBuses holds the last batch so we don't need a new fetch.
   _hobokenMap.on('zoomend', function () {
-    if (typeof renderBuses === 'function' && _lastBuses) renderBuses(_lastBuses);
+    if (typeof renderBuses === 'function') renderBuses(mapBuses());
   });
 
   // Initial view: tight on home (will re-fit once locations arrive)
@@ -6268,7 +6269,8 @@ async function fetchLocations() {
     const data = await res.json();
     markOk('locations');
     applyHomeFromProxy(data.home);     // real coords before anything measures distance
-    renderBuses(data.buses || []);     // first so _lastBuses is populated
+    _lastBuses = data.buses || [];     // first: the riding status reads it
+    renderBuses(mapBuses());
     const liveLocs = data.locations || [];
     const liveTids = new Set(liveLocs.map(l => l.tid));
     const stubs = HOME_STUBS.filter(s => !liveTids.has(s.tid));
@@ -6465,13 +6467,51 @@ function _busIconScale() {
   return 0.4;
 }
 
+// ── Live bus positions from the Beelink (2026-10-26) ──
+// The proxy's /locations caches NJT's vehicle feed for 40 s (a Cloud Run cost
+// choice), so buses glided 15 s and then sat still ~35 s while NJT itself
+// updates each one about every 15 s. bus-feed.service (~/apps/bus-feed) now
+// fetches NJT from the Beelink every ~12 s while the wall asks, free, and
+// Caddy serves it here on the LAN. The proxy's list stays as the fallback
+// whenever the feed is missing or stale, and stays the source for the riding
+// status, which also needs the 119s.
+const BUS_FEED_URL = '/api/buses';
+const BUS_FEED_POLL_MS = 10000;
+const BUS_FEED_STALE_S = 60;
+
+async function pollBusFeed() {
+  if (!IS_LOCAL || document.hidden || isSleeping()) return;
+  try {
+    const res = await fetchT(BUS_FEED_URL, null, 8000);
+    const d = res.ok ? await res.json() : null;
+    _feedBuses = (d && d.fetched_at && d.age_s != null && d.age_s < BUS_FEED_STALE_S)
+      ? (d.buses || []) : null;
+  } catch (e) {
+    _feedBuses = null;
+  }
+  renderBuses(mapBuses());
+}
+
+// The buses the map should draw from: the live feed when it's fresh, else the
+// proxy's list. NJT's own feed carries no destinations; borrow the label the
+// proxy filled in, which busToNYC uses only as a first guess.
+function mapBuses() {
+  if (!_feedBuses) return _lastBuses;
+  const labels = {};
+  for (const b of _lastBuses) if (b.vehicle_id && b.destination) labels[b.vehicle_id] = b.destination;
+  return _feedBuses.map(function (b) {
+    return (b.destination || !labels[b.vehicle_id]) ? b
+      : Object.assign({}, b, { destination: labels[b.vehicle_id] });
+  });
+}
+
 // Only the 126, and only NY-bound: Jeff's commute (2026-10-26, "I only need
 // to show 126 and only those going the direction of my commute"). Every 126
 // is still tracked, so one turning around at Hoboken Terminal appears as soon
-// as it heads north. _lastBuses keeps the FULL list on purpose: the "on 126"
-// / "on 119" riding status reads it and has to work in either direction.
+// as it heads north. _lastBuses (set by the locations poll) keeps the FULL
+// proxy list on purpose: the "on 126" / "on 119" riding status reads it and
+// has to work in either direction.
 function renderBuses(buses) {
-  _lastBuses = buses || [];
   if (!_hobokenMap) return;
   const scale = _busIconScale();
   const W = Math.round(26 * scale);
@@ -6481,7 +6521,7 @@ function renderBuses(buses) {
   const now = Date.now();
   _pruneBusTrack(now);
   const shown = [];
-  for (const b of _lastBuses) {
+  for (const b of buses || []) {
     if (b.route !== '126' || busToNYC(b, now) !== true) continue;
     shown.push(b);
     const key = 'bus_' + (b.vehicle_id || (b.route + '_' + b.lat.toFixed(4) + '_' + b.lon.toFixed(4)));
@@ -7758,6 +7798,8 @@ setInterval(checkSleepMode, 60000);
 setInterval(updateStatusBar, 10000);
 updateStatusBar();
 setInterval(updateTransit, 15000);
+setInterval(pollBusFeed, BUS_FEED_POLL_MS);
+pollBusFeed();   // also starts bus-feed's NJT polling, so data is ready by the next tick
 setInterval(updateWeather, 600000);
 setInterval(fetchAlerts,   300000);
 
