@@ -804,32 +804,38 @@
   .cal-event.all-day .cal-event-time { color: #9a9aa8; }
 
   /* Juno's uncleared poop (Jeff, 2026-11-17): while juno-yard has an open
-     spot, a label line and the yard photo with the spot circled sit under
-     the TODAY header. Same framing and colours as the launcher's juno.html
-     and the Telegram photo (newest red, older orange). The photo box is
-     sized in px by _fitJunoYard(), so the layout is settled before the
-     picture arrives and trimCalendarOverflow() measures the real height. */
-  .cal-juno { margin: 2px 0 8px 0; }
+     spot, the calendar card takes turns, 30 s each (junoRotate()): the normal
+     calendar, then a Juno turn that keeps the TODAY header (the clock) and the
+     commute lines but hides every event and fills the rest of the card with
+     the yard photo, the spots circled. Newest red, older orange, like the
+     launcher's juno.html and the Telegram photo. The block lives inside
+     #calEvents in both turns and only display flips, so trimming and the
+     photo's size are worked out once per render, not on every turn. */
+  .cal-juno { display: none; margin: 2px 0 0 0; }
+  #calCard.juno-turn .cal-juno { display: block; }
+  #calCard.juno-turn #calEvents > :not(.is-today):not(#commuteContainer):not(.cal-juno) {
+    display: none;
+  }
   .cal-juno-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     column-gap: 10px;
     white-space: nowrap;
-    font-size: var(--fs-label);
+    font-size: var(--fs-body);
     font-weight: 600;
     color: #ffb84d;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
   .cal-juno-head .cj-when {
-    font-size: var(--fs-micro);
+    font-size: var(--fs-label);
     font-weight: 500;
     color: #b8a07a;
   }
+  /* Sized and cropped in px by _fitJunoYard(): the photo fills the space
+     left under the header, cropped from the sides around the spots. */
   .cal-juno-yard {
     position: relative;
-    width: 100%;
-    aspect-ratio: 2270 / 1380;
     margin: 0 auto;
     border-radius: 8px;
     overflow: hidden;
@@ -837,10 +843,10 @@
     border: 0.5px solid #2a2a35;
   }
   .cal-juno-yard img {
+    position: absolute;
+    top: 0;
     display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    max-width: none;
   }
   .cj-spot {
     position: absolute;
@@ -7648,6 +7654,7 @@ function renderCalEvents(events) {
   // The commute line is rendered hidden inline; reveal/update immediately so
   // there's no 1s flicker waiting for the next clock tick.
   if (typeof updateCommuteEstimate === 'function') updateCommuteEstimate();
+  _fitJunoYard();
   // After paint, trim trailing items / orphan day headers until everything fits cleanly.
   // Use double-rAF + setTimeout to make sure layout has settled before measuring.
   requestAnimationFrame(function () {
@@ -7708,12 +7715,14 @@ function _autoFitTodayHeader() {
 const JUNO_POLL_MS = 60000;          // a pick-up clears the wall within a minute
 const JUNO_PHOTO_MS = 5 * 60000;     // each yard.jpg is a fresh Protect snapshot
 const JUNO_RING_R = 96;              // frame px, same as juno.html / draw_spots()
-const JUNO_MAX_FRAC = 0.6;           // photo never takes more of the calendar's height
+const JUNO_TURN_MS = 30000;          // Jeff: calendar and Juno take 30 s turns
 let _junoSpots = [];                 // open spots, oldest first (the API's order)
 let _junoView = [1570, 100, 3840, 1480];  // YARD_VIEW, refreshed from the API
 let _junoKey = '';                   // spot ids on screen; a change re-renders
 let _junoPhoto = '';                 // last yard.jpg URL that loaded
 let _junoPhotoAt = 0;
+let _junoTurn = false;               // true while the Juno turn is on screen
+let _junoTurnTimer = null;
 let _lastCalEvents = null;           // so a Juno change can re-render the card
 
 async function fetchJunoSpots() {
@@ -7728,16 +7737,34 @@ async function fetchJunoSpots() {
     if (Array.isArray(d.view) && d.view.length === 4 && d.view.every(Number.isFinite)) {
       _junoView = d.view;
     }
+    const had = _junoSpots.length > 0;
     _junoSpots = spots;
     const key = spots.map(function (s) { return s.id; }).join(',');
     if (key !== _junoKey) {
       _junoKey = key;
       if (!spots.length) { _junoPhoto = ''; _junoPhotoAt = 0; }
       if (_lastCalEvents) renderCalEvents(_lastCalEvents);
+      // A new poop goes up at once and starts its own 30 s turn; the last one
+      // picked up ends the turns and leaves the calendar.
+      if (spots.length && !had) { _junoTurn = false; junoRotate(); }
+      if (!spots.length) junoRotate();
     } else if (spots.length && Date.now() - _junoPhotoAt > JUNO_PHOTO_MS) {
       refreshJunoPhoto();
     }
   } catch (e) { /* fail soft: keep the last state */ }
+}
+
+// Flip between the calendar and the Juno turn every JUNO_TURN_MS while a spot
+// is open. A self-rescheduling timeout, so each turn is a full 30 s from when
+// it went up, and a restart (new poop) never stacks a second timer.
+function junoRotate() {
+  clearTimeout(_junoTurnTimer);
+  _junoTurnTimer = null;
+  const card = document.getElementById('calCard');
+  const ready = _junoSpots.length > 0 && !!document.getElementById('calJuno');
+  _junoTurn = ready && !_junoTurn;
+  if (card) card.classList.toggle('juno-turn', _junoTurn);
+  if (_junoSpots.length) _junoTurnTimer = setTimeout(junoRotate, JUNO_TURN_MS);
 }
 
 // A newer photo is loaded off-screen first and swapped in only once it has
@@ -7767,6 +7794,13 @@ function junoWhen(ts) {
   return d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + t;
 }
 
+// Same placement as draw_spots(): a spot off the view is pinned to its edge.
+function junoSpotXY(s) {
+  const v = _junoView;
+  return [Math.min(Math.max(s.x, v[0] + JUNO_RING_R), v[2] - JUNO_RING_R),
+          Math.min(Math.max(s.y, v[1] + JUNO_RING_R), v[3] - JUNO_RING_R)];
+}
+
 function junoBlockHtml() {
   const spots = _junoSpots;
   if (!IS_LOCAL || !spots.length) return '';
@@ -7774,17 +7808,9 @@ function junoBlockHtml() {
     _junoPhoto = '/api/juno/yard.jpg?t=' + Date.now();
     _junoPhotoAt = Date.now();
   }
-  const x0 = _junoView[0], y0 = _junoView[1], x1 = _junoView[2], y1 = _junoView[3];
-  const w = x1 - x0, h = y1 - y0;
   let rings = '';
   spots.forEach(function (s, i) {
-    // Same placement as draw_spots(): a spot off the view is pinned to its edge.
-    const x = Math.min(Math.max(s.x, x0 + JUNO_RING_R), x1 - JUNO_RING_R);
-    const y = Math.min(Math.max(s.y, y0 + JUNO_RING_R), y1 - JUNO_RING_R);
-    rings += '<span class="cj-spot' + (i === spots.length - 1 ? ' newest' : '') +
-      '" style="left:' + ((x - x0) / w * 100).toFixed(2) +
-      '%;top:' + ((y - y0) / h * 100).toFixed(2) +
-      '%;width:' + (2 * JUNO_RING_R / w * 100).toFixed(2) + '%"></span>';
+    rings += '<span class="cj-spot' + (i === spots.length - 1 ? ' newest' : '') + '"></span>';
   });
   const newest = spots[spots.length - 1];
   const what = spots.length === 1
@@ -7797,27 +7823,63 @@ function junoBlockHtml() {
     '" alt="">' + rings + '</div></div>';
 }
 
-// "Fit it to size" (Jeff): the photo takes the card's full width, keeping the
-// yard's shape, unless that would eat more than JUNO_MAX_FRAC of the
-// calendar's height; then it shrinks (still in shape) and centres, so the
-// clock above and the next events below keep their room.
+// "Fit it to size" (Jeff): in the Juno turn the photo fills everything under
+// the header. The card's space is taller than the yard view, so the photo
+// keeps the view's full height and is cropped from the sides, centred on the
+// spots. The crop never cuts a ring off: if the spots are spread wider than
+// the space allows, the photo widens to hold them and gets shorter instead.
+// Measured with the Juno turn's layout even while the calendar turn is up.
 function _fitJunoYard() {
+  const card = document.getElementById('calCard');
   const box = document.getElementById('calJunoYard');
   const content = document.getElementById('calContent');
-  if (!box || !content) return;
-  const aspect = (_junoView[2] - _junoView[0]) / (_junoView[3] - _junoView[1]);
-  let w = box.parentElement.clientWidth;
-  let h = w / aspect;
-  const maxH = content.clientHeight * JUNO_MAX_FRAC;
-  if (maxH > 0 && h > maxH) { h = maxH; w = h * aspect; }
-  box.style.width = Math.floor(w) + 'px';
+  if (!card || !box || !content || !_junoSpots.length) return;
+  const was = card.classList.contains('juno-turn');
+  if (!was) card.classList.add('juno-turn');
+  const W = box.parentElement.clientWidth;
+  const H = content.getBoundingClientRect().bottom - box.getBoundingClientRect().top - 2;
+  if (!was) card.classList.remove('juno-turn');
+  const vx0 = _junoView[0], vy0 = _junoView[1];
+  const vw = _junoView[2] - vx0, vh = _junoView[3] - vy0;
+  if (!(W > 0) || !(vw > 0) || !(vh > 0)) return;
+  const avail = H > 40 ? H : W * vh / vw;   // degenerate layout: plain full width
+  const xs = _junoSpots.map(function (s) { return junoSpotXY(s)[0]; });
+  const lo = Math.min.apply(null, xs) - 1.5 * JUNO_RING_R;
+  const hi = Math.max.apply(null, xs) + 1.5 * JUNO_RING_R;
+  // crop width in frame px: the box's own shape at full height, widened to
+  // keep every ring, never wider than the view
+  const cw = Math.min(vw, Math.max(vh * W / avail, hi - lo));
+  const h = Math.min(avail, W * vh / cw);
+  const k = h / vh;                         // css px per frame px
+  const cx0 = Math.min(Math.max((lo + hi) / 2 - cw / 2, vx0), vx0 + vw - cw);
+  box.style.width = Math.floor(cw * k) + 'px';
   box.style.height = Math.floor(h) + 'px';
+  const img = box.querySelector('img');
+  img.style.width = (vw * k).toFixed(1) + 'px';
+  img.style.height = (vh * k).toFixed(1) + 'px';
+  img.style.left = (-(cx0 - vx0) * k).toFixed(1) + 'px';
+  box.querySelectorAll('.cj-spot').forEach(function (el, i) {
+    const p = junoSpotXY(_junoSpots[i]);
+    el.style.left = ((p[0] - cx0) * k).toFixed(1) + 'px';
+    el.style.top = ((p[1] - vy0) * k).toFixed(1) + 'px';
+    el.style.width = (2 * JUNO_RING_R * k).toFixed(1) + 'px';
+  });
 }
 
 function trimCalendarOverflow() {
   const container = document.getElementById('calEvents');
   const scrollParent = document.getElementById('calContent');
   if (!container || !scrollParent) return;
+  // Trim for the calendar turn's layout even while the Juno turn is up (it
+  // hides the events, so nothing would ever look like it overflowed).
+  const card = document.getElementById('calCard');
+  const junoUp = !!card && card.classList.contains('juno-turn');
+  if (junoUp) card.classList.remove('juno-turn');
+  try { _trimCalendarOverflow(container, scrollParent); }
+  finally { if (junoUp) card.classList.add('juno-turn'); }
+}
+
+function _trimCalendarOverflow(container, scrollParent) {
   let safety = 300;
   while (safety-- > 0 && container.lastElementChild) {
     const overflow = scrollParent.scrollHeight > scrollParent.clientHeight + 1;
