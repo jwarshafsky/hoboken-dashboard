@@ -7655,6 +7655,9 @@ function renderCalEvents(events) {
   // there's no 1s flicker waiting for the next clock tick.
   if (typeof updateCommuteEstimate === 'function') updateCommuteEstimate();
   _fitJunoYard();
+  // The spots arrived before the calendar did (page load): start Juno's turn
+  // now rather than after a whole calendar turn.
+  if (_junoWaiting && document.getElementById('calJuno')) { _junoTurn = false; junoRotate(); }
   // After paint, trim trailing items / orphan day headers until everything fits cleanly.
   // Use double-rAF + setTimeout to make sure layout has settled before measuring.
   requestAnimationFrame(function () {
@@ -7723,6 +7726,7 @@ let _junoPhoto = '';                 // last yard.jpg URL that loaded
 let _junoPhotoAt = 0;
 let _junoTurn = false;               // true while the Juno turn is on screen
 let _junoTurnTimer = null;
+let _junoWaiting = false;            // a spot is open but the card isn't rendered yet
 let _lastCalEvents = null;           // so a Juno change can re-render the card
 
 async function fetchJunoSpots() {
@@ -7762,6 +7766,7 @@ function junoRotate() {
   _junoTurnTimer = null;
   const card = document.getElementById('calCard');
   const ready = _junoSpots.length > 0 && !!document.getElementById('calJuno');
+  _junoWaiting = _junoSpots.length > 0 && !ready;
   _junoTurn = ready && !_junoTurn;
   if (card) card.classList.toggle('juno-turn', _junoTurn);
   if (_junoSpots.length) _junoTurnTimer = setTimeout(junoRotate, JUNO_TURN_MS);
