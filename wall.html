@@ -848,16 +848,6 @@
     display: block;
     max-width: none;
   }
-  /* Jeff 2026-11-19: "show the photo of Juno pooping". The newest spot's
-     close-up of her squatting (juno-yard's squat.jpg, a square crop centred on
-     her) fills the same space, no rings. The yard view above is the fallback
-     when a spot has no close-up. */
-  .cal-juno-yard.squat img {
-    position: static;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
   .cj-spot {
     position: absolute;
     display: block;
@@ -7725,11 +7715,8 @@ function _autoFitTodayHeader() {
 // photo through Caddy's GET-only /api/juno/{spots,yard.jpg} route on its OWN
 // origin (stick + tailnet + loopback, like /camfeed), so this runs IS_LOCAL
 // only. The wall never marks a spot picked.
-// The picture is the newest spot's close-up of Juno squatting (Jeff,
-// 2026-11-19: "show the photo of Juno pooping"): the spot's `photo`,
-// /api/juno/spots/<id>/squat.jpg, the crop the classifier judged. The yard
-// view with rings is only the fallback, for a spot with no close-up (its
-// crops pruned) or one that fails to load.
+// The picture is a fresh yard snapshot zoomed in around the spots, with rings
+// (2026-11-19 to 11-21 it was her squat close-up; Jeff wanted the place instead).
 const JUNO_POLL_MS = 60000;          // a pick-up clears the wall within a minute
 const JUNO_PHOTO_MS = 5 * 60000;     // each yard.jpg is a fresh Protect snapshot
 const JUNO_RING_R = 96;              // frame px, same as juno.html / draw_spots()
@@ -7743,21 +7730,11 @@ let _junoTurn = false;               // true while the Juno turn is on screen
 let _junoTurnTimer = null;
 let _junoWaiting = false;            // a spot is open but the card isn't rendered yet
 let _lastCalEvents = null;           // so a Juno change can re-render the card
-const _junoSquatBad = {};            // spot ids whose close-up failed to load
-
-// The newest spot's close-up URL, or '' to fall back to the yard view.
-function junoSquat() {
-  const s = _junoSpots[_junoSpots.length - 1];
-  if (!s || _junoSquatBad[s.id]) return '';
-  const u = s.photo;
-  return typeof u === 'string' && /^\/api\/juno\/spots\/\d+\/squat\.jpg$/.test(u) ? u : '';
-}
-
-function junoSquatFailed(id) {
-  if (_junoSquatBad[id]) return;
-  _junoSquatBad[id] = true;
-  if (_lastCalEvents) renderCalEvents(_lastCalEvents);
-}
+// Jeff 2026-11-21: "it should not be zoomed in on her pooping. it should show
+// the backyard zoomed to a level that clearly shows where she pooped": the
+// crop is this many frame px tall (about the lawn's depth around a spot), so
+// the ring sits among landmarks you can place (table, planters, steps).
+const JUNO_ZOOM_H = 640;
 
 async function fetchJunoSpots() {
   if (!IS_LOCAL || document.hidden || isSleeping()) return;
@@ -7782,7 +7759,7 @@ async function fetchJunoSpots() {
       // picked up ends the turns and leaves the calendar.
       if (spots.length && !had) { _junoTurn = false; junoRotate(); }
       if (!spots.length) junoRotate();
-    } else if (spots.length && !junoSquat() && Date.now() - _junoPhotoAt > JUNO_PHOTO_MS) {
+    } else if (spots.length && Date.now() - _junoPhotoAt > JUNO_PHOTO_MS) {
       refreshJunoPhoto();
     }
   } catch (e) { /* fail soft: keep the last state */ }
@@ -7846,11 +7823,6 @@ function junoBlockHtml() {
   const head = '<div class="cal-juno" id="calJuno">' +
     '<div class="cal-juno-head"><span>💩 ' + what + '</span>' +
     '<span class="cj-when">' + junoWhen(newest.ts) + '</span></div>';
-  const squat = junoSquat();
-  if (squat) {
-    return head + '<div class="cal-juno-yard squat" id="calJunoYard"><img src="' +
-      squat + '" alt="" onerror="junoSquatFailed(' + Number(newest.id) + ')"></div></div>';
-  }
   if (!_junoPhoto) {
     _junoPhoto = '/api/juno/yard.jpg?t=' + Date.now();
     _junoPhotoAt = Date.now();
@@ -7864,11 +7836,10 @@ function junoBlockHtml() {
 }
 
 // "Fit it to size" (Jeff): in the Juno turn the photo fills everything under
-// the header. The card's space is taller than the yard view, so the photo
-// keeps the view's full height and is cropped from the sides, centred on the
-// spots. The crop never cuts a ring off: if the spots are spread wider than
-// the space allows, the photo widens to hold them and gets shorter instead.
-// Measured with the Juno turn's layout even while the calendar turn is up.
+// the header, zoomed in (JUNO_ZOOM_H) around the spots rather than the whole
+// yard view. The crop never cuts a ring off: if the spots are spread wider or
+// taller than the zoom allows, it zooms out to hold them. Measured with the
+// Juno turn's layout even while the calendar turn is up.
 function _fitJunoYard() {
   const card = document.getElementById('calCard');
   const box = document.getElementById('calJunoYard');
@@ -7879,36 +7850,37 @@ function _fitJunoYard() {
   const W = box.parentElement.clientWidth;
   const H = content.getBoundingClientRect().bottom - box.getBoundingClientRect().top - 2;
   if (!was) card.classList.remove('juno-turn');
-  if (box.classList.contains('squat')) {
-    // the close-up fills it all; object-fit: cover trims the square crop
-    if (!(W > 0)) return;
-    box.style.width = Math.floor(W) + 'px';
-    box.style.height = Math.floor(H > 40 ? H : W * 0.82) + 'px';
-    return;
-  }
   const vx0 = _junoView[0], vy0 = _junoView[1];
   const vw = _junoView[2] - vx0, vh = _junoView[3] - vy0;
   if (!(W > 0) || !(vw > 0) || !(vh > 0)) return;
-  const avail = H > 40 ? H : W * vh / vw;   // degenerate layout: plain full width
-  const xs = _junoSpots.map(function (s) { return junoSpotXY(s)[0]; });
-  const lo = Math.min.apply(null, xs) - 1.5 * JUNO_RING_R;
-  const hi = Math.max.apply(null, xs) + 1.5 * JUNO_RING_R;
-  // crop width in frame px: the box's own shape at full height, widened to
-  // keep every ring, never wider than the view
-  const cw = Math.min(vw, Math.max(vh * W / avail, hi - lo));
-  const h = Math.min(avail, W * vh / cw);
-  const k = h / vh;                         // css px per frame px
-  const cx0 = Math.min(Math.max((lo + hi) / 2 - cw / 2, vx0), vx0 + vw - cw);
+  const avail = H > 40 ? H : W * 0.82;      // degenerate layout: a plain 4:5 box
+  const aspect = W / avail;                 // crop width / height
+  const pts = _junoSpots.map(junoSpotXY);
+  const m = 1.5 * JUNO_RING_R;
+  const lx = Math.min.apply(null, pts.map(function (p) { return p[0]; })) - m;
+  const hx = Math.max.apply(null, pts.map(function (p) { return p[0]; })) + m;
+  const ly = Math.min.apply(null, pts.map(function (p) { return p[1]; })) - m;
+  const hy = Math.max.apply(null, pts.map(function (p) { return p[1]; })) + m;
+  // crop in frame px: JUNO_ZOOM_H tall at the box's shape, grown to hold every
+  // ring, never bigger than the view
+  let ch = Math.max(JUNO_ZOOM_H, hy - ly, (hx - lx) / aspect);
+  let cw = ch * aspect;
+  if (cw > vw) { cw = vw; ch = cw / aspect; }
+  if (ch > vh) { ch = vh; }
+  const k = Math.min(W / cw, avail / ch);   // css px per frame px
+  const cx0 = Math.min(Math.max((lx + hx) / 2 - cw / 2, vx0), vx0 + vw - cw);
+  const cy0 = Math.min(Math.max((ly + hy) / 2 - ch / 2, vy0), vy0 + vh - ch);
   box.style.width = Math.floor(cw * k) + 'px';
-  box.style.height = Math.floor(h) + 'px';
+  box.style.height = Math.floor(ch * k) + 'px';
   const img = box.querySelector('img');
   img.style.width = (vw * k).toFixed(1) + 'px';
   img.style.height = (vh * k).toFixed(1) + 'px';
   img.style.left = (-(cx0 - vx0) * k).toFixed(1) + 'px';
+  img.style.top = (-(cy0 - vy0) * k).toFixed(1) + 'px';
   box.querySelectorAll('.cj-spot').forEach(function (el, i) {
-    const p = junoSpotXY(_junoSpots[i]);
+    const p = pts[i];
     el.style.left = ((p[0] - cx0) * k).toFixed(1) + 'px';
-    el.style.top = ((p[1] - vy0) * k).toFixed(1) + 'px';
+    el.style.top = ((p[1] - cy0) * k).toFixed(1) + 'px';
     el.style.width = (2 * JUNO_RING_R * k).toFixed(1) + 'px';
   });
 }
